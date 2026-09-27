@@ -1,0 +1,3 @@
+<resources>
+    <string name="rest_timer_format">%1$02d:%2$02d</string>
+</resources>

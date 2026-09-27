@@ -1,0 +1,4 @@
+<resources>
+    <string name="remaining_minutes_format">남은 시간 약 %1$d분</string>
+    <string name="total_time_format">총 %1$s</string>
+</resources>
