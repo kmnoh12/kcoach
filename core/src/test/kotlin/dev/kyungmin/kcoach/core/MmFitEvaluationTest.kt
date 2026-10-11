@@ -18,6 +18,7 @@ class MmFitEvaluationTest {
     @Test
     fun `report segment counts against labelled reps`() {
         val dir = System.getenv("KCOACH_MMFIT_DIR")?.let(::File) ?: return
+        val minPathM = System.getenv("KCOACH_MIN_PATH_M")?.toDouble() ?: 0.03
         val results = mutableListOf<SetResult>()
         dir.listFiles { f -> f.name.matches(Regex("w\\d+\\.csv")) }!!.sorted().forEach { csv ->
             val rows = csv.useLines { lines ->
@@ -39,7 +40,7 @@ class MmFitEvaluationTest {
                     .forEach { r ->
                         if (r.sensor == 0) tracker.onAccel(r.t, r.x, r.y, r.z)
                         else tracker.onGyro(r.t, r.x, r.y, r.z).forEach { s ->
-                            if (s.pathLengthM >= 0.03 && s.endNanos >= label.startNs && s.startNanos <= label.endNs) segments += s
+                            if (s.pathLengthM >= minPathM && s.endNanos >= label.startNs && s.startNanos <= label.endNs) segments += s
                         }
                     }
                 results += SetResult(label.exercise, label.reps, segments)

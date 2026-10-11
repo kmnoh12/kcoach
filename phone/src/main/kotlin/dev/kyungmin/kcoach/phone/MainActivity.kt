@@ -5,6 +5,11 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.platform.ComposeView
 import dev.kyungmin.kcoach.phone.ui.ActiveWorkoutScreen
 import dev.kyungmin.kcoach.phone.ui.ExerciseUi
+import dev.kyungmin.kcoach.phone.ui.HomeActions
+import dev.kyungmin.kcoach.phone.ui.HomeScreen
+import dev.kyungmin.kcoach.phone.ui.Motion
+import dev.kyungmin.kcoach.phone.ui.RootBottomNav
+import dev.kyungmin.kcoach.phone.ui.RunningUi
 import dev.kyungmin.kcoach.phone.ui.SetField
 import dev.kyungmin.kcoach.phone.ui.SetUi
 import dev.kyungmin.kcoach.phone.ui.WorkoutActions
@@ -37,7 +42,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.Window
-import android.view.animation.DecelerateInterpolator
+import android.view.animation.PathInterpolator
 import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
@@ -510,101 +515,27 @@ class MainActivity : ComponentActivity() {
         currentTab = RootTab.HOME
         currentScreen = Screen.ROOT
 
-        val content = vertical()
-        content.setPadding(dp(18), dp(16), dp(18), dp(12))
-        content.addView(topBar("홈", "☷   ◉   ●"))
-        content.addView(space(18))
-        content.addView(label("내 루틴", 22f, white, bold = true))
-        content.addView(space(12))
-        content.addView(row().apply {
-            addView(label("최근  ▾", 14f, muted, bold = true))
-            addView(space(16))
-            addView(label("요약  ▾", 14f, muted, bold = true))
-            addView(weightSpace())
-            addView(label("☷", 18f, amber, bold = true))
-            addView(space(14))
-            addView(label("▦", 17f, muted))
-        })
-        content.addView(space(10))
-        routines.forEach { routine ->
-            content.addView(routineCard(routine))
-            content.addView(space(10))
-        }
-
-        val scroll = ScrollView(this).apply {
-            clipToPadding = false
-            addView(content)
-        }
-
         val running = activeWorkout
-        val elapsed = label("00:00", 18f, white, bold = true)
-        val actions = if (running == null) {
-            row().apply {
-                setPadding(dp(20), dp(10), dp(20), dp(12))
-                addView(primaryButton("⚡  자유운동", amberDark) { showFreeWorkout() }, weightParams(1f, 64))
-                addView(space(12))
-                addView(primaryButton("＋  추가", Color.WHITE, amberDark) { showAddSheet() }, weightParams(1f, 64))
-            }
-        } else {
-            row().apply {
-                minimumHeight = dp(78)
-                setPadding(dp(20), dp(8), dp(20), dp(8))
-                background = rounded(Color.rgb(14, 16, 16), 0, amber)
-                addView(vertical().apply {
-                    addView(label(running.routine.name, 17f, white, bold = true))
-                    addView(elapsed)
-                    isClickable = true
-                    setOnClickListener { showActiveWorkout() }
-                }, weightParams(1f, -2))
-                addView(label(if (running.paused) "▶" else "Ⅱ", 28f, white, bold = true).apply {
-                    gravity = Gravity.CENTER
-                    isClickable = true
-                    setOnClickListener {
-                        toggleWorkoutPause(running)
-                        showHome()
-                    }
-                }, fixedParams(70, 70))
-                addView(label("■", 26f, white, bold = true).apply {
-                    gravity = Gravity.CENTER
-                    isClickable = true
-                    setOnClickListener { confirmStopWorkout() }
-                }, fixedParams(70, 70))
-            }
-        }
-
-        showScaffold(scroll, actions, RootTab.HOME)
-        running?.let { startHomeWorkoutTicker(it, elapsed) }
-    }
-
-    private fun routineCard(routine: WorkoutRoutine): View {
-        val card = horizontalCard().apply {
-            minimumHeight = dp(88)
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(16), dp(12), dp(14), dp(12))
-            isClickable = true
-            isFocusable = true
-            setOnClickListener {
+        val runningUi = running?.let { RunningUi(it.routine.name, it.paused) { workoutElapsedSeconds(it) } }
+        val actions = HomeActions(
+            openRoutine = { routine ->
                 selectedRoutine = routine
-                showRoutine(
-                    routine,
-                    active = activeWorkout?.takeIf { it.routine === routine },
-                    animateIn = true,
-                )
-            }
+                showRoutine(routine, active = activeWorkout?.takeIf { it.routine === routine }, animateIn = true)
+            },
+            routineMenu = ::showRoutineMenu,
+            freeWorkout = ::showFreeWorkout,
+            add = ::showAddSheet,
+            openRunning = { showActiveWorkout() },
+            togglePause = {
+                running?.let(::toggleWorkoutPause)
+                showHome()
+            },
+            stop = ::confirmStopWorkout,
+        )
+        val home = ComposeView(this).apply {
+            setContent { HomeScreen(routines, runningUi, actions) }
         }
-        card.addView(label("⚡", 22f, amber, bold = true), fixedParams(38, -1))
-        card.addView(vertical().apply {
-            addView(label(routine.name, 17f, white, bold = true))
-            addView(space(2))
-            addView(label(routine.muscles, 13f, blue, bold = true))
-            addView(space(2))
-            addView(label("${routine.lastPerformed} · ${routine.exercises.size}종목", 12f, muted))
-        }, weightParams(1f, -2))
-        card.addView(label("•••", 16f, muted, bold = true).apply {
-            setPadding(dp(8), dp(10), 0, dp(10))
-            setOnClickListener { showRoutineMenu(routine) }
-        })
-        return card
+        showScaffold(home, null, RootTab.HOME)
     }
 
     private fun showRoutine(
@@ -2084,18 +2015,6 @@ class MainActivity : ComponentActivity() {
         showActiveWorkout(forceRebuild = true)
     }
 
-    private fun startHomeWorkoutTicker(workout: ActiveWorkout, label: TextView) {
-        ticker = object : Runnable {
-            override fun run() {
-                if (activeWorkout !== workout || currentScreen != Screen.ROOT) return
-                label.text = timeText(workoutElapsedSeconds(workout))
-                handler.postDelayed(this, 1_000)
-            }
-        }.also {
-            it.run()
-        }
-    }
-
     private fun formatActiveWeight(weightKg: Double?, usePounds: Boolean): String {
         if (weightKg == null) return "체중"
         val value = if (usePounds) weightKg * 2.20462 else weightKg
@@ -3120,12 +3039,17 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun showScaffold(body: View, actions: View?, selected: RootTab) {
+        val switchingTab = currentScreen == Screen.ROOT && root.childCount > 0
         root.removeAllViews()
         val column = vertical()
         column.addView(body, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         actions?.let { column.addView(it) }
         column.addView(bottomNav(selected), matchParams(74))
         root.addView(column, FrameLayout.LayoutParams(-1, -1))
+        if (switchingTab) {
+            body.alpha = 0f
+            body.animate().alpha(1f).setDuration(Motion.UI_MS.toLong()).setInterpolator(uiInterpolator).start()
+        }
     }
 
     private fun showDetail(body: View, actions: View, animateFromRight: Boolean = false) {
@@ -3149,13 +3073,13 @@ class MainActivity : ComponentActivity() {
                 if (frame.parent !== root) return@post
                 previous.animate()
                     .translationX(-widthPx.toFloat())
-                    .setDuration(230L)
-                    .setInterpolator(DecelerateInterpolator(1.7f))
+                    .setDuration(Motion.PANEL_MS.toLong())
+                    .setInterpolator(panelInterpolator)
                     .start()
                 frame.animate()
                     .translationX(0f)
-                    .setDuration(230L)
-                    .setInterpolator(DecelerateInterpolator(1.7f))
+                    .setDuration(Motion.PANEL_MS.toLong())
+                    .setInterpolator(panelInterpolator)
                     .withEndAction {
                         if (previous.parent === root) root.removeView(previous)
                         frame.translationX = 0f
@@ -3189,34 +3113,20 @@ class MainActivity : ComponentActivity() {
         root.addView(frame, FrameLayout.LayoutParams(-1, -1))
     }
 
-    private fun bottomNav(selected: RootTab): View = row().apply {
-        gravity = Gravity.CENTER
-        setPadding(dp(8), dp(4), dp(8), dp(4))
-        background = GradientDrawable().apply {
-            setColor(Color.rgb(14, 16, 16))
-            setStroke(dp(1), Color.rgb(35, 38, 38))
-        }
-        listOf(
-            Triple(RootTab.HOME, "⌂", "홈"),
-            Triple(RootTab.RECORDS, "▣", "기록"),
-            Triple(RootTab.STATS, "▥", "통계"),
-            Triple(RootTab.CALIBRATION, "◉", "보정"),
-            Triple(RootTab.MENU, "☰", "메뉴"),
-        ).forEach { (tab, icon, title) ->
-            addView(vertical().apply {
-                gravity = Gravity.CENTER
-                setOnClickListener {
-                    when (tab) {
-                        RootTab.HOME -> showHome()
-                        RootTab.RECORDS -> showRecords()
-                        RootTab.STATS -> showStats()
-                        RootTab.CALIBRATION -> showCalibration()
-                        RootTab.MENU -> showMenu()
-                    }
+    private val panelInterpolator = PathInterpolator(0.785f, 0.135f, 0.15f, 0.86f)
+    private val uiInterpolator = PathInterpolator(0.42f, 0f, 0.58f, 1f)
+
+    private fun bottomNav(selected: RootTab): View = ComposeView(this).apply {
+        setContent {
+            RootBottomNav(selected.ordinal) { index ->
+                when (RootTab.values()[index]) {
+                    RootTab.HOME -> showHome()
+                    RootTab.RECORDS -> showRecords()
+                    RootTab.STATS -> showStats()
+                    RootTab.CALIBRATION -> showCalibration()
+                    RootTab.MENU -> showMenu()
                 }
-                addView(label(icon, 24f, if (selected == tab) amber else muted, bold = true).apply { gravity = Gravity.CENTER })
-                addView(label(title, 12f, if (selected == tab) amber else muted, bold = selected == tab).apply { gravity = Gravity.CENTER })
-            }, weightParams(1f, 66))
+            }
         }
     }
 
