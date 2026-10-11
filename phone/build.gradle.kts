@@ -16,12 +16,12 @@ android {
         applicationId = "dev.kyungmin.kcoach"
         minSdk = 29
         targetSdk = 35
-        versionCode = 25
-        versionName = "0.5.11"
+        versionCode = 26
+        versionName = "0.5.12"
         buildConfigField(
             "String",
             "UPDATE_MANIFEST_URL",
-            "\"http://192.168.200.105:8765/update.json\"",
+            "\"https://github.com/kmnoh12/kcoach/releases/latest/download/update-phone.json\"",
         )
     }
 

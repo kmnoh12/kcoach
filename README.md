@@ -14,6 +14,14 @@
 실제 워치가 없어 하드웨어 센서와 Health Services 심박수는 아직 검증하지 않았다.
 `core`는 기기 없이 단위 테스트할 수 있도록 Android 의존성을 분리했다.
 
+## 앱 업데이트
+
+폰과 워치 앱은 GitHub Releases의 `update-phone.json`, `update-watch.json`을 읽어 앱 안에서 업데이트한다.
+배포는 버전을 올리고 커밋한 뒤 `tools/release.sh "변경 내용"`을 실행한다.
+서명은 이 Mac의 `~/.android/debug.keystore`다. 이 키를 잃으면 기존 앱을 지우고 새로 깔아야 한다.
+
+`tools/update_server.py`는 예전 LAN 방식 앱(폰 0.5.11 이하, 워치 0.1.25 이하)을 GitHub 방식으로 한 번 옮길 때만 쓴다.
+
 ## 실기 검증
 
 1. Watch8의 API 36 건강 권한과 Health Services 심박수 확인

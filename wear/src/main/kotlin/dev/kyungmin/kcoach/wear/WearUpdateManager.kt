@@ -11,7 +11,6 @@ import androidx.core.net.toUri
 import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
-import java.net.InetAddress
 import java.net.URI
 import java.net.URL
 import java.security.MessageDigest
@@ -35,13 +34,7 @@ class WearUpdateManager(
 ) {
     private val updateDirectory = File(activity.cacheDir, "updates")
     private val updateFile = File(updateDirectory, "kcoach-wear-update.apk")
-    private val manifestUrls = listOf(
-        manifestUrl,
-        "http://gyeongmin-ui-MacBook-Neo.local:8765/update-watch.json",
-        "http://192.168.200.105:8765/update-watch.json",
-        "http://192.168.200.106:8765/update-watch.json",
-        "http://10.0.2.2:8765/update-watch.json",
-    ).distinct()
+    private val manifestUrls = listOf(manifestUrl)
     private var pendingInstall = false
 
     fun checkAndDownload(onState: (WearUpdateState) -> Unit) {
@@ -167,7 +160,8 @@ class WearUpdateManager(
         return (URL(url).openConnection() as HttpURLConnection).apply {
             connectTimeout = 5_000
             readTimeout = 30_000
-            instanceFollowRedirects = false
+            // GitHub Releases answers with a redirect to its asset CDN (https → https).
+            instanceFollowRedirects = true
             requestMethod = "GET"
             connect()
             check(responseCode == HttpURLConnection.HTTP_OK) { "서버 응답 $responseCode" }
@@ -177,11 +171,9 @@ class WearUpdateManager(
     private fun requireSameHost(manifestLocation: String, apkLocation: String) {
         val manifestUri = URI(manifestLocation)
         val apkUri = URI(apkLocation)
-        require(apkUri.scheme == "https" || apkUri.scheme == "http") { "허용되지 않은 다운로드 주소" }
+        require(apkUri.scheme == "https") { "허용되지 않은 다운로드 주소" }
         val sameHost = manifestUri.host.equals(apkUri.host, ignoreCase = true)
-        val localDiscoveryToLanAddress = manifestUri.host.endsWith(".local", ignoreCase = true) &&
-            InetAddress.getByName(apkUri.host).isSiteLocalAddress
-        require(manifestUri.port == apkUri.port && (sameHost || localDiscoveryToLanAddress)) {
+        require(manifestUri.port == apkUri.port && sameHost) {
             "업데이트 서버 주소 불일치"
         }
     }

@@ -32,12 +32,12 @@ android {
         applicationId = "dev.kyungmin.kcoach"
         minSdk = 30
         targetSdk = 35
-        versionCode = 26
-        versionName = "0.1.25"
+        versionCode = 27
+        versionName = "0.1.26"
         buildConfigField(
             "String",
             "UPDATE_MANIFEST_URL",
-            "\"http://gyeongmin-ui-MacBook-Neo.local:8765/update-watch.json\"",
+            "\"https://github.com/kmnoh12/kcoach/releases/latest/download/update-watch.json\"",
         )
     }
 }
