@@ -2,6 +2,17 @@ package dev.kyungmin.kcoach.phone
 
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import dev.kyungmin.kcoach.phone.ui.CalibrationActions
+import dev.kyungmin.kcoach.phone.ui.CalibrationButtonUi
+import dev.kyungmin.kcoach.phone.ui.CalibrationProfileUi
+import dev.kyungmin.kcoach.phone.ui.CalibrationRowUi
+import dev.kyungmin.kcoach.phone.ui.CalibrationScreen
+import dev.kyungmin.kcoach.phone.ui.CalibrationUi
+import dev.kyungmin.kcoach.phone.ui.MyMountainScreen
+import dev.kyungmin.kcoach.phone.ui.ResultSectionUi
+import dev.kyungmin.kcoach.phone.ui.ResultUi
+import dev.kyungmin.kcoach.phone.ui.WorkoutResultScreen
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
 import dev.kyungmin.kcoach.phone.ui.BigChoiceSheet
@@ -239,11 +250,14 @@ class MainActivity : ComponentActivity() {
                     if (fields.getOrNull(1) == calibrationSessionId) {
                         val phase = fields.getOrNull(9).orEmpty()
                         val reps = fields.getOrNull(5)?.toIntOrNull() ?: 0
-                        calibrationButton?.text = when (phase) {
+                        val liveText = when (phase) {
                             "BASELINE" -> "기준 자세 유지 중…"
                             "CONTROLLED_REPS" -> "자연스러운 왕복 $reps/5회"
                             "CALIBRATION_RESULT" -> "원본을 폰으로 전송 중…"
-                            else -> calibrationButton?.text
+                            else -> null
+                        }
+                        if (liveText != null) {
+                            calibrationButtonOverride.value = CalibrationButtonUi(liveText, calibrationButtonOverride.value?.enabled ?: true)
                         }
                     } else {
                         handleLivePayload(payload)
@@ -302,10 +316,7 @@ class MainActivity : ComponentActivity() {
                 }
                 PhoneWearListenerService.ACTION_CALIBRATION_RAW_SAVED -> {
                     if (intent.getStringExtra("sessionId").orEmpty() == calibrationSessionId) {
-                        calibrationButton?.apply {
-                            text = "원본 저장 완료 · 개인 프로필 적용 중…"
-                            isEnabled = false
-                        }
+                        calibrationButtonOverride.value = CalibrationButtonUi("원본 저장 완료 · 개인 프로필 적용 중…", false)
                     }
                 }
                 PhoneWearListenerService.ACTION_CALIBRATION_RESULT -> {
@@ -392,10 +403,7 @@ class MainActivity : ComponentActivity() {
                     if (intent.getStringExtra("sessionId").orEmpty() == calibrationSessionId) {
                         cancelCalibrationSaveTimeout()
                         calibrationStopRequested = false
-                        calibrationButton?.apply {
-                            isEnabled = true
-                            text = "보정 종료·저장"
-                        }
+                        calibrationButtonOverride.value = CalibrationButtonUi("보정 종료·저장", true)
                     }
                     activeWorkout?.let { workout ->
                         if (captureId.isNotBlank()) workout.captureStates[captureId] = CaptureState.ANALYSIS_FAILED
@@ -441,7 +449,7 @@ class MainActivity : ComponentActivity() {
     private var activeCalibrationExerciseId: String? = null
     private var selectedCalibrationExerciseId = "external_rotation"
     private var calibrationStopRequested = false
-    private var calibrationButton: Button? = null
+    private val calibrationButtonOverride = mutableStateOf<CalibrationButtonUi?>(null)
     private var calibrationSaveTimeoutTask: Runnable? = null
 
     private var returnFromLibrary: (() -> Unit)? = null
@@ -816,19 +824,10 @@ class MainActivity : ComponentActivity() {
         stopTicker()
         currentTab = RootTab.RECORDS
         currentScreen = Screen.ROOT
-        val page = vertical().apply { setPadding(dp(20), dp(20), dp(20), dp(24)) }
-        page.addView(detailTopBar("운동 완료 결과"))
-        page.addView(space(24))
-        page.addView(label(result.title, 28f, white, bold = true))
-        page.addView(space(8))
-        page.addView(label("${result.durationMinutes}분 · ${result.completedSets}세트 · 세션 ${result.sessionId.takeLast(8)}", 14f, muted))
-        page.addView(space(22))
-        page.addView(label("세트별 확정 분석", 20f, white, bold = true))
-        page.addView(space(10))
-        if (result.analyses.isEmpty()) {
-            page.addView(sectionCard("분석 대기", listOf("센서 원본" to "워치에서 수신 대기", "확정 반복수" to "capture 수신 후 표시")))
+        val sections = if (result.analyses.isEmpty()) {
+            listOf(ResultSectionUi("분석 대기", listOf("센서 원본" to "워치에서 수신 대기", "확정 반복수" to "capture 수신 후 표시")))
         } else {
-            result.analyses.values.sortedWith(compareBy<SetAnalysisUi> { it.exerciseName }.thenBy { it.setIndex }).forEach { analysis ->
+            result.analyses.values.sortedWith(compareBy<SetAnalysisUi> { it.exerciseName }.thenBy { it.setIndex }).map { analysis ->
                 val confidenceText = "%.0f%%".format(Locale.US, analysis.confidence * 100.0)
                 val metricRows = mutableListOf(
                     "tracking" to "${analysis.capabilityTier} · ${analysis.trackingStatus.ifBlank { analysis.trackingMode }} · ${analysis.trackingProfileId}",
@@ -841,15 +840,18 @@ class MainActivity : ComponentActivity() {
                 (analysis.wristMotionRange ?: analysis.relativeRom)?.let { metricRows += "손목 관측 범위" to "%.0f%%".format(Locale.US, it * 100.0) }
                 analysis.tempoConsistency?.let { metricRows += "템포 일관성" to "$it/100" }
                 analysis.signalQuality?.let { metricRows += "신호 품질" to "%.0f%%".format(Locale.US, it * 100.0) }
-                page.addView(sectionCard("${analysis.exerciseName} · 세트 ${analysis.setIndex + 1}", metricRows))
-                page.addView(space(10))
+                ResultSectionUi("${analysis.exerciseName} · 세트 ${analysis.setIndex + 1}", metricRows)
             }
         }
-        page.addView(space(18))
-        page.addView(label("확정 반복수는 워치 표시값이 아니라 폰의 원본 capture 재분석 결과를 우선해.", 13f, muted))
-        page.addView(space(18))
-        page.addView(primaryButton("운동 기록으로 돌아가기", surfaceRaised) { showRecords() }, matchParams(58))
-        showStandalone(ScrollView(this).apply { addView(page) })
+        val ui = ResultUi(
+            title = result.title,
+            subtitle = "${result.durationMinutes}분 · ${result.completedSets}세트 · 세션 ${result.sessionId.takeLast(8)}",
+            sections = sections,
+            footnote = "확정 반복수는 워치 표시값이 아니라 폰의 원본 capture 재분석 결과를 우선해.",
+        )
+        showStandalone(ComposeView(this).apply {
+            setContent { WorkoutResultScreen(ui, back = { onBackPressed() }, toRecords = { showRecords() }) }
+        })
     }
 
     private fun showStats() {
@@ -864,10 +866,7 @@ class MainActivity : ComponentActivity() {
         if (session != null) {
             if (calibrationStopRequested) return
             calibrationStopRequested = true
-            calibrationButton?.apply {
-                isEnabled = false
-                text = "보정 원본 저장 중…"
-            }
+            calibrationButtonOverride.value = CalibrationButtonUi("보정 원본 저장 중…", false)
             sendWear(WearSync.PATH_COMMAND, WearSync.command("STOP", session, "", 0, 0))
             Toast.makeText(this, "워치 센서 원본을 저장하는 중이야", Toast.LENGTH_LONG).show()
             scheduleCalibrationSaveTimeout(session)
@@ -907,10 +906,7 @@ class MainActivity : ComponentActivity() {
         cancelCalibrationSaveTimeout()
         activeCalibrationExerciseId = exercise.id
         calibrationStopRequested = false
-        calibrationButton?.apply {
-            text = "보정 종료·저장"
-            setTextColor(white)
-        }
+        calibrationButtonOverride.value = CalibrationButtonUi("보정 종료·저장", true)
         sendWear(
             WearSync.PATH_COMMAND,
             WearSync.richCommand(
@@ -928,11 +924,7 @@ class MainActivity : ComponentActivity() {
             calibrationSessionId = null
             activeCalibrationExerciseId = null
             calibrationStopRequested = false
-            calibrationButton?.apply {
-                isEnabled = true
-                text = "보정 전송 지연 · 다시 시작"
-                setTextColor(amber)
-            }
+            calibrationButtonOverride.value = CalibrationButtonUi("보정 전송 지연 · 다시 시작", true, textAmber = true)
             Toast.makeText(this, "20초 동안 워치 원본을 받지 못했어 · 연결 후 다시 보정해줘", Toast.LENGTH_LONG).show()
         }
         calibrationSaveTimeoutTask = timeout
@@ -977,43 +969,15 @@ class MainActivity : ComponentActivity() {
                 "→ 평소 범위·속도로 왕복 5회\n" +
                 "→ 즉시 폰 저장과 개인 프로필 적용"
         }
-        val page = vertical().apply {
-            gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(20), dp(20), dp(20), dp(24))
-            addView(topBar("개인 보정", ""))
-            addView(space(24))
-            addView(label(selected.name, 22f, white, bold = true))
-            addView(space(7))
-            addView(label(
-                if (manualRequired) "손목 센서 직접 관측 불가 · 수동 기록" else calibrationLabel(selected.id),
-                14f,
-                if (manualRequired) amber else blue,
-                bold = true,
-            ))
-            addView(space(12))
-            addView(label(instructions, 15f, muted))
-            addView(space(20))
-            calibrationButton = primaryButton(
-                if (manualRequired) "이 운동은 수동 기록만 지원"
-                else if (calibrationSessionId == null) "워치 연결 후 5회 보정 시작"
-                else if (calibrationStopRequested) "보정 원본 저장 중…"
-                else "보정 종료·저장",
-                if (calibrationSessionId == null) surfaceRaised else amberDark,
-                if (calibrationSessionId == null || manualRequired) muted else white,
-            ) {
-                startOrStopCalibration()
-            }.apply {
-                isEnabled = !calibrationStopRequested && !manualRequired
-            }
-            addView(calibrationButton, matchParams(58))
-            personalProfile(selected.id)?.let { profile ->
-                val applied = PersonalCalibrationBuilder.personalizedTrackingProfile(profile, selectedProfile)
-                val axis = listOf("X", "Y", "Z").getOrElse(profile.dominantAxis) { "?" }
-                val created = SimpleDateFormat("yyyy.MM.dd HH:mm", Locale.KOREA)
-                    .format(Date(profile.createdAtMs))
-                val naturalRange = Math.toDegrees(profile.minimumRom / 2.0).coerceAtLeast(0.0)
-                addView(space(14))
-                addView(sectionCard("저장된 개인 프로필 · 실 운동 적용 중", listOf(
+        calibrationButtonOverride.value = null
+        val profileUi = personalProfile(selected.id)?.let { profile ->
+            val applied = PersonalCalibrationBuilder.personalizedTrackingProfile(profile, selectedProfile)
+            val axis = listOf("X", "Y", "Z").getOrElse(profile.dominantAxis) { "?" }
+            val created = SimpleDateFormat("yyyy.MM.dd HH:mm", Locale.KOREA).format(Date(profile.createdAtMs))
+            val naturalRange = Math.toDegrees(profile.minimumRom / 2.0).coerceAtLeast(0.0)
+            CalibrationProfileUi(
+                "저장된 개인 프로필 · 실 운동 적용 중",
+                listOf(
                     "저장 시각" to created,
                     "유효 반복" to "${profile.validRepCount}회",
                     "학습 회전 범위" to "편도 약 ${"%.0f".format(naturalRange)}° 이상",
@@ -1022,51 +986,60 @@ class MainActivity : ComponentActivity() {
                     "실 운동 허용 시간" to "${"%.2f".format(applied.minimumRepMs / 1_000.0)}–${"%.2f".format(applied.maximumRepMs / 1_000.0)}초",
                     "적용 위치" to "워치 실시간 + 폰 재분석",
                     "가중치" to "개인 80% + 일반 20%",
-                )))
-                addView(space(8))
-                addView(label(
-                    "시작 자세 2초는 센서 기준축과 흔들림 기준을 잡는 단계야. 손목 센서만으로 팔꿈치·몸 전체 자세까지 확정하진 않아.",
-                    12f,
-                    muted,
-                ))
-                addView(space(12))
-                addView(primaryButton("보정된 기록 삭제", Color.rgb(72, 38, 32), amber) {
-                    confirmDeletePersonalProfile(selected.id, selected.name)
-                }, matchParams(54))
-            }
-            addView(space(28))
-            addView(label("보정할 운동 선택", 21f, white, bold = true).apply {
-                gravity = Gravity.START
-            })
-            addView(space(10))
-            WorkoutData.catalog.forEach { exercise ->
+                ),
+                "시작 자세 2초는 센서 기준축과 흔들림 기준을 잡는 단계야. 손목 센서만으로 팔꿈치·몸 전체 자세까지 확정하진 않아.",
+            )
+        }
+        val ui = CalibrationUi(
+            selectedName = selected.name,
+            status = if (manualRequired) "손목 센서 직접 관측 불가 · 수동 기록" else calibrationLabel(selected.id),
+            statusAmber = manualRequired,
+            instructions = instructions,
+            manualRequired = manualRequired,
+            profile = profileUi,
+            rows = WorkoutData.catalog.map { exercise ->
                 val profile = ExerciseTrackingProfiles.resolve(exercise.id, exercise.name)
-                val isManual = profile.mode == TrackingMode.MANUAL_REQUIRED
-                addView(exerciseRow(
-                    exercise,
-                    if (isManual) {
+                CalibrationRowUi(
+                    id = exercise.id,
+                    name = exercise.name,
+                    muscles = exercise.muscles,
+                    status = if (profile.mode == TrackingMode.MANUAL_REQUIRED) {
                         "수동 기록만"
                     } else {
                         val status = calibrationLabel(exercise.id)
                         if (exercise.id == selectedCalibrationExerciseId) "선택됨 · $status" else status
                     },
-                    onClick = {
-                        if (calibrationSessionId == null) {
-                            selectedCalibrationExerciseId = exercise.id
-                            showCalibration()
-                        }
+                    selected = exercise.id == selectedCalibrationExerciseId,
+                    thumbnail = { exerciseAnimationView(exercise, 58, compact = true) },
+                )
+            },
+        )
+        val actions = CalibrationActions(
+            toggle = ::startOrStopCalibration,
+            deleteProfile = { confirmDeletePersonalProfile(selected.id, selected.name) },
+            select = { id ->
+                selectedCalibrationExerciseId = id
+                showCalibration()
+            },
+        )
+        showScaffold(ComposeView(this).apply {
+            setContent {
+                CalibrationScreen(
+                    ui = ui,
+                    sessionActive = { calibrationSessionId != null },
+                    button = {
+                        calibrationButtonOverride.value ?: CalibrationButtonUi(
+                            if (manualRequired) "이 운동은 수동 기록만 지원"
+                            else if (calibrationSessionId == null) "워치 연결 후 5회 보정 시작"
+                            else if (calibrationStopRequested) "보정 원본 저장 중…"
+                            else "보정 종료·저장",
+                            !calibrationStopRequested,
+                        )
                     },
-                ).apply {
-                    if (exercise.id == selectedCalibrationExerciseId) {
-                        background = rounded(surfaceRaised, 16)
-                        setPadding(dp(8), dp(7), dp(8), dp(7))
-                    }
-                    alpha = if (calibrationSessionId == null) 1f else 0.55f
-                })
-                addView(space(4))
+                    actions = actions,
+                )
             }
-        }
-        showScaffold(ScrollView(this).apply { addView(page) }, null, RootTab.CALIBRATION)
+        }, null, RootTab.CALIBRATION)
     }
 
     private fun confirmDeletePersonalProfile(exerciseId: String, exerciseName: String) {
@@ -2130,98 +2103,15 @@ class MainActivity : ComponentActivity() {
 
     private fun showMyMountain() {
         currentScreen = Screen.MY_MOUNTAIN
-        val page = vertical().apply {
-            setPadding(dp(20), dp(16), dp(20), dp(24))
-            addView(detailTopBar("마이마운틴"))
-            addView(space(28))
-            addView(label("오늘 설정", 28f, white, bold = true))
-            addView(space(8))
-            addView(label("경사·속도·시간은 매번 바꿀 수 있어.", 15f, muted))
-            addView(space(24))
-            addView(row().apply {
-                addView(inputCard("경사", numberInput("13", "경사", true)), weightParams(1f, 118))
-                addView(space(10))
-                addView(inputCard("속도", numberInput("4.0", "km/h", true)), weightParams(1f, 118))
-                addView(space(10))
-                addView(inputCard("시간", numberInput("30", "분", true)), weightParams(1f, 118))
-            })
-            addView(space(28))
-            addView(primaryButton("마이마운틴 시작", amberDark) {
-                Toast.makeText(this@MainActivity, "워치 연결 후 심박수와 함께 기록돼", Toast.LENGTH_LONG).show()
-            }, matchParams(64))
-            addView(space(12))
-            addView(primaryButton("오늘은 종료", surfaceRaised) { showRecords() }, matchParams(56))
-        }
-        showStandalone(ScrollView(this).apply { addView(page) })
-    }
-
-    private fun metricGrid(metrics: List<Pair<String, String>>): View {
-        val grid = GridLayout(this).apply { columnCount = 2 }
-        metrics.forEach { (value, title) ->
-            grid.addView(vertical().apply {
-                background = rounded(surface, 18)
-                setPadding(dp(18), dp(18), dp(18), dp(18))
-                addView(label(value, 24f, white, bold = true))
-                addView(label(title, 14f, muted))
-            }, GridLayout.LayoutParams().apply {
-                width = 0
-                height = dp(92)
-                columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
-                setMargins(dp(4), dp(4), dp(4), dp(4))
-            })
-        }
-        return grid
-    }
-
-    private fun sectionCard(title: String, values: List<Pair<String, String>>): View = vertical().apply {
-        background = rounded(surface, 20)
-        setPadding(dp(18), dp(18), dp(18), dp(18))
-        addView(label(title, 19f, white, bold = true))
-        addView(space(12))
-        values.forEach { (name, value) ->
-            addView(row().apply {
-                setPadding(0, dp(8), 0, dp(8))
-                addView(label(name, 15f, white), weightParams(1f, -2))
-                addView(label(value, 15f, blue, bold = true))
-            })
-        }
-    }
-
-    private fun exerciseRow(
-        exercise: ExerciseDefinition,
-        subtitle: String,
-        onInfo: (() -> Unit)? = null,
-        onClick: (() -> Unit)? = null,
-        onMenu: (() -> Unit)? = null,
-        showHandle: Boolean = false,
-    ): View = row().apply {
-        gravity = Gravity.CENTER_VERTICAL
-        setPadding(dp(4), dp(4), dp(4), dp(4))
-        onClick?.let { callback ->
-            isClickable = true
-            setOnClickListener { callback.invoke() }
-        }
-        addView(exerciseAnimationView(exercise, 58, compact = true), fixedParams(58, 58))
-        addView(space(10))
-        addView(vertical().apply {
-            addView(label(exercise.name, 15f, white, bold = true))
-            addView(space(2))
-            addView(label("${exercise.muscles} · $subtitle", 12f, muted))
-        }, weightParams(1f, -2))
-        if (onInfo != null) {
-            addView(label("ⓘ", 17f, muted).apply {
-                isClickable = true
-                gravity = Gravity.CENTER
-                setOnClickListener { onInfo.invoke() }
-            }, fixedParams(38, 48))
-        }
-        addView(label(if (showHandle) "☷" else "•••", 15f, if (showHandle) amber else muted).apply {
-            if (onMenu != null) {
-                isClickable = true
-                setPadding(dp(6), dp(12), 0, dp(12))
-                setOnClickListener { onMenu.invoke() }
+        showStandalone(ComposeView(this).apply {
+            setContent {
+                MyMountainScreen(
+                    back = { onBackPressed() },
+                    start = { Toast.makeText(this@MainActivity, "워치 연결 후 심박수와 함께 기록돼", Toast.LENGTH_LONG).show() },
+                    finish = { showRecords() },
+                )
             }
-        }, fixedParams(40, 48))
+        })
     }
 
     private fun showExerciseRecord(
@@ -2324,12 +2214,6 @@ class MainActivity : ComponentActivity() {
         }, fixedParams(54, 58))
         addView(label(title, 25f, white, bold = true), weightParams(1f, -2))
         addView(label("•••", 18f, muted, bold = true).apply { gravity = Gravity.CENTER }, fixedParams(54, 58))
-    }
-
-    private fun topBar(title: String, right: String): View = row().apply {
-        gravity = Gravity.CENTER_VERTICAL
-        addView(label(title, 26f, white, bold = true), weightParams(1f, 52))
-        addView(label(right, 23f, muted, bold = true).apply { gravity = Gravity.CENTER_VERTICAL or Gravity.END })
     }
 
     private fun showExerciseMenu(
@@ -2642,27 +2526,6 @@ class MainActivity : ComponentActivity() {
                 marginEnd = if (item == total - 1) 0 else dp(5)
             })
         }
-    }
-
-    private fun inputCard(title: String, input: EditText): View = vertical().apply {
-        background = rounded(surface, 18)
-        setPadding(dp(16), dp(14), dp(16), dp(10))
-        addView(label(title, 13f, muted, bold = true))
-        addView(input, matchParams(74))
-    }
-
-    private fun numberInput(value: String, hint: String, numeric: Boolean): EditText = EditText(this).apply {
-        setText(value)
-        this.hint = hint
-        setTextColor(white)
-        setHintTextColor(muted)
-        textSize = 28f
-        typeface = Typeface.DEFAULT_BOLD
-        gravity = Gravity.CENTER_VERTICAL
-        setPadding(0, 0, 0, 0)
-        background = null
-        setSingleLine()
-        if (numeric) inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
     }
 
     private fun primaryButton(
