@@ -1,0 +1,298 @@
+package dev.kyungmin.kcoach.phone.ui
+
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import dev.kyungmin.kcoach.phone.WorkoutRecord
+import java.time.LocalDate
+import java.time.YearMonth
+
+@Composable
+private fun TabPage(title: String, right: String, content: @Composable () -> Unit) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(KColors.Bg)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 20.dp),
+    ) {
+        Row(Modifier.fillMaxWidth().heightIn(min = 52.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(title, color = KColors.White, fontSize = 26.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            if (right.isNotEmpty()) Text(right, color = KColors.Muted, fontSize = 23.sp, fontWeight = FontWeight.Bold)
+        }
+        content()
+    }
+}
+
+@Composable
+fun SectionCard(title: String, values: List<Pair<String, String>>, modifier: Modifier = Modifier) {
+    Column(modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(KColors.Surface).padding(18.dp)) {
+        Text(title, color = KColors.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(12.dp))
+        values.forEach { (name, value) ->
+            Row(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                Text(name, color = KColors.White, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                Text(value, color = KColors.Blue, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
+private fun MetricGrid(metrics: List<Pair<String, String>>) {
+    metrics.chunked(2).forEach { pair ->
+        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            pair.forEach { (value, title) ->
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .heightIn(min = 92.dp)
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(KColors.Surface)
+                        .padding(18.dp),
+                ) {
+                    Text(value, color = KColors.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                    Text(title, color = KColors.Muted, fontSize = 14.sp)
+                }
+            }
+        }
+    }
+}
+
+class RecordsActions(val openResult: () -> Unit, val monthChanged: (YearMonth) -> Unit)
+
+@Composable
+fun RecordsScreen(
+    records: List<WorkoutRecord>,
+    initialMonth: YearMonth,
+    lastResultTitle: String?,
+    actions: RecordsActions,
+) {
+    var month by remember { mutableStateOf(initialMonth) }
+    TabPage("운동 기록", "＋") {
+        Spacer(Modifier.height(30.dp))
+        if (lastResultTitle != null) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(58.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(KColors.SurfaceRaised)
+                    .pressable(actions.openResult),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("최근 완료 결과 · $lastResultTitle", color = KColors.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.height(18.dp))
+        }
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(KColors.Surface).padding(16.dp, 18.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                MonthArrow("‹") {
+                    month = month.minusMonths(1)
+                    actions.monthChanged(month)
+                }
+                AnimatedContent(
+                    targetState = month,
+                    modifier = Modifier.weight(1f),
+                    transitionSpec = {
+                        fadeIn(tween(Motion.UI_MS / 2, delayMillis = Motion.UI_MS / 2, easing = Motion.UiEasing)) togetherWith
+                            fadeOut(tween(Motion.UI_MS / 2, easing = Motion.UiEasing))
+                    },
+                    label = "month",
+                ) { m ->
+                    Text(
+                        "${m.year}년 ${m.monthValue}월",
+                        color = KColors.White, fontSize = 21.sp, fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                MonthArrow("›") {
+                    month = month.plusMonths(1)
+                    actions.monthChanged(month)
+                }
+            }
+            Spacer(Modifier.height(14.dp))
+            AnimatedContent(
+                targetState = month,
+                // Digits of two months must never overlap: the old grid leaves
+                // first, the new one arrives after it.
+                transitionSpec = {
+                    fadeIn(tween(Motion.UI_MS / 2, delayMillis = Motion.UI_MS / 2, easing = Motion.UiEasing)) togetherWith
+                        fadeOut(tween(Motion.UI_MS / 2, easing = Motion.UiEasing))
+                },
+                label = "calendar",
+            ) { m -> CalendarGrid(m, records) }
+        }
+        Spacer(Modifier.height(26.dp))
+        Text("최근 운동", color = KColors.White, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(14.dp))
+        records.take(4).forEach { record ->
+            RecordCard(record)
+            Spacer(Modifier.height(10.dp))
+        }
+    }
+}
+
+@Composable
+private fun MonthArrow(text: String, onClick: () -> Unit) {
+    Box(Modifier.size(42.dp).pressable(onClick), contentAlignment = Alignment.Center) {
+        Text(text, color = KColors.Muted, fontSize = 30.sp)
+    }
+}
+
+@Composable
+private fun CalendarGrid(month: YearMonth, records: List<WorkoutRecord>) {
+    val recorded = records
+        .filter { it.date.startsWith(month.toString()) }
+        .map { LocalDate.parse(it.date).dayOfMonth }
+        .toSet()
+    val offset = month.atDay(1).dayOfWeek.value % 7
+    val cells: List<Int?> = List(offset) { null } + (1..month.lengthOfMonth()).toList()
+    Column {
+        Row(Modifier.fillMaxWidth()) {
+            listOf("일", "월", "화", "수", "목", "금", "토").forEach {
+                Text(it, color = KColors.Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+            }
+        }
+        cells.chunked(7).forEach { week ->
+            Row(Modifier.fillMaxWidth().padding(top = 6.dp)) {
+                for (i in 0 until 7) {
+                    val day = week.getOrNull(i)
+                    Column(Modifier.weight(1f).height(44.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        if (day != null) {
+                            val has = day in recorded
+                            val fill by animateColorAsState(if (has) KColors.AmberDark else Color.Transparent, Motion.ui(), label = "day")
+                            Box(Modifier.clip(CircleShape).background(fill).padding(horizontal = 9.dp, vertical = 4.dp)) {
+                                Text(day.toString(), color = if (has) KColors.White else KColors.Muted, fontSize = 15.sp, fontWeight = if (has) FontWeight.Bold else FontWeight.Normal)
+                            }
+                            if (has) Text("•", color = KColors.Amber, fontSize = 13.sp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecordCard(record: WorkoutRecord) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(KColors.Surface).padding(18.dp, 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(record.title, color = KColors.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(record.date.replace("-", "."), color = KColors.Muted, fontSize = 13.sp)
+        }
+        Column(horizontalAlignment = Alignment.End) {
+            Text("${record.minutes}분 · ${record.sets}세트", color = KColors.Blue, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Text("%,dkg".format(record.volumeKg), color = KColors.Muted, fontSize = 13.sp)
+        }
+    }
+}
+
+@Composable
+fun StatsScreen() {
+    TabPage("통계", "7월  ▾") {
+        Spacer(Modifier.height(30.dp))
+        Text("최근 4분할", color = KColors.White, fontSize = 27.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(16.dp))
+        MetricGrid(listOf("4회" to "운동", "270분" to "총 시간", "96세트" to "총 세트", "40,809kg" to "총 볼륨"))
+        Spacer(Modifier.height(22.dp))
+        SectionCard(
+            "부위별 흐름",
+            listOf("어깨" to "특화 · 주 2회", "등" to "풀업 총 26회", "가슴" to "프레스 8세트", "팔·하체" to "29세트"),
+        )
+        Spacer(Modifier.height(18.dp))
+        SectionCard(
+            "다음 목표",
+            listOf("풀업" to "총 28회", "벤치프레스" to "60kg 총 반복 +1~2", "덤벨 레터럴 레이즈" to "10kg 16회"),
+        )
+    }
+}
+
+class UpdateUi(val message: String, val readyToInstall: Boolean)
+
+class MenuActions(
+    val checkUpdate: ((UpdateUi) -> Unit) -> Unit,
+    val install: () -> String?,
+    val openProbe: () -> Unit,
+)
+
+@Composable
+fun MenuScreen(version: String, actions: MenuActions) {
+    var state by remember { mutableStateOf(UpdateUi("업데이트를 확인할 수 있어", false)) }
+    var busy by remember { mutableStateOf(false) }
+    TabPage("메뉴", "") {
+        Spacer(Modifier.height(28.dp))
+        SectionCard("기기", listOf("Galaxy Watch8" to "연결 대기", "착용 손" to "왼손", "센서 기록" to "세트 중에만"))
+        Spacer(Modifier.height(16.dp))
+        SectionCard("앱", listOf("현재 버전" to version, "데이터 저장" to "이 기기에만"))
+        Spacer(Modifier.height(16.dp))
+        Text(state.message, color = KColors.Muted, fontSize = 14.sp)
+        Spacer(Modifier.height(10.dp))
+        MenuButton(if (state.readyToInstall) "다운로드 완료 · 설치" else "업데이트 확인") {
+            if (state.readyToInstall) {
+                actions.install()?.let { state = UpdateUi(it, true) }
+            } else if (!busy) {
+                busy = true
+                state = UpdateUi("최신 버전 확인 중…", false)
+                actions.checkUpdate { result ->
+                    state = result
+                    busy = false
+                }
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        MenuButton("실측 모드", actions.openProbe)
+    }
+}
+
+@Composable
+private fun MenuButton(text: String, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(58.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(KColors.AmberDark)
+            .pressable(onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text, color = KColors.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+    }
+}

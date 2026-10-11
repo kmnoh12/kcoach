@@ -8,10 +8,16 @@ import dev.kyungmin.kcoach.phone.ui.ExerciseUi
 import dev.kyungmin.kcoach.phone.ui.HomeActions
 import dev.kyungmin.kcoach.phone.ui.HomeScreen
 import dev.kyungmin.kcoach.phone.ui.Motion
+import dev.kyungmin.kcoach.phone.ui.MenuActions
+import dev.kyungmin.kcoach.phone.ui.MenuScreen
+import dev.kyungmin.kcoach.phone.ui.RecordsActions
+import dev.kyungmin.kcoach.phone.ui.RecordsScreen
 import dev.kyungmin.kcoach.phone.ui.RootBottomNav
 import dev.kyungmin.kcoach.phone.ui.RunningUi
 import dev.kyungmin.kcoach.phone.ui.SetField
 import dev.kyungmin.kcoach.phone.ui.SetUi
+import dev.kyungmin.kcoach.phone.ui.StatsScreen
+import dev.kyungmin.kcoach.phone.ui.UpdateUi
 import dev.kyungmin.kcoach.phone.ui.WorkoutActions
 import dev.kyungmin.kcoach.phone.ui.WorkoutUiModel
 import android.app.AlertDialog
@@ -910,22 +916,14 @@ class MainActivity : ComponentActivity() {
         stopTicker()
         currentTab = RootTab.RECORDS
         currentScreen = Screen.ROOT
-        val page = vertical().apply { setPadding(dp(20), dp(20), dp(20), dp(24)) }
-        page.addView(topBar("운동 기록", "＋"))
-        page.addView(space(30))
-        lastWorkoutResult?.let { result ->
-            page.addView(primaryButton("최근 완료 결과 · ${result.title}", surfaceRaised) { showWorkoutResult(result) }, matchParams(58))
-            page.addView(space(18))
-        }
-        page.addView(calendarCard(recordMonth))
-        page.addView(space(26))
-        page.addView(label("최근 운동", 25f, white, bold = true))
-        page.addView(space(14))
-        WorkoutData.records.take(4).forEach { record ->
-            page.addView(recordCard(record))
-            page.addView(space(10))
-        }
-        showScaffold(ScrollView(this).apply { addView(page) }, null, RootTab.RECORDS)
+        val actions = RecordsActions(
+            openResult = { showWorkoutResult(lastWorkoutResult) },
+            monthChanged = { recordMonth = it },
+        )
+        val title = lastWorkoutResult?.title
+        showScaffold(ComposeView(this).apply {
+            setContent { RecordsScreen(WorkoutData.records, recordMonth, title, actions) }
+        }, null, RootTab.RECORDS)
     }
 
     private fun showWorkoutResult(result: WorkoutResultUi?) {
@@ -973,26 +971,7 @@ class MainActivity : ComponentActivity() {
         stopTicker()
         currentTab = RootTab.STATS
         currentScreen = Screen.ROOT
-        val page = vertical().apply { setPadding(dp(20), dp(20), dp(20), dp(24)) }
-        page.addView(topBar("통계", "7월  ▾"))
-        page.addView(space(30))
-        page.addView(label("최근 4분할", 27f, white, bold = true))
-        page.addView(space(16))
-        page.addView(metricGrid(listOf("4회" to "운동", "270분" to "총 시간", "96세트" to "총 세트", "40,809kg" to "총 볼륨")))
-        page.addView(space(22))
-        page.addView(sectionCard("부위별 흐름", listOf(
-            "어깨" to "특화 · 주 2회",
-            "등" to "풀업 총 26회",
-            "가슴" to "프레스 8세트",
-            "팔·하체" to "29세트",
-        )))
-        page.addView(space(18))
-        page.addView(sectionCard("다음 목표", listOf(
-            "풀업" to "총 28회",
-            "벤치프레스" to "60kg 총 반복 +1~2",
-            "덤벨 레터럴 레이즈" to "10kg 16회",
-        )))
-        showScaffold(ScrollView(this).apply { addView(page) }, null, RootTab.STATS)
+        showScaffold(ComposeView(this).apply { setContent { StatsScreen() } }, null, RootTab.STATS)
     }
 
     private fun startOrStopCalibration() {
@@ -1233,44 +1212,18 @@ class MainActivity : ComponentActivity() {
         stopTicker()
         currentTab = RootTab.MENU
         currentScreen = Screen.ROOT
-        val page = vertical().apply { setPadding(dp(20), dp(20), dp(20), dp(24)) }
-        page.addView(topBar("메뉴", ""))
-        page.addView(space(28))
-        page.addView(sectionCard("기기", listOf(
-            "Galaxy Watch8" to "연결 대기",
-            "착용 손" to "왼손",
-            "센서 기록" to "세트 중에만",
-        )))
-        page.addView(space(16))
-        page.addView(sectionCard("앱", listOf(
-            "현재 버전" to BuildConfig.VERSION_NAME,
-            "데이터 저장" to "이 기기에만",
-        )))
-        page.addView(space(16))
-        val status = label("업데이트를 확인할 수 있어", 14f, muted)
-        lateinit var update: Button
-        update = primaryButton("업데이트 확인", amberDark) {
-            status.text = "최신 버전 확인 중…"
-            updateManager.checkAndDownload { state ->
-                runOnUiThread {
-                    status.text = state.message
-                    if (state.readyToInstall) {
-                        update.text = "다운로드 완료 · 설치"
-                        update.setOnClickListener {
-                            updateManager.requestInstall()?.let { message -> status.text = message }
-                        }
-                    }
+        val actions = MenuActions(
+            checkUpdate = { report ->
+                updateManager.checkAndDownload { state ->
+                    runOnUiThread { report(UpdateUi(state.message, state.readyToInstall)) }
                 }
-            }
-        }
-        page.addView(status)
-        page.addView(space(10))
-        page.addView(update, matchParams(58))
-        page.addView(space(10))
-        page.addView(primaryButton("실측 모드", amberDark) {
-            startActivity(Intent(this, ProbeActivity::class.java))
-        }, matchParams(58))
-        showScaffold(ScrollView(this).apply { addView(page) }, null, RootTab.MENU)
+            },
+            install = { updateManager.requestInstall() },
+            openProbe = { startActivity(Intent(this, ProbeActivity::class.java)) },
+        )
+        showScaffold(ComposeView(this).apply {
+            setContent { MenuScreen(BuildConfig.VERSION_NAME, actions) }
+        }, null, RootTab.MENU)
     }
 
     private fun showStartGuide(
@@ -2371,73 +2324,6 @@ class MainActivity : ComponentActivity() {
             addView(primaryButton("오늘은 종료", surfaceRaised) { showRecords() }, matchParams(56))
         }
         showStandalone(ScrollView(this).apply { addView(page) })
-    }
-
-    private fun calendarCard(month: YearMonth): View {
-        val card = vertical().apply {
-            background = rounded(surface, 22)
-            setPadding(dp(16), dp(18), dp(16), dp(18))
-        }
-        card.addView(row().apply {
-            gravity = Gravity.CENTER_VERTICAL
-            addView(label("‹", 30f, muted).apply {
-                gravity = Gravity.CENTER
-                setOnClickListener {
-                    recordMonth = recordMonth.minusMonths(1)
-                    showRecords()
-                }
-            }, fixedParams(42, 42))
-            addView(label("${month.year}년 ${month.monthValue}월", 21f, white, bold = true).apply {
-                gravity = Gravity.CENTER
-            }, weightParams(1f, 42))
-            addView(label("›", 30f, muted).apply {
-                gravity = Gravity.CENTER
-                setOnClickListener {
-                    recordMonth = recordMonth.plusMonths(1)
-                    showRecords()
-                }
-            }, fixedParams(42, 42))
-        })
-        card.addView(space(14))
-        val grid = GridLayout(this).apply { columnCount = 7 }
-        listOf("일", "월", "화", "수", "목", "금", "토").forEach {
-            grid.addView(label(it, 12f, muted, bold = true).apply { gravity = Gravity.CENTER }, gridParams())
-        }
-        val firstOffset = month.atDay(1).dayOfWeek.value % 7
-        repeat(firstOffset) { grid.addView(Space(this), gridParams()) }
-        val recordedDays = WorkoutData.records
-            .filter { it.date.startsWith(month.toString()) }
-            .map { LocalDate.parse(it.date).dayOfMonth }
-            .toSet()
-        for (day in 1..month.lengthOfMonth()) {
-            val selected = day in recordedDays
-            grid.addView(vertical().apply {
-                gravity = Gravity.CENTER
-                setPadding(0, dp(8), 0, dp(6))
-                addView(label(day.toString(), 15f, if (selected) white else muted, bold = selected).apply {
-                    gravity = Gravity.CENTER
-                    if (selected) background = rounded(amberDark, 18)
-                    setPadding(dp(9), dp(5), dp(9), dp(5))
-                })
-                addView(label(if (selected) "•" else "", 13f, amber).apply { gravity = Gravity.CENTER })
-            }, gridParams())
-        }
-        card.addView(grid)
-        return card
-    }
-
-    private fun recordCard(record: WorkoutRecord): View = horizontalCard().apply {
-        gravity = Gravity.CENTER_VERTICAL
-        setPadding(dp(18), dp(16), dp(18), dp(16))
-        addView(vertical().apply {
-            addView(label(record.title, 20f, white, bold = true))
-            addView(label(record.date.replace("-", "."), 13f, muted))
-        }, weightParams(1f, -2))
-        addView(vertical().apply {
-            gravity = Gravity.END
-            addView(label("${record.minutes}분 · ${record.sets}세트", 14f, blue, bold = true).apply { gravity = Gravity.END })
-            addView(label("%,dkg".format(record.volumeKg), 13f, muted).apply { gravity = Gravity.END })
-        })
     }
 
     private fun metricGrid(metrics: List<Pair<String, String>>): View {
