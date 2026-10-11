@@ -3,11 +3,14 @@ package dev.kyungmin.kcoach.phone
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.dp
 import dev.kyungmin.kcoach.phone.ui.BigChoiceSheet
 import dev.kyungmin.kcoach.phone.ui.ChoiceSheet
 import dev.kyungmin.kcoach.phone.ui.ConfirmDialog
 import dev.kyungmin.kcoach.phone.ui.InputDialog
 import dev.kyungmin.kcoach.phone.ui.KColors
+import dev.kyungmin.kcoach.phone.ui.LibraryActions
+import dev.kyungmin.kcoach.phone.ui.LibraryScreen
 import dev.kyungmin.kcoach.phone.ui.Overlay
 import dev.kyungmin.kcoach.phone.ui.OverlayHost
 import dev.kyungmin.kcoach.phone.ui.OverlayState
@@ -623,163 +626,76 @@ class MainActivity : ComponentActivity() {
         showDetail(body, null, animateFromRight = animateIn)
     }
 
+    private fun freeRoutine() = WorkoutRoutine("free", "자유운동", "선택 운동", "오늘", freeExercises)
+
     private fun showFreeWorkout() {
         stopTicker()
         currentScreen = Screen.FREE
-        val list = vertical().apply {
-            setPadding(dp(20), dp(16), dp(20), dp(116))
-            addView(detailTopBar("7월 27일, 밤 운동"))
-            addView(space(18))
-            addView(anatomyPlaceholder(if (freeExercises.isEmpty()) 410 else 250))
-            if (freeExercises.isNotEmpty()) {
-                addView(space(18))
-                freeExercises.forEachIndexed { index, item ->
-                    addView(exerciseRow(item.exercise, "${item.sets.workSetCount()}세트 · 총 ${item.sets.sumOf { it.targetReps }}회", onInfo = {
-                        showExerciseInfo(item.exercise) { showFreeWorkout() }
-                    }, onClick = {
-                        val freeRoutine = WorkoutRoutine("free", "자유운동", "선택 운동", "오늘", freeExercises)
-                        showExerciseRecord(freeRoutine, index, null) { showFreeWorkout() }
-                    }, onMenu = {
-                        val freeRoutine = WorkoutRoutine("free", "자유운동", "선택 운동", "오늘", freeExercises)
-                        showExerciseMenu(freeRoutine, index, null) { showFreeWorkout() }
-                    }))
-                    addView(space(8))
-                }
-            }
+        val reload = { showFreeWorkout() }
+        val rows = freeExercises.mapIndexed { index, item ->
+            RoutineRowUi(
+                key = index,
+                name = item.exercise.name,
+                subtitle = "${item.exercise.muscles} · ${item.sets.workSetCount()}세트 · 총 ${item.sets.sumOf { it.targetReps }}회",
+                thumbnail = { exerciseAnimationView(item.exercise, 58, compact = true) },
+            )
         }
-        val actions = row().apply {
-            setPadding(dp(20), dp(10), dp(20), dp(18))
-            if (freeExercises.isNotEmpty()) {
-                addView(primaryButton("▶  시작", amberDark) {
-                    showStartGuide(
-                        WorkoutRoutine("free", "자유운동", "선택 운동", "오늘", freeExercises),
-                    )
-                }, weightParams(1f, 66))
-                addView(space(12))
-            }
-            addView(primaryButton("＋ 운동 추가", if (freeExercises.isEmpty()) amberDark else Color.WHITE, if (freeExercises.isEmpty()) white else amberDark) {
+        val actions = RoutineDetailActions(
+            back = { onBackPressed() },
+            open = { index -> showExerciseRecord(freeRoutine(), index, null, reload) },
+            info = { index -> showExerciseInfo(freeExercises[index].exercise, reload) },
+            menu = { index -> showExerciseMenu(freeRoutine(), index, null, reload) },
+            move = { from, to -> freeExercises.add(to, freeExercises.removeAt(from)) },
+            moveFinished = { Toast.makeText(this, "운동 순서가 반영됐어", Toast.LENGTH_SHORT).show() },
+            primary = { showStartGuide(freeRoutine()) },
+            addExercise = {
                 openLibrary(
                     onSelect = {
                         if (freeExercises.none { row -> row.exercise.id == it.id }) {
                             freeExercises += RoutineExercise(it, mutableListOf(PlannedSet(null, 10)))
                         }
                     },
-                    onReturn = { showFreeWorkout() },
+                    onReturn = reload,
                 )
-            }, weightParams(1f, 66))
+            },
+        )
+        val body = ComposeView(this).apply {
+            setContent {
+                RoutineDetailScreen(
+                    title = "7월 27일, 밤 운동",
+                    rows = rows,
+                    primaryLabel = if (freeExercises.isNotEmpty()) "▶  시작" else null,
+                    showHandle = false,
+                    actions = actions,
+                    placeholderHeight = if (freeExercises.isEmpty()) 410.dp else 250.dp,
+                    addFilled = freeExercises.isEmpty(),
+                )
+            }
         }
-        showDetail(ScrollView(this).apply { addView(list) }, actions)
+        showDetail(body, null)
     }
 
     private fun openLibrary(onSelect: (ExerciseDefinition) -> Unit, onReturn: () -> Unit) {
         stopTicker()
         currentScreen = Screen.LIBRARY
         returnFromLibrary = onReturn
-        var mode = "전체"
-        var body = "전체"
-        var equipment = "전체"
-        var query = ""
-
-        val page = vertical().apply { setPadding(dp(18), dp(14), dp(18), dp(20)) }
-        val search = EditText(this).apply {
-            hint = "운동 검색"
-            setHintTextColor(muted)
-            setTextColor(white)
-            textSize = 17f
-            setSingleLine()
-            setPadding(dp(18), 0, dp(18), 0)
-            background = rounded(surfaceRaised, 14)
-        }
-        page.addView(row().apply {
-            gravity = Gravity.CENTER_VERTICAL
-            addView(label("‹", 48f, white).apply {
-                gravity = Gravity.CENTER
-                setOnClickListener { onReturn() }
-            }, fixedParams(54, 58))
-            addView(search, weightParams(1f, 58))
-            addView(space(12))
-            addView(label("⊞", 34f, white).apply {
-                gravity = Gravity.CENTER
-                setOnClickListener { showCustomExerciseDialog(onSelect, onReturn) }
-            }, fixedParams(48, 58))
+        val actions = LibraryActions(
+            back = onReturn,
+            custom = { showCustomExerciseDialog(onSelect, onReturn) },
+            add = {
+                onSelect(it)
+                Toast.makeText(this, "${it.name} 추가됨", Toast.LENGTH_SHORT).show()
+            },
+        )
+        val frequent = setOf(
+            "pull_up", "lat_pull_down", "flat_bench", "incline_bench",
+            "dumbbell_lateral_raise", "leg_press", "cable_pushdown",
+        )
+        showStandalone(ComposeView(this).apply {
+            setContent {
+                LibraryScreen(WorkoutData.catalog.toList(), frequent, actions) { exerciseAnimationView(it, 56, compact = true) }
+            }
         })
-        page.addView(space(18))
-
-        val results = vertical()
-        fun refresh() {
-            results.removeAllViews()
-            val frequent = setOf(
-                "pull_up", "lat_pull_down", "flat_bench", "incline_bench",
-                "dumbbell_lateral_raise", "leg_press", "cable_pushdown",
-            )
-            val filtered = WorkoutData.catalog
-                .filter { item ->
-                    (query.isBlank() || item.name.contains(query, ignoreCase = true)) &&
-                        (body == "전체" || item.bodyCategory == body) &&
-                        (equipment == "전체" || item.equipment == equipment) &&
-                        when (mode) {
-                            "좋아하는" -> item.favorite
-                            "자주하는" -> item.id in frequent
-                            "커스텀" -> item.id.startsWith("custom_")
-                            else -> true
-                        }
-                }
-                .sortedWith(compareByDescending<ExerciseDefinition> { it.favorite }.thenBy { it.name })
-
-            results.addView(label("${filtered.size}개 운동", 13f, muted).apply {
-                setPadding(dp(6), dp(8), 0, dp(12))
-            })
-            filtered.forEach { exercise ->
-                results.addView(libraryExerciseRow(exercise) {
-                    onSelect(exercise)
-                    Toast.makeText(this, "${exercise.name} 추가됨", Toast.LENGTH_SHORT).show()
-                })
-                results.addView(space(4))
-            }
-        }
-
-        fun chipStrip(values: List<String>, selected: () -> String, onSelected: (String) -> Unit): View {
-            val strip = row()
-            fun rebuild() {
-                strip.removeAllViews()
-                values.forEach { value ->
-                    strip.addView(chip(value, selected() == value) {
-                        onSelected(value)
-                        rebuild()
-                        refresh()
-                    })
-                    strip.addView(space(8))
-                }
-            }
-            rebuild()
-            return HorizontalScrollView(this).apply {
-                isHorizontalScrollBarEnabled = false
-                addView(strip)
-            }
-        }
-
-        page.addView(chipStrip(listOf("전체", "좋아하는", "자주하는", "최근", "커스텀"), { mode }) { mode = it })
-        page.addView(space(10))
-        page.addView(chipStrip(listOf("전체", "가슴", "등", "어깨", "삼두", "이두", "하체"), { body }) { body = it })
-        page.addView(space(10))
-        page.addView(chipStrip(listOf("전체", "맨몸", "덤벨", "바벨", "머신", "케이블"), { equipment }) { equipment = it })
-        page.addView(space(16))
-        page.addView(label("＋  커스텀 운동 추가", 17f, amber, bold = true).apply {
-            setPadding(dp(14), dp(16), dp(14), dp(16))
-            setOnClickListener { showCustomExerciseDialog(onSelect, onReturn) }
-        })
-        page.addView(results)
-
-        search.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                query = s?.toString().orEmpty()
-                refresh()
-            }
-            override fun afterTextChanged(s: Editable?) = Unit
-        })
-        refresh()
-        showStandalone(ScrollView(this).apply { addView(page) })
     }
 
     private fun persistLastWorkoutResult(result: WorkoutResultUi) {

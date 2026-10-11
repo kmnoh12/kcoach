@@ -38,6 +38,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -67,9 +68,11 @@ private val RowStride = 74.dp
 fun RoutineDetailScreen(
     title: String,
     rows: List<RoutineRowUi>,
-    primaryLabel: String,
+    primaryLabel: String?,
     showHandle: Boolean,
     actions: RoutineDetailActions,
+    placeholderHeight: Dp = 285.dp,
+    addFilled: Boolean = false,
 ) {
     val list = remember { mutableStateListOf<RoutineRowUi>().apply { addAll(rows) } }
     var draggedKey by remember { mutableStateOf<Int?>(null) }
@@ -95,7 +98,7 @@ fun RoutineDetailScreen(
                         }
                     }
                     Spacer(Modifier.height(18.dp))
-                    Box(Modifier.fillMaxWidth().height(285.dp).clip(RoundedCornerShape(20.dp)).background(KColors.Surface))
+                    Box(Modifier.fillMaxWidth().height(placeholderHeight).clip(RoundedCornerShape(20.dp)).background(KColors.Surface))
                     Spacer(Modifier.height(10.dp))
                 }
             }
@@ -165,9 +168,17 @@ fun RoutineDetailScreen(
         Row(
             Modifier.align(Alignment.BottomCenter).padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 18.dp),
         ) {
-            RoutineButton(primaryLabel, KColors.AmberDark, KColors.White, Modifier.weight(1f), actions.primary)
-            Spacer(Modifier.width(12.dp))
-            RoutineButton("＋ 운동 추가", Color.White, KColors.AmberDark, Modifier.weight(1f), actions.addExercise)
+            if (primaryLabel != null) {
+                RoutineButton(primaryLabel, KColors.AmberDark, KColors.White, Modifier.weight(1f), actions.primary)
+                Spacer(Modifier.width(12.dp))
+            }
+            RoutineButton(
+                "＋ 운동 추가",
+                if (addFilled) KColors.AmberDark else Color.White,
+                if (addFilled) KColors.White else KColors.AmberDark,
+                Modifier.weight(1f),
+                actions.addExercise,
+            )
         }
     }
 }
