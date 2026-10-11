@@ -13,6 +13,9 @@ import dev.kyungmin.kcoach.phone.ui.MenuScreen
 import dev.kyungmin.kcoach.phone.ui.RecordsActions
 import dev.kyungmin.kcoach.phone.ui.RecordsScreen
 import dev.kyungmin.kcoach.phone.ui.RootBottomNav
+import dev.kyungmin.kcoach.phone.ui.RoutineDetailActions
+import dev.kyungmin.kcoach.phone.ui.RoutineDetailScreen
+import dev.kyungmin.kcoach.phone.ui.RoutineRowUi
 import dev.kyungmin.kcoach.phone.ui.RunningUi
 import dev.kyungmin.kcoach.phone.ui.SetField
 import dev.kyungmin.kcoach.phone.ui.SetUi
@@ -555,96 +558,30 @@ class MainActivity : ComponentActivity() {
         currentScreen = Screen.ROUTINE
         selectedRoutine = routine
 
-        val list = vertical().apply {
-            setPadding(dp(20), dp(16), dp(20), dp(110))
-            val top = detailTopBar(routine.name)
-            (top as ViewGroup).getChildAt(0).setOnClickListener { onExit?.invoke() ?: onBackPressed() }
-            addView(top)
-            addView(space(18))
-            addView(anatomyPlaceholder(285))
-            addView(space(10))
-            // Populate the entire list as one frame. LayoutTransition used to
-            // animate every row while this screen was first being constructed,
-            // which made the page appear in broken, staggered fragments.
-            val exerciseRows = vertical()
-            addView(exerciseRows)
-            var draggedExercise: RoutineExercise? = null
-            var draggedRow: View? = null
-            var dragMoved = false
-            routine.exercises.forEachIndexed { index, item ->
-                val targetReps = item.sets.sumOf { it.targetReps }
-                val itemRow = exerciseRow(item.exercise, "${item.sets.workSetCount()}세트 · 총 ${targetReps}회", onInfo = {
-                    showExerciseInfo(item.exercise) {
-                        showRoutine(routine, reorderMode, active, onExit)
-                    }
-                }, onClick = {
-                    if (active != null && active.routine === routine) {
-                        showWorkoutExercise(active, index)
-                    } else {
-                        showExercisePreview(routine, index)
-                    }
-                }, onMenu = {
-                    showExerciseMenu(routine, index, active) {
-                        showRoutine(routine, reorderMode, active, onExit)
-                    }
-                }, showHandle = reorderMode)
-                itemRow.tag = index
-                itemRow.setOnLongClickListener {
-                    draggedExercise = item
-                    draggedRow = itemRow
-                    dragMoved = false
-                    itemRow.alpha = 0.28f
-                    val data = ClipData.newPlainText("routine-exercise", item.exercise.id)
-                    itemRow.startDragAndDrop(data, View.DragShadowBuilder(itemRow), null, 0)
-                    true
-                }
-                itemRow.setOnDragListener { _, event ->
-                    when (event.action) {
-                        DragEvent.ACTION_DRAG_STARTED ->
-                            draggedExercise != null && event.clipDescription?.hasMimeType("text/plain") == true
-                        DragEvent.ACTION_DRAG_ENTERED -> {
-                            val moving = draggedExercise
-                            val movingView = draggedRow
-                            val from = routine.exercises.indexOfFirst { it === moving }
-                            val to = routine.exercises.indexOfFirst { it === item }
-                            if (moving != null && movingView != null && moving !== item && from >= 0 && to >= 0) {
-                                moveRoutineExercise(routine, from, to, active, announce = false)
-                                exerciseRows.removeView(movingView)
-                                exerciseRows.addView(movingView, to)
-                                movingView.alpha = 0.28f
-                                dragMoved = true
-                            }
-                            true
-                        }
-                        DragEvent.ACTION_DRAG_EXITED -> true
-                        DragEvent.ACTION_DROP -> true
-                        DragEvent.ACTION_DRAG_ENDED -> {
-                            draggedRow?.alpha = 1f
-                            exerciseRows.children.forEach { it.alpha = 1f }
-                            if (dragMoved) {
-                                active?.takeIf { it.routine === routine }?.let(::persistActiveWorkout)
-                                Toast.makeText(this@MainActivity, "운동 순서가 반영됐어", Toast.LENGTH_SHORT).show()
-                            }
-                            draggedExercise = null
-                            draggedRow = null
-                            dragMoved = false
-                            true
-                        }
-                        else -> true
-                    }
-                }
-                exerciseRows.addView(itemRow, matchParams(-2).apply { bottomMargin = dp(8) })
-            }
+        val reload = { showRoutine(routine, reorderMode, active, onExit) }
+        val rows = routine.exercises.mapIndexed { index, item ->
+            RoutineRowUi(
+                key = index,
+                name = item.exercise.name,
+                subtitle = "${item.exercise.muscles} · ${item.sets.workSetCount()}세트 · 총 ${item.sets.sumOf { it.targetReps }}회",
+                thumbnail = { exerciseAnimationView(item.exercise, 58, compact = true) },
+            )
         }
-
-        val actions = row().apply {
-            setPadding(dp(20), dp(10), dp(20), dp(18))
-            val workoutButton = if (active != null) "⚑  운동 완료" else "▶  시작"
-            addView(primaryButton(workoutButton, amberDark) {
-                if (active != null) showMyMountainDecision() else showStartGuide(routine)
-            }, weightParams(1f, 66))
-            addView(space(12))
-            addView(primaryButton("＋ 운동 추가", Color.WHITE, amberDark) {
+        val actions = RoutineDetailActions(
+            back = { onExit?.invoke() ?: onBackPressed() },
+            open = { index ->
+                if (active != null && active.routine === routine) showWorkoutExercise(active, index)
+                else showExercisePreview(routine, index)
+            },
+            info = { index -> showExerciseInfo(routine.exercises[index].exercise, reload) },
+            menu = { index -> showExerciseMenu(routine, index, active, reload) },
+            move = { from, to -> moveRoutineExercise(routine, from, to, active, announce = false) },
+            moveFinished = {
+                active?.takeIf { it.routine === routine }?.let(::persistActiveWorkout)
+                Toast.makeText(this, "운동 순서가 반영됐어", Toast.LENGTH_SHORT).show()
+            },
+            primary = { if (active != null) showMyMountainDecision() else showStartGuide(routine) },
+            addExercise = {
                 openLibrary(
                     onSelect = {
                         routine.exercises += RoutineExercise(
@@ -654,9 +591,20 @@ class MainActivity : ComponentActivity() {
                     },
                     onReturn = { showRoutine(routine) },
                 )
-            }, weightParams(1f, 66))
+            },
+        )
+        val body = ComposeView(this).apply {
+            setContent {
+                RoutineDetailScreen(
+                    title = routine.name,
+                    rows = rows,
+                    primaryLabel = if (active != null) "⚑  운동 완료" else "▶  시작",
+                    showHandle = reorderMode,
+                    actions = actions,
+                )
+            }
         }
-        showDetail(ScrollView(this).apply { addView(list) }, actions, animateFromRight = animateIn)
+        showDetail(body, null, animateFromRight = animateIn)
     }
 
     private fun showFreeWorkout() {
@@ -2938,10 +2886,10 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun showDetail(body: View, actions: View, animateFromRight: Boolean = false) {
+    private fun showDetail(body: View, actions: View?, animateFromRight: Boolean = false) {
         val frame = FrameLayout(this)
         frame.addView(body, FrameLayout.LayoutParams(-1, -1))
-        frame.addView(actions, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
+        actions?.let { frame.addView(it, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM)) }
         if (animateFromRight && root.childCount > 0) {
             if (detailTransitionRunning) {
                 root.removeAllViews()
