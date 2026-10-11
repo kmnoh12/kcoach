@@ -27,7 +27,7 @@ class WristTrajectoryTrackerTest {
         fun step(accelBody: Vec3, stepNanos: Long) {
             t += stepNanos
             tracker.onAccel(t, accelBody.x.toFloat(), accelBody.y.toFloat(), accelBody.z.toFloat())
-            tracker.onGyro(t, 0f, 0f, 0f)?.let { segments += it }
+            segments += tracker.onGyro(t, 0f, 0f, 0f)
         }
     }
 

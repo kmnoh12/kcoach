@@ -74,6 +74,7 @@ class ProbeActivity : Activity() {
     private val ages = ArrayDeque<Long>()
     private var tracker = WristTrajectoryTracker()
     private val segments = ArrayDeque<MotionSegment>()
+    @Volatile private var segmentCount = 0
     private var recorder: BufferedWriter? = null
     private var recordFile: File? = null
     private var recordedSamples = 0L
@@ -187,8 +188,9 @@ class ProbeActivity : Activity() {
             tracker.onAccel(sample.timestampNanos, sample.x, sample.y, sample.z)
         } else {
             gyroRate.add(sample.timestampNanos)
-            tracker.onGyro(sample.timestampNanos, sample.x, sample.y, sample.z)?.let { segment ->
+            tracker.onGyro(sample.timestampNanos, sample.x, sample.y, sample.z).forEach { segment ->
                 if (segment.pathLengthM >= MIN_SEGMENT_PATH_M) {
+                    segmentCount++
                     segments.addLast(segment)
                     while (segments.size > 12) segments.removeFirst()
                 }
@@ -224,7 +226,12 @@ class ProbeActivity : Activity() {
         statusText.text = if (connected) "● 워치 연결됨" else "○ 워치 대기 중 · 워치에서 KCoach → 실측 모드 → 시작"
         statusText.setTextColor(if (connected) Color.rgb(0, 230, 118) else Color.rgb(255, 177, 0))
         statsText.text = stats
-        segmentText.text = if (segmentLines.isEmpty()) "움직였다가 잠깐 멈추면 구간이 하나 잡혀" else segmentLines.joinToString("\n")
+        segmentText.text = if (segmentLines.isEmpty()) {
+            "올리고 내릴 때마다 구간이 하나씩 잡혀"
+        } else {
+            // One rep = up stroke + down stroke (MM-Fit: about two segments per rep).
+            "구간 ${segmentCount}개 · 반복 약 ${(segmentCount + 1) / 2}회 (궤적 지우기로 0부터)\n" + segmentLines.joinToString("\n")
+        }
         trajectoryView.setPaths(paths)
     }
 
@@ -269,6 +276,7 @@ class ProbeActivity : Activity() {
     private fun resetTrajectory() = synchronized(lock) {
         tracker = WristTrajectoryTracker()
         segments.clear()
+        segmentCount = 0
     }
 
     private fun buildUi(): View {
