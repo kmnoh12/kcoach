@@ -26,7 +26,7 @@
 
 ## 다음 할 일
 
-- 아직 View 방식인 화면: 보정 탭, 운동 라이브러리, 운동 정보·기록·미리보기, 시작 가이드, 자유운동, 바텀시트·다이얼로그 (`MainActivity.kt` 약 3,270줄)
+- 폰 화면은 거의 전부 Compose로 전환 완료(0.7.1 이후 작업은 로컬 커밋, 미배포): 바텀시트·다이얼로그(`ui/Overlays.kt`), 라이브러리(`ui/LibraryScreen.kt`), 운동 정보·기록(`ui/ExerciseScreens.kt`), 보정·마이마운틴·완료 결과(`ui/MiscScreens.kt`), 자유운동은 `RoutineDetailScreen` 재사용. 남은 View: 운동 화면 위 라이브 패널(`buildLivePanel`), `exerciseAnimationView`(GIF), `ProbeActivity`, 화면 껍데기 `showScaffold/showDetail/showStandalone`. 실제 폰 체감 미확인.
 - 4단계 디자인 레퍼런스 정하기 (루틴 상세 위 285dp 빈 박스는 인체 그림 placeholder)
 
 - Kyungmin이 실제 운동에서 0.7.0 사용 후 피드백 반영
