@@ -2,6 +2,18 @@ package dev.kyungmin.kcoach.phone
 
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.Composable
+import dev.kyungmin.kcoach.phone.ui.BigChoiceSheet
+import dev.kyungmin.kcoach.phone.ui.ChoiceSheet
+import dev.kyungmin.kcoach.phone.ui.ConfirmDialog
+import dev.kyungmin.kcoach.phone.ui.InputDialog
+import dev.kyungmin.kcoach.phone.ui.KColors
+import dev.kyungmin.kcoach.phone.ui.Overlay
+import dev.kyungmin.kcoach.phone.ui.OverlayHost
+import dev.kyungmin.kcoach.phone.ui.OverlayState
+import dev.kyungmin.kcoach.phone.ui.PickDialog
+import dev.kyungmin.kcoach.phone.ui.SheetItem
+import dev.kyungmin.kcoach.phone.ui.SheetOptions
 import androidx.compose.ui.platform.ComposeView
 import dev.kyungmin.kcoach.phone.ui.ActiveWorkoutScreen
 import dev.kyungmin.kcoach.phone.ui.ExerciseUi
@@ -23,7 +35,6 @@ import dev.kyungmin.kcoach.phone.ui.StatsScreen
 import dev.kyungmin.kcoach.phone.ui.UpdateUi
 import dev.kyungmin.kcoach.phone.ui.WorkoutActions
 import dev.kyungmin.kcoach.phone.ui.WorkoutUiModel
-import android.app.AlertDialog
 import android.app.Dialog
 import android.content.ClipData
 import android.content.Context
@@ -405,6 +416,7 @@ class MainActivity : ComponentActivity() {
         }
     }
     private lateinit var root: FrameLayout
+    private val overlays = OverlayState()
     private lateinit var updateManager: UpdateManager
     private lateinit var sessionStore: SessionStore
     private var currentTab = RootTab.HOME
@@ -445,6 +457,10 @@ class MainActivity : ComponentActivity() {
             WindowInsetsCompat.CONSUMED
         }
         setContentView(root)
+        addContentView(
+            ComposeView(this).apply { setContent { OverlayHost(overlays) } },
+            ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
+        )
         startService(Intent(this, PhoneWearListenerService::class.java))
         startService(Intent(this, PhoneWorkoutService::class.java))
         activeWorkout?.let { workout ->
@@ -1133,14 +1149,15 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun confirmDeletePersonalProfile(exerciseId: String, exerciseName: String) {
-        AlertDialog.Builder(this)
-            .setTitle("보정된 기록 삭제")
-            .setMessage(
-                "$exerciseName 개인 보정 프로필을 폰과 워치에서 삭제할까?\n" +
+        showPopup { dismiss ->
+            ConfirmDialog(
+                title = "보정된 기록 삭제",
+                message = "$exerciseName 개인 보정 프로필을 폰과 워치에서 삭제할까?\n" +
                     "삭제 후에는 이 운동이 일반 기준 프로필로 측정돼.",
-            )
-            .setNegativeButton("취소", null)
-            .setPositiveButton("삭제") { _, _ ->
+                negative = "취소",
+                positive = "삭제",
+                dismiss = dismiss,
+            ) {
                 val prefs = getSharedPreferences("wear-sync", MODE_PRIVATE)
                 prefs.edit()
                     .remove("personalProfile:$exerciseId")
@@ -1153,8 +1170,12 @@ class MainActivity : ComponentActivity() {
                 Toast.makeText(this, "$exerciseName 보정 기록을 삭제했어", Toast.LENGTH_LONG).show()
                 showCalibration()
             }
-            .show()
+        }
     }
+
+    private fun showSheet(content: @Composable (dismiss: () -> Unit) -> Unit) = overlays.show(Overlay(true, content))
+
+    private fun showPopup(content: @Composable (dismiss: () -> Unit) -> Unit) = overlays.show(Overlay(false, content))
 
     private fun showMenu() {
         stopTicker()
@@ -1180,75 +1201,56 @@ class MainActivity : ComponentActivity() {
         startSetIndex: Int = 0,
         onStarted: ((ActiveWorkout) -> Unit)? = null,
     ) {
-        val dialog = bottomDialog()
-        val content = vertical().apply {
-            gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(24), dp(16), dp(24), dp(28))
-            addView(label("▶", 38f, blue, bold = true))
-            addView(space(8))
-            addView(label("운동 시작", 28f, white, bold = true))
-            addView(space(14))
-            addView(label("운동을 시작하시겠습니까?\n\n워치가 연결되면 현재 세트·횟수·심박수가 동기화됩니다.", 16f, white).apply {
-                gravity = Gravity.CENTER
-            })
-            addView(space(24))
-            addView(row().apply {
-                addView(label("취소", 17f, amber, bold = true).apply {
-                    gravity = Gravity.CENTER
-                    setOnClickListener { dialog.dismiss() }
-                }, weightParams(1f, 58))
-                addView(label("확인", 17f, amber, bold = true).apply {
-                    gravity = Gravity.CENTER
-                    setOnClickListener {
-                        dialog.dismiss()
-                        previewWorkout = null
-                        val safeExerciseIndex = startExerciseIndex.coerceIn(
-                            0,
-                            routine.exercises.lastIndex.coerceAtLeast(0),
-                        )
-                        val safeSetIndex = startSetIndex.coerceIn(
-                            0,
-                            routine.exercises.getOrNull(safeExerciseIndex)
-                                ?.sets?.lastIndex?.coerceAtLeast(0) ?: 0,
-                        )
-                        activeWorkout = ActiveWorkout(
-                            routine = routine,
-                            exerciseIndex = safeExerciseIndex,
-                            setIndex = safeSetIndex,
-                        )
-                        activeWorkout?.let { workout ->
-                            if (!persistActiveWorkout(workout)) return@setOnClickListener
-                            val first = routine.exercises.getOrNull(safeExerciseIndex)
-                            if (first != null) {
-                                val firstSet = first.sets.getOrNull(safeSetIndex)
-                                val startPayload = WearSync.richCommand(
-                                    "START", workout.sessionId, first.exercise.id, first.exercise.name,
-                                    safeSetIndex, firstSet?.targetReps ?: 10, firstSet?.weightKg, first.restSeconds,
-                                )
-                                if (watchUiReady) {
-                                    sendWear(WearSync.PATH_COMMAND, startPayload)
-                                    activeLiveStatus?.text = "워치 앱 준비 완료 · 운동 시작"
-                                } else {
-                                    pendingWatchStartPayload = startPayload
-                                    activeLiveStatus?.text = "워치 연동 중… 워치 앱을 열어줘"
-                                    wearLiveStatus?.apply {
-                                        text = "⌚ 워치 연동 중… 워치 앱을 열어줘"
-                                        setTextColor(amber)
-                                    }
-                                }
-                            }
-                            if (onStarted != null) {
-                                onStarted(workout)
-                            } else {
-                                showActiveWorkout()
-                            }
-                        }
+        fun start() {
+            previewWorkout = null
+            val safeExerciseIndex = startExerciseIndex.coerceIn(
+                0,
+                routine.exercises.lastIndex.coerceAtLeast(0),
+            )
+            val safeSetIndex = startSetIndex.coerceIn(
+                0,
+                routine.exercises.getOrNull(safeExerciseIndex)
+                    ?.sets?.lastIndex?.coerceAtLeast(0) ?: 0,
+            )
+            activeWorkout = ActiveWorkout(
+                routine = routine,
+                exerciseIndex = safeExerciseIndex,
+                setIndex = safeSetIndex,
+            )
+            val workout = activeWorkout ?: return
+            if (!persistActiveWorkout(workout)) return
+            val first = routine.exercises.getOrNull(safeExerciseIndex)
+            if (first != null) {
+                val firstSet = first.sets.getOrNull(safeSetIndex)
+                val startPayload = WearSync.richCommand(
+                    "START", workout.sessionId, first.exercise.id, first.exercise.name,
+                    safeSetIndex, firstSet?.targetReps ?: 10, firstSet?.weightKg, first.restSeconds,
+                )
+                if (watchUiReady) {
+                    sendWear(WearSync.PATH_COMMAND, startPayload)
+                    activeLiveStatus?.text = "워치 앱 준비 완료 · 운동 시작"
+                } else {
+                    pendingWatchStartPayload = startPayload
+                    activeLiveStatus?.text = "워치 연동 중… 워치 앱을 열어줘"
+                    wearLiveStatus?.apply {
+                        text = "⌚ 워치 연동 중… 워치 앱을 열어줘"
+                        setTextColor(amber)
                     }
-                }, weightParams(1f, 58))
-            })
+                }
+            }
+            if (onStarted != null) onStarted(workout) else showActiveWorkout()
         }
-        dialog.setContentView(content)
-        showBottomDialog(dialog)
+        showSheet { dismiss ->
+            BigChoiceSheet(
+                eyebrow = "▶", eyebrowColor = KColors.Blue,
+                title = "운동 시작",
+                body = "운동을 시작하시겠습니까?\n\n워치가 연결되면 현재 세트·횟수·심박수가 동기화됩니다.",
+                bodyColor = KColors.White,
+                cancel = "취소", confirm = "확인",
+                dismiss = dismiss, onCancel = {}, onConfirm = ::start,
+                filledButtons = false,
+            )
+        }
     }
 
     private fun adjustRestDuration(
@@ -2007,105 +2009,78 @@ class MainActivity : ComponentActivity() {
 
     private fun showWorkoutMenu(workout: ActiveWorkout) {
         val routineExercise = workout.routine.exercises.getOrNull(workout.exerciseIndex) ?: return
-        val dialog = bottomDialog()
-        val content = vertical().apply {
-            setPadding(dp(22), dp(8), dp(22), dp(28))
-            addView(label("━", 22f, faint).apply { gravity = Gravity.CENTER })
-            addView(label(routineExercise.exercise.name, 18f, white, bold = true).apply {
-                setPadding(0, dp(4), 0, dp(18))
-            })
-            addView(sheetOption(if (workout.usePounds) "kg" else "lb", if (workout.usePounds) "킬로그램으로 단위 변경" else "파운드로 단위 변경") {
-                workout.usePounds = !workout.usePounds
-                dialog.dismiss()
-                showActiveWorkout()
-            })
-            addView(sheetOption("⏱", "휴식 시간") {
-                dialog.dismiss()
-                showChoiceSheet("휴식 시간", listOf("30초" to "짧은 휴식", "60초" to "일반 휴식", "90초" to "근비대 기본", "120초" to "고중량 휴식", "160초" to "긴 휴식")) { value ->
-                    routineExercise.restSeconds = value.removeSuffix("초").toInt()
-                    showActiveWorkout()
-                }
-            })
-            addView(sheetOption("⇄", "운동 대체") {
-                dialog.dismiss()
-                showExerciseAlternatives(workout.routine, workout.exerciseIndex) { showActiveWorkout() }
-            })
+        showSheet { dismiss ->
+            SheetOptions(
+                routineExercise.exercise.name,
+                listOf(
+                    SheetItem(if (workout.usePounds) "kg" else "lb", if (workout.usePounds) "킬로그램으로 단위 변경" else "파운드로 단위 변경") {
+                        workout.usePounds = !workout.usePounds
+                        dismiss()
+                        showActiveWorkout()
+                    },
+                    SheetItem("⏱", "휴식 시간") {
+                        showChoiceSheet("휴식 시간", listOf("30초" to "짧은 휴식", "60초" to "일반 휴식", "90초" to "근비대 기본", "120초" to "고중량 휴식", "160초" to "긴 휴식")) { value ->
+                            routineExercise.restSeconds = value.removeSuffix("초").toInt()
+                            showActiveWorkout()
+                        }
+                    },
+                    SheetItem("⇄", "운동 대체") {
+                        dismiss()
+                        showExerciseAlternatives(workout.routine, workout.exerciseIndex) { showActiveWorkout() }
+                    },
+                ),
+            )
         }
-        dialog.setContentView(content)
-        showBottomDialog(dialog)
     }
 
     private fun showSetMenu(workout: ActiveWorkout, routineExercise: RoutineExercise, setIndex: Int) {
         val set = routineExercise.sets.getOrNull(setIndex) ?: return
-        val dialog = bottomDialog()
-        val content = vertical().apply {
-            setPadding(dp(18), dp(6), dp(18), dp(20))
-            addView(label("━", 22f, faint).apply { gravity = Gravity.CENTER })
-            val setLabel = routineExercise.sets.workSetLabel(setIndex).let { if (it == "W") "웜업" else "${it}세트" }
-            addView(label("${routineExercise.exercise.name} $setLabel · ${set.targetReps}회", 15f, white, bold = true).apply {
-                setPadding(0, dp(3), 0, dp(12))
-            })
-            addView(sheetOption("◉", "세트 타입\n${set.setType.displayName}") {
-                dialog.dismiss()
-                showChoiceSheet("세트 타입", listOf("일반" to "일반 세트", "웜업" to "근육을 준비하기 위한 워밍업", "슈퍼" to "두 가지 운동을 휴식 없이", "드랍" to "휴식시간 없이 무게를 낮춰서", "실패" to "실패한 세트", "보조" to "보조 받아 세트를 완료")) { value ->
-                    set.setType = SetType.fromStorage(value)
-                    showActiveWorkout()
-                }
-            })
-            addView(sheetOption("✊", "그립 타입\n${set.gripType}") {
-                dialog.dismiss()
-                showChoiceSheet("그립 타입", listOf("노멀" to "표준 그립", "오버핸드" to "손바닥이 몸 반대쪽을 향함", "언더핸드" to "손바닥이 몸 쪽으로 향함", "뉴트럴" to "양손이 서로 마주보게", "와이드" to "어깨 너비보다 넓은 손 배치", "클로즈" to "손을 어깨 너비보다 가깝게", "얼터네이트" to "한 손은 오버핸드, 다른 한 손은 언더핸드")) { value ->
-                    set.gripType = value
-                    showActiveWorkout()
-                }
-            })
-            addView(sheetOption("Ⓡ", "운동자각도\n${set.rpe ?: "선택해"}") {
-                dialog.dismiss()
-                showChoiceSheet("RPE", listOf("선택해" to "", "10" to "이게 한계다", "9.5" to "1개 정도 더 할 수 있으려나?", "9" to "확실히 1개 정도 더 할 수 있다", "8.5" to "아마 2개 정도 더 할 수 있다", "8" to "확실히 2개 정도 더 할 수 있다", "7" to "꽤 할만 했다", "6" to "웜업 정도?")) { value ->
-                    set.rpe = value.takeUnless { it == "선택해" }
-                    showActiveWorkout()
-                }
-            })
-            addView(sheetOption("−", "세트 삭제") {
-                dialog.dismiss()
-                if (routineExercise.sets.size > 1) routineExercise.sets.removeAt(setIndex)
-                workout.selectedEditSetIndex = workout.selectedEditSetIndex.coerceAtMost(routineExercise.sets.lastIndex)
-                showActiveWorkout()
-            })
-            addView(sheetOption("＋", "이전 세트 추가") {
-                dialog.dismiss()
-                routineExercise.sets.add(setIndex, PlannedSet(set.weightKg, set.targetReps))
-                showActiveWorkout()
-            })
+        val setLabel = routineExercise.sets.workSetLabel(setIndex).let { if (it == "W") "웜업" else "${it}세트" }
+        showSheet { dismiss ->
+            SheetOptions(
+                "${routineExercise.exercise.name} $setLabel · ${set.targetReps}회",
+                listOf(
+                    SheetItem("◉", "세트 타입\n${set.setType.displayName}") {
+                        showChoiceSheet("세트 타입", listOf("일반" to "일반 세트", "웜업" to "근육을 준비하기 위한 워밍업", "슈퍼" to "두 가지 운동을 휴식 없이", "드랍" to "휴식시간 없이 무게를 낮춰서", "실패" to "실패한 세트", "보조" to "보조 받아 세트를 완료")) { value ->
+                            set.setType = SetType.fromStorage(value)
+                            showActiveWorkout()
+                        }
+                    },
+                    SheetItem("✊", "그립 타입\n${set.gripType}") {
+                        showChoiceSheet("그립 타입", listOf("노멀" to "표준 그립", "오버핸드" to "손바닥이 몸 반대쪽을 향함", "언더핸드" to "손바닥이 몸 쪽으로 향함", "뉴트럴" to "양손이 서로 마주보게", "와이드" to "어깨 너비보다 넓은 손 배치", "클로즈" to "손을 어깨 너비보다 가깝게", "얼터네이트" to "한 손은 오버핸드, 다른 한 손은 언더핸드")) { value ->
+                            set.gripType = value
+                            showActiveWorkout()
+                        }
+                    },
+                    SheetItem("Ⓡ", "운동자각도\n${set.rpe ?: "선택해"}") {
+                        showChoiceSheet("RPE", listOf("선택해" to "", "10" to "이게 한계다", "9.5" to "1개 정도 더 할 수 있으려나?", "9" to "확실히 1개 정도 더 할 수 있다", "8.5" to "아마 2개 정도 더 할 수 있다", "8" to "확실히 2개 정도 더 할 수 있다", "7" to "꽤 할만 했다", "6" to "웜업 정도?")) { value ->
+                            set.rpe = value.takeUnless { it == "선택해" }
+                            showActiveWorkout()
+                        }
+                    },
+                    SheetItem("−", "세트 삭제") {
+                        dismiss()
+                        if (routineExercise.sets.size > 1) routineExercise.sets.removeAt(setIndex)
+                        workout.selectedEditSetIndex = workout.selectedEditSetIndex.coerceAtMost(routineExercise.sets.lastIndex)
+                        showActiveWorkout()
+                    },
+                    SheetItem("＋", "이전 세트 추가") {
+                        dismiss()
+                        routineExercise.sets.add(setIndex, PlannedSet(set.weightKg, set.targetReps))
+                        showActiveWorkout()
+                    },
+                ),
+            )
         }
-        dialog.setContentView(content)
-        showBottomDialog(dialog)
     }
 
     private fun showChoiceSheet(title: String, items: List<Pair<String, String>>, onSelect: (String) -> Unit) {
-        val dialog = bottomDialog()
-        val content = vertical().apply {
-            setPadding(dp(18), dp(6), dp(18), dp(20))
-            addView(label("━", 22f, faint).apply { gravity = Gravity.CENTER })
-            addView(label(title, 16f, white, bold = true).apply { setPadding(0, dp(3), 0, dp(12)) })
-            items.forEach { (value, description) ->
-                addView(row().apply {
-                    setPadding(0, dp(4), 0, dp(4))
-                    isClickable = true
-                    setOnClickListener {
-                        dialog.dismiss()
-                        onSelect(value)
-                    }
-                    addView(label("○", 25f, white), fixedParams(58, 62))
-                    addView(vertical().apply {
-                        addView(label(value, 17f, white))
-                        if (description.isNotBlank()) addView(label(description, 13f, muted))
-                    }, weightParams(1f, -2))
-                })
+        showSheet { dismiss ->
+            ChoiceSheet(title, items) { value ->
+                dismiss()
+                onSelect(value)
             }
         }
-        dialog.setContentView(ScrollView(this).apply { addView(content) })
-        showBottomDialog(dialog)
     }
 
     private fun continueAfterRest(workout: ActiveWorkout) {
@@ -2217,34 +2192,19 @@ class MainActivity : ComponentActivity() {
         activeRestStartAtMs = 0L
         activeRestEndAtMs = 0L
         pausedRestRemainingMs = 0L
-        val dialog = bottomDialog()
-        val content = vertical().apply {
-            setPadding(dp(24), dp(12), dp(24), dp(28))
-            gravity = Gravity.CENTER_HORIZONTAL
-            addView(label("━", 28f, faint))
-            addView(space(8))
-            addView(label("웨이트 완료", 15f, green, bold = true))
-            addView(space(8))
-            addView(label("마이마운틴 할까?", 28f, white, bold = true))
-            addView(space(10))
-            addView(label("오늘 컨디션에 따라 선택하면 돼.\n안 해도 루틴은 정상 완료야.", 15f, muted).apply {
-                gravity = Gravity.CENTER
-            })
-            addView(space(24))
-            addView(row().apply {
-                addView(primaryButton("아니오", surfaceRaised) {
-                    dialog.dismiss()
-                    showWorkoutResult(lastWorkoutResult)
-                }, weightParams(1f, 60))
-                addView(space(12))
-                addView(primaryButton("예", amberDark) {
-                    dialog.dismiss()
-                    showMyMountain()
-                }, weightParams(1f, 60))
-            })
+        showSheet { dismiss ->
+            BigChoiceSheet(
+                eyebrow = "웨이트 완료", eyebrowColor = KColors.Green,
+                title = "마이마운틴 할까?",
+                body = "오늘 컨디션에 따라 선택하면 돼.\n안 해도 루틴은 정상 완료야.",
+                bodyColor = KColors.Muted,
+                cancel = "아니오", confirm = "예",
+                dismiss = dismiss,
+                onCancel = { showWorkoutResult(lastWorkoutResult) },
+                onConfirm = { showMyMountain() },
+                filledButtons = true,
+            )
         }
-        dialog.setContentView(content)
-        showBottomDialog(dialog)
     }
 
     private fun showMyMountain() {
@@ -2553,35 +2513,18 @@ class MainActivity : ComponentActivity() {
         onReturn: () -> Unit,
     ) {
         val exercise = routine.exercises.getOrNull(index)?.exercise ?: return
-        val dialog = bottomDialog()
-        val content = vertical().apply {
-            setPadding(dp(22), dp(8), dp(22), dp(28))
-            addView(vertical().apply {
-                addView(label("━", 22f, faint).apply { gravity = Gravity.CENTER })
-                addView(label(exercise.name, 18f, white, bold = true).apply {
-                    setPadding(0, dp(4), 0, dp(18))
-                })
-            })
-            addView(sheetOption("🏃", "운동 애니메이션") {
-                dialog.dismiss()
-                showExerciseInfo(exercise, onReturn)
-            })
-            addView(sheetOption("ⓘ", "운동 정보") {
-                dialog.dismiss()
-                showExerciseInfo(exercise, onReturn)
-            })
-            addView(sheetOption("⛓", "슈퍼세트 설정") {})
-            addView(sheetOption("▣", "운동 제거") {
-                dialog.dismiss()
-                confirmRemoveExercise(routine, index, active, onReturn)
-            })
-            addView(sheetOption("⇄", "운동 대체") {
-                dialog.dismiss()
-                showExerciseAlternatives(routine, index, onReturn)
-            })
+        showSheet { dismiss ->
+            SheetOptions(
+                exercise.name,
+                listOf(
+                    SheetItem("🏃", "운동 애니메이션") { dismiss(); showExerciseInfo(exercise, onReturn) },
+                    SheetItem("ⓘ", "운동 정보") { dismiss(); showExerciseInfo(exercise, onReturn) },
+                    SheetItem("⛓", "슈퍼세트 설정") {},
+                    SheetItem("▣", "운동 제거") { dismiss(); confirmRemoveExercise(routine, index, active, onReturn) },
+                    SheetItem("⇄", "운동 대체") { dismiss(); showExerciseAlternatives(routine, index, onReturn) },
+                ),
+            )
         }
-        dialog.setContentView(content)
-        showBottomDialog(dialog)
     }
 
     private fun showExerciseInfo(exercise: ExerciseDefinition, onReturn: () -> Unit) {
@@ -2697,11 +2640,8 @@ class MainActivity : ComponentActivity() {
 
     private fun confirmRemoveExercise(routine: WorkoutRoutine, index: Int, active: ActiveWorkout?, onReturn: () -> Unit) {
         val exercise = routine.exercises.getOrNull(index)?.exercise ?: return
-        AlertDialog.Builder(this)
-            .setTitle("${exercise.name} 제거")
-            .setMessage("이 루틴에서 운동을 제거할까?")
-            .setNegativeButton("취소", null)
-            .setPositiveButton("제거") { _, _ ->
+        showPopup { dismiss ->
+            ConfirmDialog("${exercise.name} 제거", "이 루틴에서 운동을 제거할까?", "취소", "제거", dismiss) {
                 routine.exercises.removeAt(index)
                 active?.let {
                     if (it.routine === routine) {
@@ -2713,7 +2653,7 @@ class MainActivity : ComponentActivity() {
                 Toast.makeText(this, "운동이 제거됐어", Toast.LENGTH_SHORT).show()
                 onReturn()
             }
-            .show()
+        }
     }
 
     private fun showExerciseAlternatives(routine: WorkoutRoutine, index: Int, onReturn: () -> Unit) {
@@ -2723,16 +2663,14 @@ class MainActivity : ComponentActivity() {
             .map { exercise -> exercise to exerciseSimilarity(current, exercise) }
             .sortedByDescending { it.second }
             .take(5)
-        val labels = alternatives.map { (exercise, score) -> "${exercise.name}  ·  유사도 ${score}%\n${exercise.muscles} · ${exercise.equipment}" }.toTypedArray()
-        AlertDialog.Builder(this)
-            .setTitle("운동 대체\n${current.name}")
-            .setItems(labels) { _, which ->
+        val labels = alternatives.map { (exercise, score) -> "${exercise.name}  ·  유사도 ${score}%\n${exercise.muscles} · ${exercise.equipment}" }
+        showPopup { dismiss ->
+            PickDialog("운동 대체\n${current.name}", labels, dismiss) { which ->
                 routine.exercises[index] = routine.exercises[index].copy(exercise = alternatives[which].first)
                 Toast.makeText(this, "${alternatives[which].first.name}(으)로 바꿨어", Toast.LENGTH_SHORT).show()
                 onReturn()
             }
-            .setNegativeButton("취소", null)
-            .show()
+        }
     }
 
     private fun exerciseSimilarity(source: ExerciseDefinition, target: ExerciseDefinition): Int {
@@ -2746,57 +2684,24 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun showAddSheet() {
-        val dialog = bottomDialog()
-        val content = vertical().apply {
-            setPadding(dp(22), dp(8), dp(22), dp(28))
-            gravity = Gravity.CENTER_HORIZONTAL
-            addView(label("━", 22f, faint))
-            addView(label("추가", 18f, white, bold = true).apply {
-                gravity = Gravity.START
-                setPadding(0, dp(4), 0, dp(18))
-            }, matchParams(-2))
-            addView(sheetOption("＋", "나만의 루틴 추가") {
-                dialog.dismiss()
-                showNewRoutineDialog()
-            })
-            addView(sheetOption("⇥", "기록에서 불러오기") {
-                dialog.dismiss()
-                showRecords()
-            })
-            addView(sheetOption("▣", "운동 계획 추가") {
-                dialog.dismiss()
-                showNewRoutineDialog()
-            })
+        showSheet { dismiss ->
+            SheetOptions(
+                "추가",
+                listOf(
+                    SheetItem("＋", "나만의 루틴 추가") { dismiss(); showNewRoutineDialog() },
+                    SheetItem("⇥", "기록에서 불러오기") { dismiss(); showRecords() },
+                    SheetItem("▣", "운동 계획 추가") { dismiss(); showNewRoutineDialog() },
+                ),
+            )
         }
-        dialog.setContentView(content)
-        showBottomDialog(dialog)
-    }
-
-    private fun sheetOption(icon: String, title: String, onClick: () -> Unit): View = row().apply {
-        gravity = Gravity.CENTER_VERTICAL
-        setPadding(0, dp(3), 0, dp(3))
-        isClickable = true
-        setOnClickListener { onClick() }
-        addView(label(icon, 18f, white).apply { gravity = Gravity.CENTER }, fixedParams(46, 36))
-        addView(label(title, 13f, white), weightParams(1f, 36))
     }
 
     private fun showNewRoutineDialog() {
-        val input = EditText(this).apply {
-            hint = "루틴 이름"
-            setTextColor(white)
-            setHintTextColor(muted)
-            setSingleLine()
-        }
-        AlertDialog.Builder(this)
-            .setTitle("나만의 루틴 추가")
-            .setView(input)
-            .setNegativeButton("취소", null)
-            .setPositiveButton("추가") { _, _ ->
-                val name = input.text.toString().trim().ifBlank { "새 루틴" }
+        showPopup { dismiss ->
+            InputDialog("나만의 루틴 추가", "루틴 이름", dismiss) { typed ->
                 val routine = WorkoutRoutine(
                     id = "custom_${System.currentTimeMillis()}",
-                    name = name,
+                    name = typed.ifBlank { "새 루틴" },
                     muscles = "운동을 추가해",
                     lastPerformed = "기록 없음",
                     exercises = mutableListOf(),
@@ -2805,22 +2710,12 @@ class MainActivity : ComponentActivity() {
                 selectedRoutine = routine
                 showRoutine(routine)
             }
-            .show()
+        }
     }
 
     private fun showCustomExerciseDialog(onSelect: (ExerciseDefinition) -> Unit, onReturn: () -> Unit) {
-        val input = EditText(this).apply {
-            hint = "운동 이름"
-            setTextColor(white)
-            setHintTextColor(muted)
-            setSingleLine()
-        }
-        AlertDialog.Builder(this)
-            .setTitle("커스텀 운동 추가")
-            .setView(input)
-            .setNegativeButton("취소", null)
-            .setPositiveButton("추가") { _, _ ->
-                val name = input.text.toString().trim()
+        showPopup { dismiss ->
+            InputDialog("커스텀 운동 추가", "운동 이름", dismiss) { name ->
                 if (name.isNotEmpty()) {
                     val custom = ExerciseDefinition(
                         id = "custom_${System.currentTimeMillis()}",
@@ -2834,32 +2729,33 @@ class MainActivity : ComponentActivity() {
                     onReturn()
                 }
             }
-            .show()
+        }
     }
 
     private fun showRoutineMenu(routine: WorkoutRoutine) {
-        AlertDialog.Builder(this)
-            .setTitle(routine.name)
-            .setItems(arrayOf("상세 보기", "운동 추가")) { _, which ->
-                if (which == 0) showRoutine(routine) else {
-                    openLibrary(
-                        onSelect = { routine.exercises += RoutineExercise(it, mutableListOf(PlannedSet(null, 10))) },
-                        onReturn = { showRoutine(routine) },
-                    )
-                }
-            }
-            .show()
+        showSheet { dismiss ->
+            SheetOptions(
+                routine.name,
+                listOf(
+                    SheetItem("▤", "상세 보기") { dismiss(); showRoutine(routine) },
+                    SheetItem("＋", "운동 추가") {
+                        dismiss()
+                        openLibrary(
+                            onSelect = { routine.exercises += RoutineExercise(it, mutableListOf(PlannedSet(null, 10))) },
+                            onReturn = { showRoutine(routine) },
+                        )
+                    },
+                ),
+            )
+        }
     }
 
     private fun confirmStopWorkout() {
-        AlertDialog.Builder(this)
-            .setTitle("운동 중단")
-            .setMessage("운동을 중단하면 기록이 저장되지 않습니다. 중단하시겠습니까?")
-            .setNegativeButton("계속 운동", null)
-            .setPositiveButton("종료") { _, _ ->
+        showPopup { dismiss ->
+            ConfirmDialog("운동 중단", "운동을 중단하면 기록이 저장되지 않습니다. 중단하시겠습니까?", "계속 운동", "종료", dismiss) {
                 val stoppedWorkout = activeWorkout
                 if (stoppedWorkout != null) {
-                    if (!persistActiveWorkout(stoppedWorkout)) return@setPositiveButton
+                    if (!persistActiveWorkout(stoppedWorkout)) return@ConfirmDialog
                     sendWear(WearSync.PATH_COMMAND, WearSync.command("STOP", stoppedWorkout.sessionId, "", 0, 0))
                     sessionStore.clearActive()
                 }
@@ -2869,7 +2765,7 @@ class MainActivity : ComponentActivity() {
                 pausedRestRemainingMs = 0L
                 showHome()
             }
-            .show()
+        }
     }
 
     private fun showScaffold(body: View, actions: View?, selected: RootTab) {
@@ -3041,60 +2937,6 @@ class MainActivity : ComponentActivity() {
 
     private fun weightSpace() = Space(this).apply {
         layoutParams = LinearLayout.LayoutParams(0, 1, 1f)
-    }
-
-    private fun bottomDialog() = BottomSheetDialog(this).apply {
-        requestWindowFeature(Window.FEATURE_NO_TITLE)
-    }
-
-    private fun showBottomDialog(dialog: Dialog) {
-        dialog.show()
-        dialog.window?.apply {
-            setBackgroundDrawable(Color.TRANSPARENT.toDrawable())
-            setDimAmount(0.78f)
-            addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-            setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-            setGravity(Gravity.BOTTOM)
-            decorView.background = rounded(surface, 28)
-        }
-    }
-
-    private class BottomSheetDialog(context: Context) : Dialog(context) {
-        private var downY = 0f
-        private var dragging = false
-        private val triggerDistance = 12f * context.resources.displayMetrics.density
-        private val dismissDistance = 100f * context.resources.displayMetrics.density
-
-        override fun dispatchTouchEvent(event: MotionEvent): Boolean {
-            val decor = window?.decorView
-            when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN -> {
-                    downY = event.rawY
-                    dragging = false
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    if (event.rawY - downY > triggerDistance) {
-                        dragging = true
-                        decor?.translationY = (event.rawY - downY).coerceAtLeast(0f)
-                        return true
-                    }
-                }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    val distance = event.rawY - downY
-                    if (dragging) {
-                        if (event.actionMasked == MotionEvent.ACTION_UP && distance > dismissDistance) {
-                            dismiss()
-                        } else {
-                            decor?.animate()?.translationY(0f)?.setDuration(160)?.start()
-                        }
-                        dragging = false
-                        return true
-                    }
-                    dragging = false
-                }
-            }
-            return super.dispatchTouchEvent(event)
-        }
     }
 
     private fun Int.toDrawable() = android.graphics.drawable.ColorDrawable(this)
