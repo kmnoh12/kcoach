@@ -15,7 +15,7 @@ if [ -n "$(git status --porcelain)" ]; then
     exit 1
 fi
 
-"$TOOLS/gradle-8.11.1/bin/gradle" :core:test :phone:assembleDebug :wear:assembleOta
+"$TOOLS/gradle-8.11.1/bin/gradle" :core:test :phone:assembleOta :wear:assembleOta
 
 version() { sed -n "s/.*$2 = \"\{0,1\}\([^\"]*\)\"\{0,1\}$/\1/p" "$1/build.gradle.kts" | head -1; }
 PHONE_CODE=$(version phone versionCode)
@@ -26,7 +26,7 @@ TAG="p${PHONE_NAME}-w${WATCH_NAME}"
 
 OUT="$ROOT/build/release/$TAG"
 rm -rf "$OUT" && mkdir -p "$OUT"
-cp phone/build/outputs/apk/debug/phone-debug.apk "$OUT/kcoach-phone.apk"
+cp phone/build/outputs/apk/ota/phone-ota.apk "$OUT/kcoach-phone.apk"
 cp wear/build/outputs/apk/ota/wear-ota.apk "$OUT/kcoach-watch.apk"
 
 manifest() { # kind code name

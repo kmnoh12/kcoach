@@ -25,6 +25,8 @@ data class PlannedSet(
     var setType: SetType = SetType.NORMAL,
     var gripType: String = "노멀",
     var rpe: String? = null,
+    /** Rest after this set; null uses the exercise default. */
+    var restSeconds: Int? = null,
 )
 
 fun List<PlannedSet>.workSetLabel(index: Int): String {

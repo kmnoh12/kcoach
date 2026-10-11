@@ -1,6 +1,14 @@
 package dev.kyungmin.kcoach.phone
 
-import android.app.Activity
+import androidx.activity.ComponentActivity
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.platform.ComposeView
+import dev.kyungmin.kcoach.phone.ui.ActiveWorkoutScreen
+import dev.kyungmin.kcoach.phone.ui.ExerciseUi
+import dev.kyungmin.kcoach.phone.ui.SetField
+import dev.kyungmin.kcoach.phone.ui.SetUi
+import dev.kyungmin.kcoach.phone.ui.WorkoutActions
+import dev.kyungmin.kcoach.phone.ui.WorkoutUiModel
 import android.app.AlertDialog
 import android.app.Dialog
 import android.content.ClipData
@@ -26,10 +34,8 @@ import android.util.Log
 import android.view.Gravity
 import android.view.DragEvent
 import android.view.MotionEvent
-import android.view.VelocityTracker
 import android.view.View
 import android.view.ViewGroup
-import android.view.ViewConfiguration
 import android.view.Window
 import android.view.animation.DecelerateInterpolator
 import android.widget.Button
@@ -39,7 +45,6 @@ import android.widget.GridLayout
 import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.Space
 import android.widget.TextView
@@ -70,7 +75,7 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.max
 
-class MainActivity : Activity() {
+class MainActivity : ComponentActivity() {
     private enum class RootTab { HOME, RECORDS, STATS, CALIBRATION, MENU }
     private enum class Screen { ROOT, ROUTINE, FREE, LIBRARY, EXERCISE_INFO, EXERCISE_RECORD, ACTIVE, REST, MY_MOUNTAIN }
 
@@ -127,17 +132,6 @@ class MainActivity : Activity() {
         val captureStates: MutableMap<String, CaptureState> = mutableMapOf(),
     )
 
-    private data class ActiveWorkoutUi(
-        val workout: ActiveWorkout,
-        val exerciseIndex: Int,
-        val setRows: LinearLayout,
-        val target: TextView,
-        val performed: TextView,
-        val summary: TextView,
-        val restDuration: TextView,
-        val restProgress: ProgressBar,
-    )
-
     private data class NextWorkoutTarget(
         val exerciseId: String,
         val exerciseName: String,
@@ -163,8 +157,6 @@ class MainActivity : Activity() {
 
     private var wearLiveStatus: TextView? = null
     private var activeLiveStatus: TextView? = null
-    private var activeWorkoutUi: ActiveWorkoutUi? = null
-    private val animationConstantStates = mutableMapOf<Int, Drawable.ConstantState>()
     private var restHeartStatus: TextView? = null
     private var activeRestStartAtMs = 0L
     private var activeRestEndAtMs = 0L
@@ -173,8 +165,13 @@ class MainActivity : Activity() {
     private var lastWearLiveSessionId = ""
     private var lastWearLiveTitle = ""
     private var lastWearLiveTelemetry = ""
-    private var workoutTransitionRunning = false
     private var detailTransitionRunning = false
+    private var workoutComposeView: ComposeView? = null
+    private var workoutComposeWorkout: ActiveWorkout? = null
+    private val workoutVersion = mutableIntStateOf(0)
+    private var lastRemovedSet: Triple<RoutineExercise, Int, PlannedSet>? = null
+    private var lastRestCueSecond = -1
+    private val restTone by lazy { android.media.ToneGenerator(android.media.AudioManager.STREAM_NOTIFICATION, 80) }
     private val wearReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             try {
@@ -427,9 +424,11 @@ class MainActivity : Activity() {
         activeWorkout = restoreActiveWorkout()
         root = FrameLayout(this).apply { setBackgroundColor(bg) }
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
+            // Android 15+ draws edge-to-edge; keep every screen clear of both bars here
+            // and consume the insets so nested Compose content doesn't pad twice.
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            view.setPadding(0, 0, 0, bars.bottom)
-            insets
+            view.setPadding(0, bars.top, 0, bars.bottom)
+            WindowInsetsCompat.CONSUMED
         }
         setContentView(root)
         startService(Intent(this, PhoneWearListenerService::class.java))
@@ -484,7 +483,14 @@ class MainActivity : Activity() {
         }
     }
 
+    @Deprecated("Screen stack is managed manually; Compose BackHandlers still get first say.")
     override fun onBackPressed() {
+        // Let Compose close the keypad or rest panel before leaving the screen.
+        if (onBackPressedDispatcher.hasEnabledCallbacks()) {
+            @Suppress("DEPRECATION")
+            super.onBackPressed()
+            return
+        }
         when (currentScreen) {
             Screen.ROOT -> {
                 if (currentTab == RootTab.HOME) super.onBackPressed() else showHome()
@@ -1428,10 +1434,10 @@ class MainActivity : Activity() {
                 WearSync.PATH_COMMAND,
                 restCommand(workout, routineExercise.restSeconds, activeRestEndAtMs),
             )
-            refreshActiveWorkoutUi(workout)
-            updateRestUi(workout)
+            bumpWorkoutUi()
         } else {
-            showActiveWorkout()
+            activeWorkout?.let(::persistActiveWorkout)
+            bumpWorkoutUi()
         }
     }
 
@@ -1460,249 +1466,44 @@ class MainActivity : Activity() {
     }
 
     private fun showActiveWorkout(preview: ActiveWorkout? = null, forceRebuild: Boolean = false) {
-        val existingWorkout = activeWorkout ?: previewWorkout
-        if (!forceRebuild && preview == null && currentScreen == Screen.ACTIVE &&
-            activeWorkoutUi?.workout === existingWorkout &&
-            activeWorkoutUi?.exerciseIndex == existingWorkout?.exerciseIndex
-        ) {
-            refreshActiveWorkoutUi(existingWorkout!!)
-            return
-        }
-        stopTicker()
-        activeWorkoutUi = null
-        currentScreen = Screen.ACTIVE
         if (preview != null) previewWorkout = preview
         val workout = activeWorkout ?: previewWorkout ?: return showHome()
-        val isPreview = activeWorkout == null
         if (workout.exerciseIndex >= workout.routine.exercises.size) {
             showMyMountainDecision()
             return
         }
-        val routineExercise = workout.routine.exercises[workout.exerciseIndex]
-        workout.selectedEditSetIndex = workout.selectedEditSetIndex.coerceIn(0, routineExercise.sets.lastIndex)
-        val elapsed = label("00:00", 17f, white, bold = true)
-        val completedCount = routineExercise.sets.completedWorkSetCount()
-        val totalTarget = routineExercise.sets.sumOf { it.targetReps }
-        val performed = workout.performedRepsByExercise[routineExercise.exercise.id] ?: 0
-        lateinit var setRows: LinearLayout
-        lateinit var targetStatus: TextView
-        lateinit var performedStatus: TextView
-        lateinit var summary: TextView
-        lateinit var restDuration: TextView
-        lateinit var restProgress: ProgressBar
-
-        val page = vertical().apply {
-            setPadding(dp(16), dp(12), dp(16), dp(20))
-            addView(row().apply {
-                gravity = Gravity.CENTER_VERTICAL
-                addView(label("‹", 38f, white).apply {
-                    gravity = Gravity.CENTER
-                    setOnClickListener {
-                        if (isPreview) {
-                            previewWorkout = null
-                            showRoutine(workout.routine)
-                        } else showHome()
-                    }
-                }, fixedParams(42, 44))
-                addView(vertical().apply {
-                    addView(label(workout.routine.name, 16f, white, bold = true))
-                    addView(label("운동 시간", 11f, muted))
-                }, weightParams(1f, -2))
-                addView(elapsed)
-                addView(label("•••", 16f, muted, bold = true).apply {
-                    gravity = Gravity.CENTER
-                    isClickable = true
-                    setOnClickListener { showWorkoutMenu(workout) }
-                }, fixedParams(42, 44))
-            })
-            addView(space(10))
-            val hasCachedWearState = lastWearLiveSessionId == workout.sessionId &&
-                lastWearLiveTitle.isNotBlank() && lastWearLiveTelemetry.isNotBlank()
-            val liveTitle = label(
-                if (hasCachedWearState) lastWearLiveTitle else "⌚ Watch8 연결 확인 중",
-                12f,
-                green,
-                bold = true,
-            ).apply {
-                setSingleLine()
-                ellipsize = android.text.TextUtils.TruncateAt.END
-                gravity = Gravity.CENTER_VERTICAL
-                tag = if (hasCachedWearState) WATCH_PANEL_TELEMETRY else WATCH_PANEL_CONNECTION
-            }
-            val liveTelemetry = label(
-                if (hasCachedWearState) lastWearLiveTelemetry else "워치 운동 상태 수신 대기 중",
-                12f,
-                green,
-                bold = true,
-            ).apply {
-                setSingleLine()
-                ellipsize = android.text.TextUtils.TruncateAt.END
-                gravity = Gravity.CENTER_VERTICAL
-                tag = if (hasCachedWearState) WATCH_PANEL_TELEMETRY else WATCH_PANEL_CONNECTION
-            }
-            val livePanel = vertical().apply {
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(14), dp(7), dp(14), dp(7))
-                background = GradientDrawable().apply {
-                    setColor(Color.rgb(20, 24, 28))
-                    setStroke(1, Color.rgb(44, 52, 60))
-                    cornerRadius = 12f
+        val reuse = currentScreen == Screen.ACTIVE &&
+            workoutComposeView?.parent === root &&
+            workoutComposeWorkout === workout
+        if (reuse) {
+            // Same screen: re-render in place so only what changed animates.
+            bumpWorkoutUi()
+        } else {
+            stopTicker()
+            currentScreen = Screen.ACTIVE
+            workoutComposeWorkout = workout
+            val liveHeader = buildLivePanel(workout)
+            val composeView = ComposeView(this).apply {
+                setContent {
+                    workoutVersion.intValue
+                    val current = workoutComposeWorkout ?: return@setContent
+                    ActiveWorkoutScreen(
+                        model = buildWorkoutModel(current),
+                        actions = workoutActions,
+                        liveHeader = liveHeader,
+                        animationView = { index ->
+                            exerciseAnimationView(current.routine.exercises[index].exercise, 190)
+                        },
+                    )
                 }
-                addView(liveTitle, matchParams(23))
-                addView(liveTelemetry, matchParams(23))
             }
-            activeLiveStatus = liveTelemetry
-            wearLiveStatus = liveTitle
-            addView(livePanel, matchParams(60))
+            workoutComposeView = composeView
+            root.removeAllViews()
+            root.addView(composeView, FrameLayout.LayoutParams(-1, -1))
             updateWearConnectionStatus()
-            addView(space(12))
-            addView(row().apply {
-                addView(label("${workout.exerciseIndex + 1} / ${workout.routine.exercises.size}  운동", 12f, blue, bold = true), weightParams(1f, -2))
-                addView(label("●  ●  ●  ●  ●", 10f, muted))
-            })
-            addView(space(6))
-            addView(exerciseAnimationView(routineExercise.exercise, 190))
-            addView(space(6))
-            addView(row().apply {
-                addView(label(routineExercise.exercise.name, 19f, white, bold = true), weightParams(1f, -2))
-                addView(label("ⓘ", 18f, muted).apply {
-                    gravity = Gravity.CENTER
-                    setOnClickListener {
-                        showExerciseInfo(routineExercise.exercise) { showActiveWorkout() }
-                    }
-                }, fixedParams(38, 42))
-            })
-            addView(label(routineExercise.exercise.muscles, 13f, muted))
-            addView(space(4))
-            targetStatus = label("목표 ${totalTarget}회", 14f, blue, bold = true)
-            performedStatus = label("수행 ${performed}회", 14f, if (performed > 0) amber else muted, bold = true)
-            addView(row().apply {
-                addView(targetStatus, weightParams(1f, -2))
-                addView(performedStatus)
-            })
-            addView(space(10))
-            addView(row().apply {
-                addView(label("›  기록", 14f, white, bold = true), weightParams(1f, 38))
-                addView(label("?", 14f, white).apply {
-                    gravity = Gravity.CENTER
-                    background = rounded(muted, 99)
-                }, fixedParams(28, 28))
-            })
-            addView(space(4))
-            addView(activeSetGridRow(routineExercise.exercise.equipment != "맨몸", 32).apply {
-                val weighted = routineExercise.exercise.equipment != "맨몸"
-                addActiveSetCell(this, label("세트", 12f, muted, bold = true).apply { gravity = Gravity.CENTER }, 0)
-                if (weighted) addActiveSetCell(this, label(if (workout.usePounds) "LB" else "KG", 12f, muted, bold = true).apply { gravity = Gravity.CENTER }, 1)
-                addActiveSetCell(this, label("회", 12f, muted, bold = true).apply { gravity = Gravity.CENTER }, if (weighted) 2 else 1)
-                addActiveSetCell(this, label("완료", 12f, muted, bold = true).apply { gravity = Gravity.CENTER }, if (weighted) 3 else 2)
-                addActiveSetCell(this, Space(this@MainActivity), if (weighted) 4 else 3)
-            })
-            setRows = vertical()
-            routineExercise.sets.forEachIndexed { setIndex, plannedSet ->
-                setRows.addView(workoutSetRow(workout, routineExercise, setIndex, plannedSet))
-                setRows.addView(space(3))
-            }
-            addView(setRows)
-            addView(space(4))
-            addView(row().apply {
-                addView(label("＋ 세트추가", 15f, amber, bold = true).apply {
-                    gravity = Gravity.CENTER
-                    setOnClickListener {
-                        val source = routineExercise.sets.lastOrNull() ?: PlannedSet(null, 10)
-                        routineExercise.sets += PlannedSet(source.weightKg, source.targetReps)
-                        showActiveWorkout()
-                    }
-                }, weightParams(1f, 44))
-                addView(space(8))
-                addView(label("− 세트삭제", 15f, blue, bold = true).apply {
-                    gravity = Gravity.CENTER
-                    setOnClickListener {
-                        if (routineExercise.sets.size > 1) routineExercise.sets.removeAt(routineExercise.sets.lastIndex)
-                        workout.selectedEditSetIndex = workout.selectedEditSetIndex.coerceAtMost(routineExercise.sets.lastIndex)
-                        showActiveWorkout()
-                    }
-                }, weightParams(1f, 44))
-            })
-            addView(space(4))
-            if (!isPreview) addView(row().apply {
-                addView(label("☑  모든 세트완료", 15f, blue, bold = true).apply {
-                    gravity = Gravity.CENTER
-                    setOnClickListener {
-                        routineExercise.sets.forEach { it.completed = true }
-                        workout.performedRepsByExercise[routineExercise.exercise.id] = totalTarget
-                        showActiveWorkout()
-                    }
-                }, weightParams(1f, 44))
-                addView(space(8))
-                addView(label("→  다음운동", 15f, white, bold = true).apply {
-                    gravity = Gravity.CENTER
-                    setOnClickListener { advanceWorkoutExercise(workout) }
-                }, weightParams(1f, 44))
-            })
-            addView(space(10))
-            summary = label(workoutSetSummary(workout, routineExercise, completedCount), 13f, green, bold = true)
-            addView(summary)
-            restProgress = ProgressBar(this@MainActivity, null, android.R.attr.progressBarStyleHorizontal).apply {
-                max = 1000
-                progress = 0
-                isIndeterminate = false
-                progressTintList = android.content.res.ColorStateList.valueOf(amber)
-                progressBackgroundTintList = android.content.res.ColorStateList.valueOf(Color.rgb(61, 52, 25))
-                visibility = View.INVISIBLE
-            }
-            addView(restProgress, LinearLayout.LayoutParams(-1, dp(3)).apply {
-                topMargin = dp(7)
-                bottomMargin = dp(7)
-            })
-            addView(label("휴식 시간", 12f, amber, bold = true))
-            addView(space(2))
-            addView(row().apply {
-                gravity = Gravity.CENTER_VERTICAL
-                restDuration = label("${routineExercise.restSeconds}초", 22f, white, bold = true)
-                addView(restDuration, weightParams(1f, 44))
-                addView(label("−", 18f, white, bold = true).apply {
-                    gravity = Gravity.CENTER
-                    background = rounded(amber, 99)
-                    setOnClickListener { adjustRestDuration(workout, routineExercise, -10) }
-                }, fixedParams(42, 42))
-                addView(space(10))
-                addView(label("+", 18f, bg, bold = true).apply {
-                    gravity = Gravity.CENTER
-                    background = rounded(amber, 99)
-                    setOnClickListener { adjustRestDuration(workout, routineExercise, 10) }
-                }, fixedParams(42, 42))
-                addView(space(10))
-                addView(label(if (workout.paused) "▶" else "Ⅱ", 18f, white, bold = true).apply {
-                    gravity = Gravity.CENTER
-                    setOnClickListener { toggleWorkoutPause(workout); showActiveWorkout() }
-                }, fixedParams(42, 42))
-                addView(space(10))
-                addView(label("■", 16f, white, bold = true).apply {
-                    gravity = Gravity.CENTER
-                    setOnClickListener { confirmStopWorkout() }
-                }, fixedParams(42, 42))
-            })
         }
-        val scroll = ScrollView(this).apply {
-            addView(page)
-            setOnScrollChangeListener { _, _, y, _, _ ->
-                workout.scrollY = y
-                workout.scrollYByExercise[routineExercise.exercise.id] = y
-            }
-        }
-        val pager = WorkoutPagerHost(workout, scroll)
-        showStandalone(pager, null)
-        activeWorkoutUi = ActiveWorkoutUi(
-            workout = workout,
-            exerciseIndex = workout.exerciseIndex,
-            setRows = setRows,
-            target = targetStatus,
-            performed = performedStatus,
-            summary = summary,
-            restDuration = restDuration,
-            restProgress = restProgress,
-        )
-        updateRestUi(workout)
+        val isPreview = activeWorkout == null
+        val routineExercise = workout.routine.exercises[workout.exerciseIndex]
         if (!isPreview && !workout.paused && workout.phase == WorkoutPhase.WORKING && activeRestEndAtMs <= 0L) {
             val currentSet = routineExercise.sets.getOrNull(workout.setIndex)
             if (persistActiveWorkout(workout)) {
@@ -1715,360 +1516,331 @@ class MainActivity : Activity() {
                 )
             }
         }
-        scroll.post {
-            scroll.scrollTo(
-                0,
-                workout.scrollYByExercise[routineExercise.exercise.id] ?: workout.scrollY,
-            )
-        }
-        if (isPreview) return
+        if (isPreview || ticker != null) return
         ticker = object : Runnable {
             override fun run() {
                 try {
-                    val seconds = workoutElapsedSeconds(workout)
-                    elapsed.text = timeText(seconds)
-                    if (activeRestEndAtMs > 0L && System.currentTimeMillis() >= activeRestEndAtMs) {
-                        continueAfterRest(workout)
+                    if (activeWorkout !== workout || currentScreen != Screen.ACTIVE) {
+                        ticker = null
                         return
                     }
-                    updateRestUi(workout)
+                    if (activeRestEndAtMs > 0L) {
+                        val leftMs = activeRestEndAtMs - System.currentTimeMillis()
+                        restCue(leftMs)
+                        if (leftMs <= 0L) {
+                            ticker = null
+                            restCue(0L)
+                            continueAfterRest(workout)
+                            return
+                        }
+                    }
                     handler.postDelayed(this, if (activeRestEndAtMs > 0L) 100 else 1_000)
                 } catch (error: Exception) {
                     reportWorkoutUiError("active_ticker", error)
-                    // Keep the Activity alive and rebuild the same workout screen
-                    // from the already committed session snapshot.
-                    handler.post {
-                        runCatching { showActiveWorkout(forceRebuild = true) }
-                            .onFailure { reportWorkoutUiError("active_ticker_rebuild", it) }
-                    }
+                    ticker = null
                 }
             }
         }.also { handler.post(it) }
     }
 
-    /**
-     * A three-page workout pager. Previous and next exercises are already
-     * rendered beside the current ScrollView, so the finger always reveals a
-     * real page instead of the root background.
-     */
-    private inner class WorkoutPagerHost(
-        private val workout: ActiveWorkout,
-        private val currentPage: ScrollView,
-    ) : FrameLayout(this@MainActivity) {
-        private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
-        private val currentIndex = workout.exerciseIndex
-        private val previousPage = (currentIndex - 1)
-            .takeIf { it in workout.routine.exercises.indices }
-            ?.let { buildWorkoutSwipePreview(workout, it) }
-        private val nextPage = (currentIndex + 1)
-            .takeIf { it in workout.routine.exercises.indices }
-            ?.let { buildWorkoutSwipePreview(workout, it) }
-        private var downX = 0f
-        private var downY = 0f
-        private var dragX = 0f
-        private var horizontal = false
-        private var vertical = false
-        private var velocityTracker: VelocityTracker? = null
+    private fun bumpWorkoutUi() {
+        workoutVersion.intValue++
+    }
 
-        init {
-            setBackgroundColor(bg)
-            isClickable = true
-            previousPage?.let { addView(it, FrameLayout.LayoutParams(-1, -1)) }
-            nextPage?.let { addView(it, FrameLayout.LayoutParams(-1, -1)) }
-            addView(currentPage, FrameLayout.LayoutParams(-1, -1))
+    /** 3·2·1 short cues and a longer one at zero, once each per rest. */
+    private fun restCue(leftMs: Long) {
+        val second = if (leftMs <= 0L) 0 else ((leftMs + 999L) / 1000L).toInt()
+        if (second > 3 || second == lastRestCueSecond || activeRestEndAtMs <= 0L && second != 0) return
+        lastRestCueSecond = second
+        val vibrator = getSystemService(android.os.Vibrator::class.java)
+        if (second == 0) {
+            vibrator?.vibrate(android.os.VibrationEffect.createWaveform(longArrayOf(0, 180, 90, 260), -1))
+            runCatching { restTone.startTone(android.media.ToneGenerator.TONE_PROP_ACK, 220) }
+        } else {
+            vibrator?.vibrate(android.os.VibrationEffect.createOneShot(60, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
+            runCatching { restTone.startTone(android.media.ToneGenerator.TONE_PROP_BEEP, 90) }
+        }
+    }
+
+    private fun buildLivePanel(workout: ActiveWorkout): View {
+        val hasCachedWearState = lastWearLiveSessionId == workout.sessionId &&
+            lastWearLiveTitle.isNotBlank() && lastWearLiveTelemetry.isNotBlank()
+        val liveTitle = label(
+            if (hasCachedWearState) lastWearLiveTitle else "⌚ Watch8 연결 확인 중",
+            12f,
+            green,
+            bold = true,
+        ).apply {
+            setSingleLine()
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            gravity = Gravity.CENTER_VERTICAL
+            tag = if (hasCachedWearState) WATCH_PANEL_TELEMETRY else WATCH_PANEL_CONNECTION
+        }
+        val liveTelemetry = label(
+            if (hasCachedWearState) lastWearLiveTelemetry else "워치 운동 상태 수신 대기 중",
+            12f,
+            green,
+            bold = true,
+        ).apply {
+            setSingleLine()
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            gravity = Gravity.CENTER_VERTICAL
+            tag = if (hasCachedWearState) WATCH_PANEL_TELEMETRY else WATCH_PANEL_CONNECTION
+        }
+        activeLiveStatus = liveTelemetry
+        wearLiveStatus = liveTitle
+        return vertical().apply {
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(14), dp(7), dp(14), dp(7))
+            background = GradientDrawable().apply {
+                setColor(Color.rgb(20, 24, 28))
+                setStroke(1, Color.rgb(44, 52, 60))
+                cornerRadius = 12f
+            }
+            addView(liveTitle, matchParams(23))
+            addView(liveTelemetry, matchParams(23))
+        }
+    }
+
+    private fun effectiveRestSeconds(routineExercise: RoutineExercise, setIndex: Int): Int =
+        routineExercise.sets.getOrNull(setIndex)?.restSeconds ?: routineExercise.restSeconds
+
+    private fun buildWorkoutModel(workout: ActiveWorkout): WorkoutUiModel {
+        val next = if (activeWorkout === workout) nextWorkoutTarget(workout) else null
+        val nextText = next?.takeIf { it.exerciseId.isNotEmpty() }?.let { target ->
+            val exercise = workout.routine.exercises.firstOrNull { it.exercise.id == target.exerciseId }
+            val setLabel = exercise?.sets?.workSetLabel(target.setIndex)?.let { if (it == "W") "웜업" else "${it}세트" }.orEmpty()
+            val weight = target.weightKg?.let { "${formatActiveWeight(it, workout.usePounds)}${if (workout.usePounds) "lb" else "kg"} × " }.orEmpty()
+            "다음: ${target.exerciseName} $setLabel · $weight${target.targetReps}회"
+        }
+        return WorkoutUiModel(
+            routineName = workout.routine.name,
+            isPreview = activeWorkout !== workout,
+            paused = workout.paused,
+            startedAtMs = workout.startedAtMs,
+            totalPausedMs = workout.totalPausedMs,
+            pausedSinceMs = workout.pausedSinceMs,
+            exerciseIndex = workout.exerciseIndex,
+            usePounds = workout.usePounds,
+            restStartAtMs = activeRestStartAtMs,
+            restEndAtMs = activeRestEndAtMs,
+            pausedRestRemainingMs = pausedRestRemainingMs,
+            nextSetText = nextText,
+            exercises = workout.routine.exercises.mapIndexed { exerciseIndex, routineExercise ->
+                val currentSet = if (exerciseIndex == workout.exerciseIndex) workout.setIndex
+                else workout.setIndexByExercise[routineExercise.exercise.id]
+                    ?: routineExercise.sets.indexOfFirst { !it.completed }.coerceAtLeast(0)
+                ExerciseUi(
+                    id = routineExercise.exercise.id,
+                    name = routineExercise.exercise.name,
+                    muscles = routineExercise.exercise.muscles,
+                    weighted = routineExercise.exercise.equipment != "맨몸",
+                    restSeconds = routineExercise.restSeconds,
+                    targetReps = routineExercise.sets.sumOf { it.targetReps },
+                    performedReps = workout.performedRepsByExercise[routineExercise.exercise.id] ?: 0,
+                    completedWorkSets = routineExercise.sets.completedWorkSetCount(),
+                    workSetCount = routineExercise.sets.workSetCount(),
+                    currentSetIndex = currentSet,
+                    sets = routineExercise.sets.mapIndexed { setIndex, set ->
+                        SetUi(
+                            uid = System.identityHashCode(set),
+                            label = routineExercise.sets.workSetLabel(setIndex),
+                            weightText = formatActiveWeight(set.weightKg, workout.usePounds),
+                            reps = set.targetReps,
+                            completed = set.completed,
+                            warmup = set.setType == SetType.WARMUP,
+                            grip = set.gripType,
+                            restSeconds = effectiveRestSeconds(routineExercise, setIndex),
+                            customRest = set.restSeconds != null,
+                        )
+                    },
+                )
+            },
+        )
+    }
+
+    private val workoutActions = object : WorkoutActions {
+        private fun workout() = activeWorkout ?: previewWorkout
+        private fun exercise(index: Int) = workout()?.routine?.exercises?.getOrNull(index)
+
+        override fun onBack() {
+            val workout = workout() ?: return showHome()
+            if (activeWorkout == null) {
+                previewWorkout = null
+                showRoutine(workout.routine)
+            } else {
+                showHome()
+            }
         }
 
-        override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
-            super.onSizeChanged(w, h, oldw, oldh)
-            if (!horizontal && !workoutTransitionRunning) positionPages(0f)
+        override fun onMenu() {
+            workout()?.let(::showWorkoutMenu)
         }
 
-        override fun onInterceptTouchEvent(event: MotionEvent): Boolean {
-            when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN -> beginGesture(event)
-                MotionEvent.ACTION_MOVE -> {
-                    velocityTracker?.addMovement(event)
-                    classifyGesture(event)
-                    if (horizontal) {
-                        parent?.requestDisallowInterceptTouchEvent(true)
-                        updateDrag(event.x - downX)
-                        return true
+        override fun onExerciseInfo(exerciseIndex: Int) {
+            val exercise = exercise(exerciseIndex) ?: return
+            showExerciseInfo(exercise.exercise) { showActiveWorkout() }
+        }
+
+        override fun onPageSettled(exerciseIndex: Int) {
+            val workout = workout() ?: return
+            if (exerciseIndex != workout.exerciseIndex) showWorkoutExercise(workout, exerciseIndex)
+        }
+
+        override fun onEditValue(exerciseIndex: Int, setIndex: Int, field: SetField, value: String, applyAll: Boolean) {
+            val workout = workout() ?: return
+            val routineExercise = exercise(exerciseIndex) ?: return
+            val targets = if (applyAll) routineExercise.sets.filter { !it.completed } + listOfNotNull(routineExercise.sets.getOrNull(setIndex))
+            else listOfNotNull(routineExercise.sets.getOrNull(setIndex))
+            targets.distinct().forEach { set ->
+                when (field) {
+                    SetField.WEIGHT -> {
+                        val parsed = value.toDoubleOrNull()
+                        set.weightKg = when {
+                            value.isBlank() -> 0.0
+                            parsed == null -> set.weightKg
+                            workout.usePounds -> parsed / 2.20462
+                            else -> parsed
+                        }
                     }
-                }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> recycleTrackerIfIdle()
-            }
-            return false
-        }
-
-        override fun onTouchEvent(event: MotionEvent): Boolean {
-            when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN -> {
-                    beginGesture(event)
-                    return true
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    velocityTracker?.addMovement(event)
-                    classifyGesture(event)
-                    if (horizontal) updateDrag(event.x - downX)
-                    return horizontal
-                }
-                MotionEvent.ACTION_UP -> {
-                    if (horizontal) finishDrag(cancelled = false) else recycleTrackerIfIdle()
-                    return horizontal
-                }
-                MotionEvent.ACTION_CANCEL -> {
-                    if (horizontal) finishDrag(cancelled = true) else recycleTrackerIfIdle()
-                    return horizontal
+                    SetField.REPS -> set.targetReps = value.toIntOrNull()?.coerceAtLeast(0) ?: 0
                 }
             }
-            return false
+            workout.selectedEditSetIndex = setIndex
+            bumpWorkoutUi()
         }
 
-        fun animateTo(index: Int) {
-            if (index !in workout.routine.exercises.indices || index == currentIndex) return
-            if (kotlin.math.abs(index - currentIndex) != 1) {
-                showWorkoutExercise(workout, index)
-                return
-            }
-            settleTo(index)
+        override fun onEditFinished() {
+            // Persists and, while working, re-sends the current set target to the watch.
+            activeWorkout?.let(::persistActiveWorkout)
+            showActiveWorkout()
         }
 
-        private fun beginGesture(event: MotionEvent) {
-            currentPage.animate().cancel()
-            previousPage?.animate()?.cancel()
-            nextPage?.animate()?.cancel()
-            downX = event.x
-            downY = event.y
-            dragX = 0f
-            horizontal = false
-            vertical = false
-            velocityTracker?.recycle()
-            velocityTracker = VelocityTracker.obtain().also { it.addMovement(event) }
-        }
-
-        private fun classifyGesture(event: MotionEvent) {
-            if (horizontal || vertical) return
-            val dx = event.x - downX
-            val dy = event.y - downY
-            if (maxOf(kotlin.math.abs(dx), kotlin.math.abs(dy)) <= touchSlop) return
-            horizontal = kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.15f
-            vertical = !horizontal
-        }
-
-        private fun updateDrag(rawDx: Float) {
-            val hasDestination = if (rawDx < 0f) nextPage != null else previousPage != null
-            dragX = if (hasDestination) rawDx else rawDx * 0.24f
-            positionPages(dragX)
-        }
-
-        private fun positionPages(offset: Float) {
-            val pageWidth = width.takeIf { it > 0 }?.toFloat()
-                ?: resources.displayMetrics.widthPixels.toFloat()
-            currentPage.translationX = offset
-            previousPage?.translationX = -pageWidth + offset
-            nextPage?.translationX = pageWidth + offset
-        }
-
-        private fun finishDrag(cancelled: Boolean) {
-            velocityTracker?.computeCurrentVelocity(1_000)
-            val velocityX = velocityTracker?.xVelocity ?: 0f
-            velocityTracker?.recycle()
-            velocityTracker = null
-            val pageWidth = width.coerceAtLeast(resources.displayMetrics.widthPixels).toFloat()
-            val direction = when {
-                kotlin.math.abs(velocityX) > 900f -> if (velocityX < 0f) 1 else -1
-                dragX < 0f -> 1
-                else -> -1
-            }
-            val destination = currentIndex + direction
-            val shouldChange = !cancelled && destination in workout.routine.exercises.indices &&
-                (kotlin.math.abs(dragX) >= pageWidth * 0.18f ||
-                    (kotlin.math.abs(velocityX) > 900f && kotlin.math.abs(dragX) > dp(12)))
-            if (shouldChange) settleTo(destination) else settleBack()
-            horizontal = false
-            vertical = false
-        }
-
-        private fun settleBack() {
-            val pageWidth = width.coerceAtLeast(resources.displayMetrics.widthPixels).toFloat()
-            animatePage(currentPage, 0f)
-            previousPage?.let { animatePage(it, -pageWidth) }
-            nextPage?.let { animatePage(it, pageWidth) }
-        }
-
-        private fun settleTo(index: Int) {
-            if (workoutTransitionRunning) return
-            val direction = if (index > currentIndex) 1 else -1
-            val pageWidth = width.coerceAtLeast(resources.displayMetrics.widthPixels).toFloat()
-            val incoming = if (direction > 0) nextPage else previousPage
-            if (incoming == null) {
-                settleBack()
-                return
-            }
-            workoutTransitionRunning = true
-            animatePage(currentPage, -direction * pageWidth)
-            if (direction > 0) previousPage?.let { animatePage(it, -2f * pageWidth) }
-            else nextPage?.let { animatePage(it, 2f * pageWidth) }
-            incoming.animate()
-                .translationX(0f)
-                .setDuration(230L)
-                .setInterpolator(DecelerateInterpolator(1.8f))
-                .withEndAction {
-                    showWorkoutExercise(workout, index)
-                    workoutTransitionRunning = false
+        override fun onToggleSet(exerciseIndex: Int, setIndex: Int) {
+            val workout = workout() ?: return
+            val routineExercise = exercise(exerciseIndex) ?: return
+            val plannedSet = routineExercise.sets.getOrNull(setIndex) ?: return
+            if (!plannedSet.completed) {
+                if (activeWorkout !== workout) {
+                    showStartGuide(
+                        routine = workout.routine,
+                        startExerciseIndex = exerciseIndex,
+                        startSetIndex = setIndex,
+                    ) { startedWorkout ->
+                        val startedExercise = startedWorkout.routine.exercises
+                            .getOrNull(startedWorkout.exerciseIndex) ?: return@showStartGuide
+                        val startedSet = startedExercise.sets.getOrNull(setIndex) ?: return@showStartGuide
+                        completeWorkoutSet(startedWorkout, startedExercise, setIndex, startedSet)
+                    }
+                    return
                 }
-                .start()
-        }
-
-        private fun animatePage(view: View, target: Float) {
-            view.animate()
-                .translationX(target)
-                .setDuration(230L)
-                .setInterpolator(DecelerateInterpolator(1.8f))
-                .start()
-        }
-
-        private fun recycleTrackerIfIdle() {
-            if (!horizontal) {
-                velocityTracker?.recycle()
-                velocityTracker = null
-            }
-        }
-    }
-
-    private fun buildWorkoutSwipePreview(workout: ActiveWorkout, index: Int): ScrollView {
-        val routineExercise = workout.routine.exercises[index]
-        val weighted = routineExercise.exercise.equipment != "맨몸"
-        val selectedSet = workout.setIndexByExercise[routineExercise.exercise.id] ?: 0
-        val completedCount = routineExercise.sets.completedWorkSetCount()
-        val performed = workout.performedRepsByExercise[routineExercise.exercise.id] ?: 0
-        val page = vertical().apply {
-            setPadding(dp(16), dp(12), dp(16), dp(20))
-            addView(row().apply {
-                gravity = Gravity.CENTER_VERTICAL
-                addView(label("‹", 38f, white).apply { gravity = Gravity.CENTER }, fixedParams(42, 44))
-                addView(vertical().apply {
-                    addView(label(workout.routine.name, 16f, white, bold = true))
-                    addView(label("운동 시간", 11f, muted))
-                }, weightParams(1f, -2))
-                addView(label(timeText(workoutElapsedSeconds(workout)), 17f, white, bold = true))
-                addView(label("•••", 16f, muted, bold = true).apply { gravity = Gravity.CENTER }, fixedParams(42, 44))
-            })
-            addView(space(10))
-            addView(vertical().apply {
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(14), dp(7), dp(14), dp(7))
-                background = GradientDrawable().apply {
-                    setColor(Color.rgb(20, 24, 28))
-                    setStroke(1, Color.rgb(44, 52, 60))
-                    cornerRadius = 12f
+                completeWorkoutSet(workout, routineExercise, setIndex, plannedSet)
+            } else {
+                plannedSet.completed = false
+                val current = workout.performedRepsByExercise[routineExercise.exercise.id] ?: 0
+                workout.performedRepsByExercise[routineExercise.exercise.id] =
+                    (current - plannedSet.targetReps).coerceAtLeast(0)
+                workout.phase = WorkoutPhase.WORKING
+                if (workout.lastCompletedSetKey == "${workout.sessionId}:${routineExercise.exercise.id}:$setIndex") {
+                    workout.lastCompletedSetKey = null
+                    lastCompletedLiveKey = null
                 }
-                addView(label("⌚ Watch8 연결 상태 유지", 12f, green, bold = true), matchParams(23))
-                addView(label("운동을 놓으면 이 페이지로 전환", 12f, green, bold = true), matchParams(23))
-            }, matchParams(60))
-            addView(space(12))
-            addView(row().apply {
-                addView(label("${index + 1} / ${workout.routine.exercises.size}  운동", 12f, blue, bold = true), weightParams(1f, -2))
-                addView(label("●  ●  ●  ●  ●", 10f, muted))
-            })
-            addView(space(6))
-            addView(exerciseAnimationView(routineExercise.exercise, 190))
-            addView(space(6))
-            addView(row().apply {
-                addView(label(routineExercise.exercise.name, 19f, white, bold = true), weightParams(1f, -2))
-                addView(label("ⓘ", 18f, muted).apply { gravity = Gravity.CENTER }, fixedParams(38, 42))
-            })
-            addView(label(routineExercise.exercise.muscles, 13f, muted))
-            addView(space(4))
-            addView(row().apply {
-                addView(label("목표 ${routineExercise.sets.sumOf { it.targetReps }}회", 14f, blue, bold = true), weightParams(1f, -2))
-                addView(label("수행 ${performed}회", 14f, if (performed > 0) amber else muted, bold = true))
-            })
-            addView(space(10))
-            addView(row().apply {
-                addView(label("›  기록", 14f, white, bold = true), weightParams(1f, 38))
-                addView(label("?", 14f, white).apply {
-                    gravity = Gravity.CENTER
-                    background = rounded(muted, 99)
-                }, fixedParams(28, 28))
-            })
-            addView(space(4))
-            addView(activeSetGridRow(weighted, 32).apply {
-                addActiveSetCell(this, label("세트", 12f, muted, bold = true).apply { gravity = Gravity.CENTER }, 0)
-                if (weighted) addActiveSetCell(this, label(if (workout.usePounds) "LB" else "KG", 12f, muted, bold = true).apply { gravity = Gravity.CENTER }, 1)
-                addActiveSetCell(this, label("회", 12f, muted, bold = true).apply { gravity = Gravity.CENTER }, if (weighted) 2 else 1)
-                addActiveSetCell(this, label("완료", 12f, muted, bold = true).apply { gravity = Gravity.CENTER }, if (weighted) 3 else 2)
-                addActiveSetCell(this, Space(this@MainActivity), if (weighted) 4 else 3)
-            })
-            routineExercise.sets.forEachIndexed { setIndex, set ->
-                addView(workoutSetPreviewRow(workout, routineExercise, setIndex, set, selectedSet))
-                addView(space(3))
+                persistActiveWorkout(workout)
+                bumpWorkoutUi()
             }
-            addView(space(4))
-            addView(row().apply {
-                addView(label("＋ 세트추가", 15f, amber, bold = true).apply { gravity = Gravity.CENTER }, weightParams(1f, 44))
-                addView(space(8))
-                addView(label("− 세트삭제", 15f, blue, bold = true).apply { gravity = Gravity.CENTER }, weightParams(1f, 44))
-            })
-            if (activeWorkout === workout) {
-                addView(space(4))
-                addView(row().apply {
-                    addView(label("☑  모든 세트완료", 15f, blue, bold = true).apply { gravity = Gravity.CENTER }, weightParams(1f, 44))
-                    addView(space(8))
-                    addView(label("→  다음운동", 15f, white, bold = true).apply { gravity = Gravity.CENTER }, weightParams(1f, 44))
-                })
+        }
+
+        override fun onSetMenu(exerciseIndex: Int, setIndex: Int) {
+            val workout = workout() ?: return
+            val routineExercise = exercise(exerciseIndex) ?: return
+            workout.selectedEditSetIndex = setIndex
+            showSetMenu(workout, routineExercise, setIndex)
+        }
+
+        override fun onAddSet(exerciseIndex: Int) {
+            val routineExercise = exercise(exerciseIndex) ?: return
+            val source = routineExercise.sets.lastOrNull() ?: PlannedSet(null, 10)
+            routineExercise.sets += PlannedSet(source.weightKg, source.targetReps, gripType = source.gripType, restSeconds = source.restSeconds)
+            activeWorkout?.let(::persistActiveWorkout)
+            bumpWorkoutUi()
+        }
+
+        override fun onRemoveSet(exerciseIndex: Int, setIndex: Int) {
+            val workout = workout() ?: return
+            val routineExercise = exercise(exerciseIndex) ?: return
+            if (routineExercise.sets.size <= 1 || setIndex !in routineExercise.sets.indices) return
+            val removed = routineExercise.sets.removeAt(setIndex)
+            lastRemovedSet = Triple(routineExercise, setIndex, removed)
+            workout.selectedEditSetIndex = workout.selectedEditSetIndex.coerceAtMost(routineExercise.sets.lastIndex)
+            if (exerciseIndex == workout.exerciseIndex) {
+                workout.setIndex = workout.setIndex.coerceAtMost(routineExercise.sets.lastIndex)
             }
-            addView(space(10))
-            val currentLabel = routineExercise.sets.workSetLabel(selectedSet).let { if (it == "W") "웜업" else "세트 $it / ${routineExercise.sets.workSetCount()}" }
-            addView(label("현재 $currentLabel · 완료 ${completedCount}세트", 13f, green, bold = true))
-            addView(space(12))
-            addView(label("휴식 시간", 12f, amber, bold = true))
-            addView(label("${routineExercise.restSeconds}초", 22f, white, bold = true), matchParams(44))
+            activeWorkout?.let(::persistActiveWorkout)
+            bumpWorkoutUi()
         }
-        return ScrollView(this).apply {
-            addView(page)
-            post { scrollTo(0, workout.scrollYByExercise[routineExercise.exercise.id] ?: 0) }
+
+        override fun onUndoRemoveSet() {
+            val (routineExercise, index, set) = lastRemovedSet ?: return
+            lastRemovedSet = null
+            routineExercise.sets.add(index.coerceAtMost(routineExercise.sets.size), set)
+            activeWorkout?.let(::persistActiveWorkout)
+            bumpWorkoutUi()
         }
-    }
 
-    private fun workoutSetPreviewRow(
-        workout: ActiveWorkout,
-        routineExercise: RoutineExercise,
-        setIndex: Int,
-        plannedSet: PlannedSet,
-        currentSetIndex: Int,
-    ): View = activeSetGridRow(
-        routineExercise.exercise.equipment != "맨몸",
-        42,
-        if (currentSetIndex == setIndex) Color.rgb(38, 39, 39) else surfaceRaised,
-    ).apply {
-        val weighted = routineExercise.exercise.equipment != "맨몸"
-        addActiveSetCell(this, label(routineExercise.sets.workSetLabel(setIndex), 13f, if (setIndex == currentSetIndex) white else muted, bold = true).apply { gravity = Gravity.CENTER }, 0)
-        if (weighted) addActiveSetCell(this, label(formatActiveWeight(plannedSet.weightKg, workout.usePounds), 13f, white, bold = true).apply { gravity = Gravity.CENTER }, 1)
-        addActiveSetCell(this, label(plannedSet.targetReps.toString(), 13f, white, bold = true).apply { gravity = Gravity.CENTER }, if (weighted) 2 else 1)
-        addActiveSetCell(this, label(if (plannedSet.completed) "✓" else "", 15f, if (plannedSet.completed) amber else muted, bold = true).apply { gravity = Gravity.CENTER }, if (weighted) 3 else 2)
-        addActiveSetCell(this, label("•••", 13f, muted, bold = true).apply { gravity = Gravity.CENTER }, if (weighted) 4 else 3, filled = false)
-    }
+        override fun onSetRest(exerciseIndex: Int, setIndex: Int) {
+            val routineExercise = exercise(exerciseIndex) ?: return
+            val set = routineExercise.sets.getOrNull(setIndex) ?: return
+            showChoiceSheet(
+                "이 세트 뒤 휴식",
+                listOf("기본값" to "운동 기본 휴식 ${routineExercise.restSeconds}초") +
+                    listOf(30, 45, 60, 90, 120, 150, 180).map { "${it}초" to "" },
+            ) { value ->
+                set.restSeconds = value.removeSuffix("초").toIntOrNull()
+                activeWorkout?.let(::persistActiveWorkout)
+                bumpWorkoutUi()
+            }
+        }
 
-    private fun refreshActiveWorkoutUi(workout: ActiveWorkout) {
-        val ui = activeWorkoutUi ?: return
-        if (ui.workout !== workout || currentScreen != Screen.ACTIVE) return
-        val routineExercise = workout.routine.exercises.getOrNull(workout.exerciseIndex) ?: return
-        workout.selectedEditSetIndex = workout.selectedEditSetIndex.coerceIn(0, routineExercise.sets.lastIndex)
-        val completedCount = routineExercise.sets.completedWorkSetCount()
-        val totalTarget = routineExercise.sets.sumOf { it.targetReps }
-        val performed = workout.performedRepsByExercise[routineExercise.exercise.id] ?: 0
+        override fun onAllSetsDone(exerciseIndex: Int) {
+            val workout = workout() ?: return
+            val routineExercise = exercise(exerciseIndex) ?: return
+            routineExercise.sets.forEach { it.completed = true }
+            workout.performedRepsByExercise[routineExercise.exercise.id] = routineExercise.sets.sumOf { it.targetReps }
+            activeWorkout?.let(::persistActiveWorkout)
+            bumpWorkoutUi()
+        }
 
-        ui.target.text = "목표 ${totalTarget}회"
-        ui.performed.text = "수행 ${performed}회"
-        ui.performed.setTextColor(if (performed > 0) amber else muted)
-        ui.summary.text = workoutSetSummary(workout, routineExercise, completedCount)
-        ui.restDuration.text = "${routineExercise.restSeconds}초"
+        override fun onAdjustRest(deltaSeconds: Int) {
+            val workout = workout() ?: return
+            val routineExercise = exercise(workout.exerciseIndex) ?: return
+            adjustRestDuration(workout, routineExercise, deltaSeconds)
+        }
 
-        ui.setRows.removeAllViews()
-        routineExercise.sets.forEachIndexed { setIndex, plannedSet ->
-            ui.setRows.addView(workoutSetRow(workout, routineExercise, setIndex, plannedSet))
-            ui.setRows.addView(space(3))
+        override fun onRestPreset(seconds: Int) {
+            val workout = workout() ?: return
+            val routineExercise = exercise(workout.exerciseIndex) ?: return
+            adjustRestDuration(workout, routineExercise, seconds - routineExercise.restSeconds)
+        }
+
+        override fun onSkipRest() {
+            val workout = activeWorkout ?: return
+            if (activeRestEndAtMs <= 0L) return
+            stopTicker()
+            continueAfterRest(workout)
+        }
+
+        override fun onTogglePause() {
+            activeWorkout?.let(::toggleWorkoutPause)
+        }
+
+        override fun onStop() {
+            if (activeWorkout != null) confirmStopWorkout()
+        }
+
+        override fun onToggleUnit() {
+            val workout = workout() ?: return
+            workout.usePounds = !workout.usePounds
+            bumpWorkoutUi()
         }
     }
 
@@ -2153,7 +1925,7 @@ class MainActivity : Activity() {
             ),
         )
         val routineExercise = workout.routine.exercises.getOrNull(workout.exerciseIndex) ?: return
-        val restSeconds = routineExercise.restSeconds
+        val restSeconds = effectiveRestSeconds(routineExercise, setIndex)
         val restEndAtMs = System.currentTimeMillis() + restSeconds * 1_000L
         val transaction = sessionStore.completeSet(
             SetCompletionEvent(
@@ -2241,7 +2013,7 @@ class MainActivity : Activity() {
                 setIndex,
             ),
         )
-        val previousActiveUi = activeWorkoutUi
+        val uiReused = currentScreen == Screen.ACTIVE && workoutComposeView?.parent === root
         showRest(restSeconds, restEndAtMs)
         Log.i(
             EVENT_TAG,
@@ -2250,7 +2022,7 @@ class MainActivity : Activity() {
                 sessionId,
                 exerciseId,
                 setIndex,
-                detail = "uiReused=${previousActiveUi != null && activeWorkoutUi === previousActiveUi}",
+                detail = "uiReused=$uiReused",
             ),
         )
     }
@@ -2330,130 +2102,14 @@ class MainActivity : Activity() {
         return cleanWeight(value)
     }
 
-    private fun workoutSetSummary(
-        workout: ActiveWorkout,
-        routineExercise: RoutineExercise,
-        completedWorkSets: Int = routineExercise.sets.completedWorkSetCount(),
-    ): String {
-        val current = routineExercise.sets.workSetLabel(workout.setIndex)
-        val currentLabel = if (current == "W") "웜업" else "세트 $current / ${routineExercise.sets.workSetCount()}"
-        return "현재 $currentLabel · 완료 ${completedWorkSets}세트"
-    }
-
-    private fun activeSetGridRow(weighted: Boolean, heightDp: Int, fill: Int? = null): GridLayout {
-        val weights = if (weighted) listOf(0.78f, 1.25f, 1.15f, 0.78f, 0.38f) else listOf(0.82f, 1.28f, 0.82f, 0.38f)
-        return GridLayout(this).apply {
-            columnCount = weights.size
-            alignmentMode = GridLayout.ALIGN_BOUNDS
-            useDefaultMargins = false
-            setPadding(dp(4), dp(2), dp(4), dp(2))
-            tag = Triple(weights, heightDp, fill)
-        }
-    }
-
-    private fun addActiveSetCell(grid: GridLayout, view: View, column: Int, filled: Boolean = true) {
-        val (weights, heightDp, fill) = grid.tag as Triple<*, *, *>
-        if (fill != null && filled && view !is Space) view.background = rounded(fill as Int, 10)
-        grid.addView(view, GridLayout.LayoutParams().apply {
-            width = 0
-            height = dp((heightDp as Int) - if (fill != null) 6 else 0)
-            columnSpec = GridLayout.spec(column, 1, ((weights as List<*>)[column] as Float))
-            rowSpec = GridLayout.spec(0)
-            if (fill != null) setMargins(if (filled) dp(3) else 0, dp(3), if (filled) dp(3) else 0, dp(3))
-        })
-    }
-
-    private fun workoutSetRow(
-        workout: ActiveWorkout,
-        routineExercise: RoutineExercise,
-        setIndex: Int,
-        plannedSet: PlannedSet,
-    ): View = activeSetGridRow(routineExercise.exercise.equipment != "맨몸", 42, if (workout.selectedEditSetIndex == setIndex) Color.rgb(38, 39, 39) else surfaceRaised).apply {
-        val weighted = routineExercise.exercise.equipment != "맨몸"
-        addActiveSetCell(this, label(routineExercise.sets.workSetLabel(setIndex), 13f, if (setIndex == workout.setIndex) white else muted, bold = true).apply {
-            gravity = Gravity.CENTER
-            setOnClickListener {
-                workout.selectedEditSetIndex = setIndex
-                showSetMenu(workout, routineExercise, setIndex)
-            }
-        }, 0)
-        if (weighted) {
-            addActiveSetCell(this, label(formatActiveWeight(plannedSet.weightKg, workout.usePounds), 13f, white, bold = true).apply {
-                gravity = Gravity.CENTER
-                setOnClickListener {
-                    workout.selectedEditSetIndex = setIndex
-                    val initial = formatActiveWeight(plannedSet.weightKg, workout.usePounds).replace("체중", "")
-                    showNumberPad(if (workout.usePounds) "중량 lb" else "중량 kg", initial, true,
-                        onCommit = { value ->
-                            value.toDoubleOrNull()?.let { parsed -> plannedSet.weightKg = if (workout.usePounds) parsed / 2.20462 else parsed }
-                            showActiveWorkout()
-                        },
-                        onPrevious = { workout.selectedEditSetIndex = (setIndex - 1).coerceAtLeast(0); showActiveWorkout() },
-                        onNext = { workout.selectedEditSetIndex = (setIndex + 1).coerceAtMost(routineExercise.sets.lastIndex); showActiveWorkout() },
-                    )
-                }
-            }, 1)
-        }
-        addActiveSetCell(this, label(plannedSet.targetReps.toString(), 13f, white, bold = true).apply {
-            gravity = Gravity.CENTER
-            setOnClickListener {
-                workout.selectedEditSetIndex = setIndex
-                showNumberPad("횟수", plannedSet.targetReps.toString(), false,
-                    onCommit = { value -> plannedSet.targetReps = value.toIntOrNull()?.coerceAtLeast(0) ?: plannedSet.targetReps; showActiveWorkout() },
-                    onPrevious = { workout.selectedEditSetIndex = (setIndex - 1).coerceAtLeast(0); showActiveWorkout() },
-                    onNext = { workout.selectedEditSetIndex = (setIndex + 1).coerceAtMost(routineExercise.sets.lastIndex); showActiveWorkout() },
-                )
-            }
-        }, if (weighted) 2 else 1)
-        addActiveSetCell(this, label(if (plannedSet.completed) "✓" else "", 15f, if (plannedSet.completed) amber else muted, bold = true).apply {
-            gravity = Gravity.CENTER
-            setOnClickListener {
-                if (!plannedSet.completed) {
-                    if (activeWorkout !== workout) {
-                        showStartGuide(
-                            routine = workout.routine,
-                            startExerciseIndex = workout.exerciseIndex,
-                            startSetIndex = setIndex,
-                        ) { startedWorkout ->
-                            val startedExercise = startedWorkout.routine.exercises
-                                .getOrNull(startedWorkout.exerciseIndex) ?: return@showStartGuide
-                            val startedSet = startedExercise.sets.getOrNull(setIndex)
-                                ?: return@showStartGuide
-                            completeWorkoutSet(startedWorkout, startedExercise, setIndex, startedSet)
-                        }
-                        return@setOnClickListener
-                    }
-                    completeWorkoutSet(workout, routineExercise, setIndex, plannedSet)
-                } else {
-                    plannedSet.completed = false
-                    val current = workout.performedRepsByExercise[routineExercise.exercise.id] ?: 0
-                    workout.performedRepsByExercise[routineExercise.exercise.id] =
-                        (current - plannedSet.targetReps).coerceAtLeast(0)
-                    workout.phase = WorkoutPhase.WORKING
-                    if (workout.lastCompletedSetKey ==
-                        "${workout.sessionId}:${routineExercise.exercise.id}:$setIndex"
-                    ) {
-                        workout.lastCompletedSetKey = null
-                        lastCompletedLiveKey = null
-                    }
-                    persistActiveWorkout(workout)
-                    showActiveWorkout()
-                }
-            }
-        }, if (weighted) 3 else 2)
-        addActiveSetCell(this, label("•••", 13f, muted, bold = true).apply {
-            gravity = Gravity.CENTER
-            setOnClickListener { showSetMenu(workout, routineExercise, setIndex) }
-        }, if (weighted) 4 else 3, filled = false)
-    }
-
     private fun completeWorkoutSet(
         workout: ActiveWorkout,
         routineExercise: RoutineExercise,
         setIndex: Int,
         plannedSet: PlannedSet,
     ) {
-        val restEndAtMs = System.currentTimeMillis() + routineExercise.restSeconds * 1_000L
+        val restSeconds = effectiveRestSeconds(routineExercise, setIndex)
+        val restEndAtMs = System.currentTimeMillis() + restSeconds * 1_000L
         val transaction = sessionStore.completeSet(
             SetCompletionEvent(
                 sessionId = workout.sessionId,
@@ -2473,7 +2129,7 @@ class MainActivity : Activity() {
         if (transaction !is SetCompletionResult.Applied) return
         applySnapshotToWorkout(workout, transaction.snapshot)
         lastCompletedLiveKey = workout.lastCompletedSetKey
-        activeRestStartAtMs = restEndAtMs - routineExercise.restSeconds * 1_000L
+        activeRestStartAtMs = restEndAtMs - restSeconds * 1_000L
         activeRestEndAtMs = restEndAtMs
         if (activeWorkout === workout) {
             val next = nextWorkoutTarget(workout)
@@ -2481,72 +2137,11 @@ class MainActivity : Activity() {
                 WearSync.PATH_COMMAND,
                 WearSync.richCommand(
                     "SET_COMPLETE", workout.sessionId, next.exerciseId, next.exerciseName,
-                    next.setIndex, next.targetReps, next.weightKg, routineExercise.restSeconds, restEndAtMs,
+                    next.setIndex, next.targetReps, next.weightKg, restSeconds, restEndAtMs,
                 ),
             )
         }
-        showRest(routineExercise.restSeconds, restEndAtMs)
-    }
-
-    private fun advanceWorkoutExercise(workout: ActiveWorkout) {
-        animateWorkoutExercise(workout, workout.exerciseIndex + 1, root.getChildAt(0))
-    }
-
-    private fun animateWorkoutExercise(workout: ActiveWorkout, index: Int, currentView: View?) {
-        if (index !in workout.routine.exercises.indices) {
-            currentView?.animate()
-                ?.translationX(0f)
-                ?.alpha(1f)
-                ?.setDuration(180L)
-                ?.setInterpolator(DecelerateInterpolator())
-                ?.start()
-            return
-        }
-        if (workoutTransitionRunning) return
-        if (currentView is WorkoutPagerHost) {
-            currentView.animateTo(index)
-            return
-        }
-        val outgoing = currentView ?: run {
-            showWorkoutExercise(workout, index)
-            return
-        }
-        workoutTransitionRunning = true
-        handler.postDelayed({ workoutTransitionRunning = false }, 650L)
-        val widthPx = outgoing.width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
-        val direction = if (index > workout.exerciseIndex) 1f else -1f
-        val outgoingTarget = -direction * widthPx
-        outgoing.animate()
-            .translationX(outgoingTarget)
-            .alpha(0.94f)
-            .setDuration(170L)
-            .setInterpolator(DecelerateInterpolator())
-            .withEndAction {
-                if (!showWorkoutExercise(workout, index)) {
-                    outgoing.animate()
-                        .translationX(0f)
-                        .alpha(1f)
-                        .setDuration(180L)
-                        .setInterpolator(DecelerateInterpolator())
-                        .withEndAction { workoutTransitionRunning = false }
-                        .start()
-                    return@withEndAction
-                }
-                root.getChildAt(0)?.apply {
-                    translationX = direction * widthPx
-                    alpha = 0.94f
-                    animate()
-                        .translationX(0f)
-                        .alpha(1f)
-                        .setDuration(220L)
-                        .setInterpolator(DecelerateInterpolator())
-                        .withEndAction { workoutTransitionRunning = false }
-                        .start()
-                } ?: run {
-                    workoutTransitionRunning = false
-                }
-            }
-            .start()
+        showRest(restSeconds, restEndAtMs)
     }
 
     private fun showWorkoutExercise(workout: ActiveWorkout, index: Int): Boolean {
@@ -2693,82 +2288,6 @@ class MainActivity : Activity() {
         showBottomDialog(dialog)
     }
 
-    private fun showNumberPad(
-        title: String,
-        initial: String,
-        allowDecimal: Boolean,
-        onCommit: (String) -> Unit,
-        onPrevious: (() -> Unit)? = null,
-        onNext: (() -> Unit)? = null,
-    ) {
-        val dialog = bottomDialog()
-        var buffer = initial.ifBlank { "0" }
-        val display = label(buffer, 34f, white, bold = true).apply { gravity = Gravity.CENTER }
-        fun refresh() { display.text = buffer.ifBlank { "0" } }
-        fun delta(amount: Double) {
-            val value = (buffer.toDoubleOrNull() ?: 0.0) + amount
-            buffer = if (allowDecimal) cleanWeight(value.coerceAtLeast(0.0)) else value.toInt().coerceAtLeast(0).toString()
-            refresh()
-        }
-        val content = vertical().apply {
-            setPadding(dp(20), dp(8), dp(20), dp(24))
-            addView(label("━", 22f, faint).apply { gravity = Gravity.CENTER })
-            addView(label(title, 19f, white, bold = true).apply { setPadding(0, dp(4), 0, dp(8)) })
-            addView(display, matchParams(64))
-            addView(row().apply {
-                listOf("−5" to { delta(-5.0) }, "−1" to { delta(-1.0) }, "+1" to { delta(1.0) }, "+5" to { delta(5.0) }).forEach { (text, action) ->
-                    addView(label(text, 18f, amber, bold = true).apply {
-                        gravity = Gravity.CENTER
-                        isClickable = true
-                        setOnClickListener { action() }
-                    }, weightParams(1f, 54))
-                }
-            })
-            val grid = GridLayout(this@MainActivity).apply { columnCount = 3 }
-            (1..9).forEach { number ->
-                grid.addView(label(number.toString(), 22f, white, bold = true).apply {
-                    gravity = Gravity.CENTER
-                    isClickable = true
-                    setOnClickListener {
-                        if (buffer == "0") buffer = ""
-                        buffer += number
-                        refresh()
-                    }
-                }, GridLayout.LayoutParams().apply { width = 0; height = dp(58); columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f) })
-            }
-            grid.addView(label(if (allowDecimal) "." else "", 22f, white, bold = true).apply {
-                gravity = Gravity.CENTER
-                isClickable = allowDecimal
-                setOnClickListener { if (allowDecimal && !buffer.contains('.')) { buffer += "."; refresh() } }
-            }, GridLayout.LayoutParams().apply { width = 0; height = dp(58); columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f) })
-            grid.addView(label("0", 22f, white, bold = true).apply {
-                gravity = Gravity.CENTER
-                setOnClickListener { if (buffer != "0") buffer += "0"; refresh() }
-            }, GridLayout.LayoutParams().apply { width = 0; height = dp(58); columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f) })
-            grid.addView(label("⌫", 22f, white, bold = true).apply {
-                gravity = Gravity.CENTER
-                setOnClickListener { buffer = buffer.dropLast(1).ifBlank { "0" }; refresh() }
-            }, GridLayout.LayoutParams().apply { width = 0; height = dp(58); columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f) })
-            addView(grid)
-            addView(row().apply {
-                addView(label("‹ 이전", 17f, blue, bold = true).apply {
-                    gravity = Gravity.CENTER
-                    setOnClickListener { onCommit(buffer); dialog.dismiss(); onPrevious?.invoke() }
-                }, weightParams(1f, 58))
-                addView(label("다음 ›", 17f, blue, bold = true).apply {
-                    gravity = Gravity.CENTER
-                    setOnClickListener { onCommit(buffer); dialog.dismiss(); onNext?.invoke() }
-                }, weightParams(1f, 58))
-                addView(label("✓", 28f, amber, bold = true).apply {
-                    gravity = Gravity.CENTER
-                    setOnClickListener { dialog.dismiss(); onCommit(buffer) }
-                }, fixedParams(70, 58))
-            })
-        }
-        dialog.setContentView(content)
-        showBottomDialog(dialog)
-    }
-
     private fun continueAfterRest(workout: ActiveWorkout) {
         activeRestStartAtMs = 0L
         activeRestEndAtMs = 0L
@@ -2835,10 +2354,10 @@ class MainActivity : Activity() {
             ?: (System.currentTimeMillis() + seconds.coerceAtLeast(0) * 1_000L)
         activeRestStartAtMs = activeRestEndAtMs - seconds.coerceAtLeast(0) * 1_000L
         workout.phase = WorkoutPhase.RESTING
+        lastRestCueSecond = -1
         if (!persistActiveWorkout(workout)) return
         try {
             showActiveWorkout(forceRebuild = !wasActiveScreen)
-            updateRestUi(workout)
         } catch (error: Exception) {
             reportWorkoutUiError("enter_rest", error)
             // Session/rest state was committed before rendering. A clean rebuild
@@ -2855,26 +2374,6 @@ class MainActivity : Activity() {
             .putLong("lastUiErrorAt", System.currentTimeMillis())
             .apply()
     }
-
-    private fun updateRestUi(workout: ActiveWorkout) {
-        val ui = activeWorkoutUi ?: return
-        if (ui.workout !== workout || currentScreen != Screen.ACTIVE) return
-        val routineExercise = workout.routine.exercises.getOrNull(workout.exerciseIndex) ?: return
-        if (activeRestEndAtMs <= 0L) {
-            ui.restDuration.text = "${routineExercise.restSeconds}초"
-            ui.restProgress.visibility = View.INVISIBLE
-            ui.restProgress.progress = 0
-            return
-        }
-        val now = System.currentTimeMillis()
-        val leftMs = (activeRestEndAtMs - now).coerceAtLeast(0L)
-        val leftSeconds = ((leftMs + 999L) / 1_000L).toInt()
-        val totalMs = (activeRestEndAtMs - activeRestStartAtMs).coerceAtLeast(1L)
-        ui.restDuration.text = "${leftSeconds}초"
-        ui.restProgress.visibility = View.VISIBLE
-        ui.restProgress.progress = ((leftMs * 1000L) / totalMs).toInt().coerceIn(0, 1000)
-    }
-
 
     private fun showMyMountainDecision() {
         stopTicker()
@@ -3246,12 +2745,10 @@ class MainActivity : Activity() {
         val animationRes = resources.getIdentifier(resName, "drawable", packageName).takeIf { it != 0 }
             ?: return anatomyPlaceholder(heightDp)
         return runCatching {
-            val drawable = animationConstantStates[animationRes]?.newDrawable(resources)?.mutate()
-                ?: ImageDecoder.decodeDrawable(
-                    ImageDecoder.createSource(resources, animationRes),
-                ).also { drawable ->
-                    drawable.constantState?.let { animationConstantStates[animationRes] = it }
-                }
+            // Decode per view: AnimatedImageDrawables that share a constant state also
+            // share one native decoder, and two running at once (pager neighbours)
+            // abort the process.
+            val drawable = ImageDecoder.decodeDrawable(ImageDecoder.createSource(resources, animationRes))
             val radiusDp = if (compact) 12 else 20
             FrameLayout(this).apply {
                 layoutParams = LinearLayout.LayoutParams(
@@ -3690,7 +3187,6 @@ class MainActivity : Activity() {
             setMargins(dp(12), 0, dp(12), dp(8))
         })
         root.addView(frame, FrameLayout.LayoutParams(-1, -1))
-        updateRestUi(activeWorkout ?: return)
     }
 
     private fun bottomNav(selected: RootTab): View = row().apply {
