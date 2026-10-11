@@ -45,7 +45,7 @@ class WristTrajectoryTracker(
     private val axisTimeConstantSec: Double = 2.0,
     private val velocityLeakSec: Double = 1.5,
     private val turnaroundHysteresisMps: Double = 0.08,
-    private val reversalFraction: Double = 0.4,
+    private val reversalFraction: Double = 0.15,
     private val movingGravityGain: Double = 0.1,
     private val movingGravityWindow: Double = 3.0,
     private val tailMaxSec: Double = 0.6,
@@ -124,8 +124,10 @@ class WristTrajectoryTracker(
         val gyroQuiet = sqrt(gx * gx + gy * gy + gz * gz) < stillGyroRadPerSec
 
         if (!initialized) {
-            // Loose gate: people rarely stand perfectly still before a set.
-            if (gyroQuiet && abs(aNorm - gravity) < 1.5) initializeFromTilt(a)
+            // Start right away even mid-movement (people press start and lift
+            // at once); the continuous gravity correction settles the tilt
+            // within a few seconds because rep motion averages out.
+            initializeFromTilt(a)
             return null
         }
         // Strong gravity correction when still; a weak one during movement,

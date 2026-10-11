@@ -32,8 +32,8 @@ android {
         applicationId = "dev.kyungmin.kcoach"
         minSdk = 30
         targetSdk = 35
-        versionCode = 28
-        versionName = "0.2.0"
+        versionCode = 29
+        versionName = "0.2.1"
         buildConfigField(
             "String",
             "UPDATE_MANIFEST_URL",
@@ -46,5 +46,6 @@ dependencies {
     implementation(project(":core"))
     implementation("androidx.core:core-ktx:1.16.0")
     implementation("androidx.health:health-services-client:1.1.0-rc02")
+    implementation("androidx.wear:wear-ongoing:1.0.0")
     implementation("com.google.android.gms:play-services-wearable:20.0.1")
 }

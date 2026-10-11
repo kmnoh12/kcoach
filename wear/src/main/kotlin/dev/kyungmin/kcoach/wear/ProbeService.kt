@@ -3,6 +3,7 @@ package dev.kyungmin.kcoach.wear
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
@@ -14,6 +15,8 @@ import android.os.IBinder
 import android.os.PowerManager
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
+import androidx.wear.ongoing.OngoingActivity
+import androidx.wear.ongoing.Status
 import com.google.android.gms.tasks.Tasks
 import com.google.android.gms.wearable.ChannelClient
 import com.google.android.gms.wearable.Wearable
@@ -205,13 +208,28 @@ class ProbeService : Service(), SensorEventListener {
     private fun startInForeground() {
         val manager = getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(NotificationChannel(CHANNEL_ID, "KCoach 실측", NotificationManager.IMPORTANCE_LOW))
-        val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
+        val openProbe = PendingIntent.getActivity(
+            this,
+            0,
+            Intent(this, ProbeActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_menu_compass)
             .setContentTitle("KCoach 실측")
             .setContentText("센서를 폰으로 보내는 중")
             .setOngoing(true)
-            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setCategory(NotificationCompat.CATEGORY_WORKOUT)
+            .setContentIntent(openProbe)
+        // Wear OS treats a long-running workout as an Ongoing Activity (Now Bar
+        // on Galaxy watches); without it the system sees a plain background app.
+        OngoingActivity.Builder(applicationContext, NOTIFICATION_ID, builder)
+            .setStaticIcon(android.R.drawable.ic_menu_compass)
+            .setTouchIntent(openProbe)
+            .setStatus(Status.Builder().addTemplate("KCoach 실측 중").build())
             .build()
+            .apply(applicationContext)
+        val notification: Notification = builder.build()
         runCatching {
             startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH)
         }.onFailure {

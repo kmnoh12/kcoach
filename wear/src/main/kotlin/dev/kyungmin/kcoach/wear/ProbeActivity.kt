@@ -1,6 +1,8 @@
 package dev.kyungmin.kcoach.wear
 
 import android.app.Activity
+import android.app.ActivityManager
+import android.app.ApplicationExitInfo
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
@@ -13,6 +15,9 @@ import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /** Watch side of the measurement probe: start/stop streaming and toggle screen-on. */
 class ProbeActivity : Activity() {
@@ -47,6 +52,7 @@ class ProbeActivity : Activity() {
             render()
         }
         column.addView(screenButton, LinearLayout.LayoutParams(-1, -2).apply { topMargin = 8 })
+        column.addView(text(lastExitSummary(), 9f, Color.rgb(150, 160, 170)).apply { setPadding(0, 14, 0, 0) })
         setContentView(ScrollView(this).apply {
             setBackgroundColor(Color.BLACK)
             addView(column)
@@ -88,6 +94,32 @@ class ProbeActivity : Activity() {
             if (s.droppedSamples > 0) append("\n버림 ${s.droppedSamples}")
             append("\n최소 주기 ${s.accelMinDelayUs}/${s.gyroMinDelayUs}µs")
         }
+    }
+
+    /** Why the app's previous process ended, to diagnose screen-off kills. */
+    private fun lastExitSummary(): String {
+        val info = getSystemService(ActivityManager::class.java)
+            .getHistoricalProcessExitReasons(packageName, 0, 1)
+            .firstOrNull() ?: return "지난 종료 기록 없음"
+        val reason = when (info.reason) {
+            ApplicationExitInfo.REASON_EXIT_SELF -> "앱 스스로 종료"
+            ApplicationExitInfo.REASON_SIGNALED -> "시스템 신호로 종료"
+            ApplicationExitInfo.REASON_LOW_MEMORY -> "메모리 부족"
+            ApplicationExitInfo.REASON_CRASH -> "앱 오류(크래시)"
+            ApplicationExitInfo.REASON_CRASH_NATIVE -> "네이티브 크래시"
+            ApplicationExitInfo.REASON_ANR -> "응답 없음(ANR)"
+            ApplicationExitInfo.REASON_INITIALIZATION_FAILURE -> "시작 실패"
+            ApplicationExitInfo.REASON_PERMISSION_CHANGE -> "권한 변경"
+            ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE -> "자원 과다 사용"
+            ApplicationExitInfo.REASON_USER_REQUESTED -> "사용자/설정에서 종료"
+            ApplicationExitInfo.REASON_USER_STOPPED -> "사용자 강제 중지"
+            ApplicationExitInfo.REASON_DEPENDENCY_DIED -> "연결된 프로세스 종료"
+            ApplicationExitInfo.REASON_OTHER -> "시스템 기타 사유"
+            ApplicationExitInfo.REASON_FREEZER -> "시스템이 앱을 얼림"
+            else -> "코드 ${info.reason}"
+        }
+        val time = SimpleDateFormat("HH:mm:ss", Locale.KOREA).format(Date(info.timestamp))
+        return "지난 종료 $time · $reason\n${info.description.orEmpty().take(80)}"
     }
 
     private fun text(value: String, size: Float, color: Int, bold: Boolean = false) = TextView(this).apply {
