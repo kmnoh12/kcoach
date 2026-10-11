@@ -73,7 +73,7 @@ fun SectionCard(title: String, values: List<Pair<String, String>>, modifier: Mod
 }
 
 @Composable
-private fun MetricGrid(metrics: List<Pair<String, String>>) {
+fun MetricGrid(metrics: List<Pair<String, String>>) {
     metrics.chunked(2).forEach { pair ->
         Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             pair.forEach { (value, title) ->

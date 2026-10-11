@@ -8,7 +8,12 @@ import dev.kyungmin.kcoach.phone.ui.BigChoiceSheet
 import dev.kyungmin.kcoach.phone.ui.ChoiceSheet
 import dev.kyungmin.kcoach.phone.ui.ConfirmDialog
 import dev.kyungmin.kcoach.phone.ui.InputDialog
+import dev.kyungmin.kcoach.phone.ui.ExerciseInfoScreen
+import dev.kyungmin.kcoach.phone.ui.ExerciseInfoUi
+import dev.kyungmin.kcoach.phone.ui.ExerciseRecordScreen
+import dev.kyungmin.kcoach.phone.ui.ExerciseRecordUi
 import dev.kyungmin.kcoach.phone.ui.KColors
+import dev.kyungmin.kcoach.phone.ui.RecordSetUi
 import dev.kyungmin.kcoach.phone.ui.LibraryActions
 import dev.kyungmin.kcoach.phone.ui.LibraryScreen
 import dev.kyungmin.kcoach.phone.ui.Overlay
@@ -2182,22 +2187,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun libraryExerciseRow(exercise: ExerciseDefinition, onClick: () -> Unit): View = row().apply {
-        gravity = Gravity.CENTER_VERTICAL
-        setPadding(dp(4), dp(5), dp(4), dp(5))
-        isClickable = true
-        setOnClickListener { onClick() }
-        addView(label(if (exercise.favorite) "♥" else "♡", 18f, if (exercise.favorite) Color.rgb(224, 102, 135) else faint), fixedParams(30, 56))
-        addView(exerciseAnimationView(exercise, 56, compact = true), fixedParams(56, 56))
-        addView(space(10))
-        addView(vertical().apply {
-            addView(label(exercise.name, 15f, white, bold = true))
-            addView(space(2))
-            addView(label(exercise.muscles, 12f, muted))
-        }, weightParams(1f, -2))
-        addView(label("•••", 15f, muted))
-    }
-
     private fun exerciseRow(
         exercise: ExerciseDefinition,
         subtitle: String,
@@ -2246,111 +2235,32 @@ class MainActivity : ComponentActivity() {
         currentScreen = Screen.EXERCISE_RECORD
         returnFromExerciseRecord = onReturn
 
-        val targetTotal = routineExercise.sets.sumOf { it.targetReps }
-        val performed = active?.performedRepsByExercise?.get(routineExercise.exercise.id) ?: 0
-        val animation = exerciseAnimationView(routineExercise.exercise, 320)
-        val page = vertical().apply {
-            setPadding(dp(20), dp(16), dp(20), dp(34))
-            addView(row().apply {
-                addView(label("‹", 44f, white).apply {
-                    gravity = Gravity.CENTER
-                    setOnClickListener { onReturn() }
-                }, fixedParams(54, 58))
-                addView(weightSpace())
-                addView(label("●●●●●●", 11f, muted), fixedParams(120, 58))
-                addView(label("•••", 18f, muted, bold = true), fixedParams(54, 58))
-            })
-            addView(space(8))
-            addView(animation)
-            addView(space(24))
-            addView(row().apply {
-                addView(label(routineExercise.exercise.name, 25f, white, bold = true), weightParams(1f, -2))
-                addView(label("ⓘ", 24f, muted).apply {
-                    gravity = Gravity.CENTER
-                    setOnClickListener {
-                        showExerciseInfo(routineExercise.exercise) {
-                            showExerciseRecord(routine, index, active, onReturn)
-                        }
-                    }
-                }, fixedParams(54, 58))
-            })
-            addView(space(6))
-            addView(label(routineExercise.exercise.muscles, 14f, muted))
-            addView(space(12))
-            addView(row().apply {
-                addView(label("횟수 ${targetTotal}회", 18f, blue, bold = true))
-                addView(space(22))
-                addView(label("${performed}회", 18f, muted, bold = true))
-            })
-            addView(space(22))
-            addView(label("›  메모", 17f, white, bold = true))
-            addView(space(12))
-            addView(label("›  기록", 17f, white, bold = true))
-            addView(space(16))
-            addView(row().apply {
-                addView(label("세트", 14f, muted, bold = true), weightParams(1f, 42))
-                addView(label("회", 14f, muted, bold = true), weightParams(1f, 42))
-                addView(label("완료", 14f, muted, bold = true), weightParams(1f, 42))
-                addView(label("•••", 16f, muted), fixedParams(42, 42))
-            })
-            routineExercise.sets.forEachIndexed { setIndex, set ->
-                val completed = active != null && setIndex < active.completedSets && active.routine === routine && active.exerciseIndex > index
-                addView(row().apply {
-                    addView(label("${setIndex + 1}", 16f, white), weightParams(1f, 58))
-                    addView(label("${set.targetReps}", 16f, white, bold = true), weightParams(1f, 58))
-                    addView(label(if (completed) "✓" else "", 18f, if (completed) green else muted), weightParams(1f, 58))
-                    addView(label("•••", 16f, muted), fixedParams(42, 58))
-                })
+        val record = ExerciseRecordUi(
+            name = routineExercise.exercise.name,
+            muscles = routineExercise.exercise.muscles,
+            targetTotal = routineExercise.sets.sumOf { it.targetReps },
+            performed = active?.performedRepsByExercise?.get(routineExercise.exercise.id) ?: 0,
+            sets = routineExercise.sets.mapIndexed { setIndex, set ->
+                RecordSetUi(
+                    setIndex,
+                    set.targetReps,
+                    active != null && setIndex < active.completedSets && active.routine === routine && active.exerciseIndex > index,
+                )
+            },
+            restSeconds = routineExercise.restSeconds,
+            recentDates = listOf("2026. 7. 26.", "2026. 7. 23.", "2026. 7. 20."),
+            recentSets = routineExercise.sets.mapIndexed { i, set -> "${i + 1}  -  ${set.targetReps}회" }.take(3).joinToString("\n"),
+        )
+        showStandalone(ComposeView(this).apply {
+            setContent {
+                ExerciseRecordScreen(
+                    record,
+                    back = onReturn,
+                    openInfo = { showExerciseInfo(routineExercise.exercise) { showExerciseRecord(routine, index, active, onReturn) } },
+                    animation = { height -> exerciseAnimationView(routineExercise.exercise, height) },
+                )
             }
-            addView(space(18))
-            addView(row().apply {
-                addView(label("＋ 세트추가", 16f, amber, bold = true), weightParams(1f, 54))
-                addView(label("− 세트삭제", 16f, blue, bold = true), weightParams(1f, 54))
-            })
-            addView(space(28))
-            addView(label("현재 기록", 18f, white, bold = true))
-            addView(space(12))
-            addView(metricGrid(listOf("${performed}회" to "REP MAX", "${performed}회" to "REPS TOTAL")))
-            addView(space(28))
-            addView(label("최근 기록", 18f, white, bold = true))
-            addView(space(12))
-            addView(HorizontalScrollView(this@MainActivity).apply {
-                isHorizontalScrollBarEnabled = false
-                addView(row().apply {
-                    listOf("2026. 7. 26.", "2026. 7. 23.", "2026. 7. 20.").forEach { date ->
-                        addView(vertical().apply {
-                            setPadding(dp(14), dp(12), dp(14), dp(12))
-                            background = rounded(surface, 14)
-                            addView(label("•  $date", 14f, amber, bold = true))
-                            addView(space(10))
-                            addView(label(routineExercise.sets.mapIndexed { i, set -> "${i + 1}  -  ${set.targetReps}회" }.take(3).joinToString("\n"), 15f, white))
-                        }, fixedParams(210, 150))
-                        addView(space(10))
-                    }
-                })
-            })
-            addView(space(32))
-            addView(label("유튜브", 16f, white, bold = true))
-            addView(space(8))
-            addView(anatomyPlaceholder(118))
-            addView(space(26))
-            addView(label("휴식 시간", 14f, amber, bold = true))
-            addView(label("${routineExercise.restSeconds}초", 32f, white, bold = true))
-        }
-        val scroll = ScrollView(this).apply {
-            clipToPadding = false
-            addView(page)
-            setOnScrollChangeListener { _, _, scrollY, _, _ ->
-                val progress = (scrollY / dp(420).toFloat()).coerceIn(0f, 1f)
-                val height = dp(320) - ((dp(320) - dp(96)) * progress).toInt()
-                val params = animation.layoutParams
-                if (params.height != height) {
-                    params.height = height
-                    animation.layoutParams = params
-                }
-            }
-        }
-        showStandalone(scroll)
+        })
     }
 
     private fun showExercisePreview(routine: WorkoutRoutine, index: Int) {
@@ -2443,97 +2353,45 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun exerciseDescription(exercise: ExerciseDefinition): String =
+        if (exercise.id == "pull_up") {
+            "● 팁\n\n풀업은 등, 어깨, 팔 근육을 동시에 강화하는 운동입니다. 그립의 넓이와 손바닥 방향에 따라 자극되는 근육의 비중이 달라집니다. 처음부터 반복 수를 늘리기보다 매 반복의 시작과 끝 자세를 일정하게 유지하세요.\n\n● 설명\n\n- 준비\n\n1. 바를 어깨너비보다 약간 넓게 오버핸드 그립으로 잡으세요.\n2. 팔을 완전히 뻗은 상태에서 어깨를 귀에서 멀어지게 내리고, 복부와 둔근에 가볍게 힘을 주세요.\n3. 다리를 앞뒤로 흔들지 말고 발목을 겹쳐 몸통을 하나의 단단한 덩어리처럼 유지하세요.\n\n- 움직임\n\n1. 가슴을 바 쪽으로 끌어올리면서 팔꿈치를 아래·뒤 방향으로 당기세요.\n2. 턱만 내미는 대신 가슴이 올라가도록 움직이고, 어깨가 으쓱하지 않게 유지하세요.\n3. 위에서 잠깐 멈춘 뒤 팔꿈치를 천천히 펴며 시작 자세로 돌아가세요. 내려가는 구간까지 통제해야 1회가 완성됩니다.\n\n- 호흡법\n\n몸을 끌어올릴 때 숨을 내쉬고, 내려오면서 숨을 들이마시세요. 반복 중 숨을 오래 참지 말고 일정한 호흡을 유지하세요.\n\n● 주의사항\n\n1. 어깨·팔꿈치·손목에 통증이 느껴지면 즉시 중단하세요.\n2. 반동으로 몸을 차거나 허리를 과하게 젖히지 마세요.\n3. 가동범위가 무너지면 반복 수를 줄이거나 어시스티드 머신·밴드로 난도를 낮추세요."
+        } else {
+            "● 팁\n\n${exercise.name}은 ${exercise.muscles} 근육을 사용하는 운동입니다. 무게를 올리는 것보다 몸통을 고정하고 매 반복의 시작·끝 자세를 일정하게 유지하는 것이 우선입니다. 목표 근육에 힘이 들어오는지 느끼면서 호흡과 속도를 일정하게 맞추세요.\n\n● 설명\n\n- 준비\n\n1. 기구와 그립을 편하게 잡고 발·골반·몸통을 안정시키세요.\n2. 어깨를 으쓱하지 말고 관절이 자연스럽게 움직이는 위치를 찾으세요.\n3. 가벼운 중량으로 1세트를 진행해 통증과 가동범위를 확인하세요.\n\n- 움직임\n\n1. 목표 근육으로 힘을 보내며 1~2초에 걸쳐 들어 올리거나 당기세요.\n2. 수축 지점에서 반동 없이 잠깐 멈추고, 무게를 놓치지 않으며 천천히 돌아오세요.\n3. 몸통이 흔들리거나 관절이 먼저 움직이면 중량·반복 수를 낮추고 궤적을 다시 맞추세요.\n4. 마지막 반복까지 같은 자세를 유지할 수 있을 때만 다음 세트의 중량을 올리세요.\n\n- 호흡법\n\n힘을 쓰는 구간에 숨을 내쉬고, 시작 위치로 돌아오며 들이마시세요. 무거운 중량에서도 숨을 오래 참지 말고 복부 긴장과 호흡을 함께 유지하세요.\n\n● 주의사항\n\n1. 날카로운 통증, 저림 또는 관절 불편감이 느껴지면 즉시 중단하세요.\n2. 빠른 반동, 과도한 중량, 허리 꺾기로 반복 수를 억지로 채우지 마세요.\n3. 자세가 무너지기 시작하면 세트를 끝내고 다음 세트는 중량이나 범위를 조절하세요."
+        }
+
     private fun showExerciseInfo(exercise: ExerciseDefinition, onReturn: () -> Unit) {
         stopTicker()
         currentScreen = Screen.EXERCISE_INFO
         returnFromExerciseInfo = onReturn
-        var tab = 0
-        val page = vertical().apply { setPadding(dp(20), dp(12), dp(20), dp(24)) }
-        page.addView(row().apply {
-            addView(label("‹", 40f, white).apply {
-                gravity = Gravity.CENTER
-                setOnClickListener { onReturn() }
-            }, fixedParams(54, 58))
-            addView(label(exercise.name, 18f, white, bold = true), weightParams(1f, 52))
-        })
-        page.addView(space(6))
-        page.addView(exerciseAnimationView(exercise, 220))
-        page.addView(space(6))
-        page.addView(label(exercise.name, 20f, white, bold = true))
-        page.addView(space(2))
-        page.addView(label(exercise.muscles, 13f, muted))
-        page.addView(space(8))
 
-        val tabs = row().apply { gravity = Gravity.CENTER }
-        val content = vertical()
-        fun infoTab(title: String, index: Int): TextView = label(title, 14f, white, bold = true).apply {
-            gravity = Gravity.CENTER
-            setPadding(0, dp(12), 0, dp(12))
-            setOnClickListener {
-                tab = index
-                refreshExerciseInfoTabs(tabs, content, exercise, tab)
-            }
-        }
-        tabs.addView(infoTab("설명", 0), weightParams(1f, 44))
-        tabs.addView(infoTab("나의 기록", 1), weightParams(1f, 44))
-        tabs.addView(infoTab("통계", 2), weightParams(1f, 44))
-        page.addView(tabs)
-        page.addView(space(12))
-        page.addView(content)
-        refreshExerciseInfoTabs(tabs, content, exercise, tab)
-        showStandalone(ScrollView(this).apply { addView(page) })
-    }
-
-    private fun refreshExerciseInfoTabs(
-        tabs: ViewGroup,
-        content: ViewGroup,
-        exercise: ExerciseDefinition,
-        selected: Int,
-    ) {
-        for (i in 0 until tabs.childCount) {
-            val item = tabs.getChildAt(i) as? TextView ?: continue
-            item.setTextColor(if (i == selected) amber else white)
-            item.background = if (i == selected) rounded(Color.TRANSPARENT, 0, amber, 0) else null
-        }
-        content.removeAllViews()
-        when (selected) {
-            0 -> {
-                val detail = if (exercise.id == "pull_up") {
-                    "● 팁\n\n풀업은 등, 어깨, 팔 근육을 동시에 강화하는 운동입니다. 그립의 넓이와 손바닥 방향에 따라 자극되는 근육의 비중이 달라집니다. 처음부터 반복 수를 늘리기보다 매 반복의 시작과 끝 자세를 일정하게 유지하세요.\n\n● 설명\n\n- 준비\n\n1. 바를 어깨너비보다 약간 넓게 오버핸드 그립으로 잡으세요.\n2. 팔을 완전히 뻗은 상태에서 어깨를 귀에서 멀어지게 내리고, 복부와 둔근에 가볍게 힘을 주세요.\n3. 다리를 앞뒤로 흔들지 말고 발목을 겹쳐 몸통을 하나의 단단한 덩어리처럼 유지하세요.\n\n- 움직임\n\n1. 가슴을 바 쪽으로 끌어올리면서 팔꿈치를 아래·뒤 방향으로 당기세요.\n2. 턱만 내미는 대신 가슴이 올라가도록 움직이고, 어깨가 으쓱하지 않게 유지하세요.\n3. 위에서 잠깐 멈춘 뒤 팔꿈치를 천천히 펴며 시작 자세로 돌아가세요. 내려가는 구간까지 통제해야 1회가 완성됩니다.\n\n- 호흡법\n\n몸을 끌어올릴 때 숨을 내쉬고, 내려오면서 숨을 들이마시세요. 반복 중 숨을 오래 참지 말고 일정한 호흡을 유지하세요.\n\n● 주의사항\n\n1. 어깨·팔꿈치·손목에 통증이 느껴지면 즉시 중단하세요.\n2. 반동으로 몸을 차거나 허리를 과하게 젖히지 마세요.\n3. 가동범위가 무너지면 반복 수를 줄이거나 어시스티드 머신·밴드로 난도를 낮추세요."
-                } else {
-                    "● 팁\n\n${exercise.name}은 ${exercise.muscles} 근육을 사용하는 운동입니다. 무게를 올리는 것보다 몸통을 고정하고 매 반복의 시작·끝 자세를 일정하게 유지하는 것이 우선입니다. 목표 근육에 힘이 들어오는지 느끼면서 호흡과 속도를 일정하게 맞추세요.\n\n● 설명\n\n- 준비\n\n1. 기구와 그립을 편하게 잡고 발·골반·몸통을 안정시키세요.\n2. 어깨를 으쓱하지 말고 관절이 자연스럽게 움직이는 위치를 찾으세요.\n3. 가벼운 중량으로 1세트를 진행해 통증과 가동범위를 확인하세요.\n\n- 움직임\n\n1. 목표 근육으로 힘을 보내며 1~2초에 걸쳐 들어 올리거나 당기세요.\n2. 수축 지점에서 반동 없이 잠깐 멈추고, 무게를 놓치지 않으며 천천히 돌아오세요.\n3. 몸통이 흔들리거나 관절이 먼저 움직이면 중량·반복 수를 낮추고 궤적을 다시 맞추세요.\n4. 마지막 반복까지 같은 자세를 유지할 수 있을 때만 다음 세트의 중량을 올리세요.\n\n- 호흡법\n\n힘을 쓰는 구간에 숨을 내쉬고, 시작 위치로 돌아오며 들이마시세요. 무거운 중량에서도 숨을 오래 참지 말고 복부 긴장과 호흡을 함께 유지하세요.\n\n● 주의사항\n\n1. 날카로운 통증, 저림 또는 관절 불편감이 느껴지면 즉시 중단하세요.\n2. 빠른 반동, 과도한 중량, 허리 꺾기로 반복 수를 억지로 채우지 마세요.\n3. 자세가 무너지기 시작하면 세트를 끝내고 다음 세트는 중량이나 범위를 조절하세요."
-                }
-                content.addView(infoSection("", detail))
-            }
-            1 -> {
-                val matching = routines.filter { it.exercises.any { item -> item.exercise.id == exercise.id } }
-                val plannedSets = matching.sumOf { routine -> routine.exercises.filter { it.exercise.id == exercise.id }.sumOf { it.sets.size } }
-                content.addView(infoSection("● 나의 기록", "이 운동이 포함된 루틴 ${matching.size}개\n계획된 총 세트 ${plannedSets}세트\n\n최근 루틴\n${matching.firstOrNull()?.name ?: "아직 기록 없음"}"))
-                content.addView(space(22))
-                content.addView(infoSection("● 최근 목표", matching.firstOrNull()?.exercises?.firstOrNull { it.exercise.id == exercise.id }?.sets?.firstOrNull()?.let { set ->
+        val matching = routines.filter { it.exercises.any { item -> item.exercise.id == exercise.id } }
+        val plannedSets = matching.sumOf { routine -> routine.exercises.filter { it.exercise.id == exercise.id }.sumOf { it.sets.size } }
+        val used = routines.flatMap { it.exercises }.filter { it.exercise.id == exercise.id }
+        val averageRest = used.map { it.restSeconds }.average().takeIf { !it.isNaN() }?.toInt() ?: 0
+        val info = ExerciseInfoUi(
+            name = exercise.name,
+            muscles = exercise.muscles,
+            description = exerciseDescription(exercise),
+            myRecord = listOf(
+                "● 나의 기록" to "이 운동이 포함된 루틴 ${matching.size}개\n계획된 총 세트 ${plannedSets}세트\n\n최근 루틴\n${matching.firstOrNull()?.name ?: "아직 기록 없음"}",
+                "● 최근 목표" to (matching.firstOrNull()?.exercises?.firstOrNull { it.exercise.id == exercise.id }?.sets?.firstOrNull()?.let { set ->
                     "${set.weightKg?.let { cleanWeight(it) + "kg" } ?: "체중"} · ${set.targetReps}회"
-                } ?: "기록이 쌓이면 표시됩니다."))
+                } ?: "기록이 쌓이면 표시됩니다."),
+            ),
+            stats = listOf(
+                "${used.size}회" to "루틴 포함",
+                "${used.sumOf { it.sets.size }}세트" to "계획 세트",
+                "${averageRest}초" to "평균 휴식",
+                exercise.equipment to "기구",
+            ),
+            analysisNote = "워치 센서 기록이 연결되면 템포·진폭·반복 일관성을 이 운동 기준으로 분석합니다.",
+        )
+        showStandalone(ComposeView(this).apply {
+            setContent {
+                ExerciseInfoScreen(info, back = onReturn) { height -> exerciseAnimationView(exercise, height) }
             }
-            else -> {
-                val matching = routines.flatMap { it.exercises }.filter { it.exercise.id == exercise.id }
-                val totalSets = matching.sumOf { it.sets.size }
-                val averageRest = matching.map { it.restSeconds }.average().takeIf { !it.isNaN() }?.toInt() ?: 0
-                content.addView(metricGrid(listOf(
-                    "${matching.size}회" to "루틴 포함",
-                    "${totalSets}세트" to "계획 세트",
-                    "${averageRest}초" to "평균 휴식",
-                    exercise.equipment to "기구",
-                )))
-                content.addView(space(20))
-                content.addView(infoSection("● 분석 메모", "워치 센서 기록이 연결되면 템포·진폭·반복 일관성을 이 운동 기준으로 분석합니다."))
-            }
-        }
-    }
-
-    private fun infoSection(title: String, body: String): View = vertical().apply {
-        if (title.isNotBlank()) addView(label(title, 15f, white, bold = true))
-        if (title.isNotBlank()) addView(space(8))
-        addView(label(body, 13f, white).apply { setLineSpacing(dp(1).toFloat(), 1.05f) })
+        })
     }
 
     private fun moveRoutineExercise(
@@ -2805,17 +2663,6 @@ class MainActivity : ComponentActivity() {
         background = null
         setSingleLine()
         if (numeric) inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
-    }
-
-    private fun chip(text: String, selected: Boolean, onClick: () -> Unit): View = label(
-        text,
-        15f,
-        if (selected) amber else muted,
-        bold = true,
-    ).apply {
-        setPadding(dp(14), dp(9), dp(14), dp(9))
-        background = rounded(if (selected) Color.rgb(50, 42, 18) else Color.TRANSPARENT, 20)
-        setOnClickListener { onClick() }
     }
 
     private fun primaryButton(
