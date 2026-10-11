@@ -1329,6 +1329,10 @@ class MainActivity : Activity() {
         page.addView(status)
         page.addView(space(10))
         page.addView(update, matchParams(58))
+        page.addView(space(10))
+        page.addView(primaryButton("실측 모드", amberDark) {
+            startActivity(Intent(this, ProbeActivity::class.java))
+        }, matchParams(58))
         showScaffold(ScrollView(this).apply { addView(page) }, null, RootTab.MENU)
     }
 
