@@ -1410,8 +1410,17 @@ class MainActivity : ComponentActivity() {
             if (set.weightKg == null) "${set.reps}회" else "${formatActiveWeight(set.weightKg, workout.usePounds)}×${set.reps}"
         } + if (last.sets.size > 4) " …" else ""
         val next = NextTargetAdvisor.advise(last, plannedReps(item))
+        val workSets = item.sets.filter { it.setType != SetType.WARMUP }
+        val alreadyApplied = when (next) {
+            is NextTarget.RaiseWeight -> workSets.isNotEmpty() && workSets.all { (it.weightKg ?: 0.0) >= next.toKg }
+            is NextTarget.AddRep -> workSets.sumOf { it.targetReps } > last.totalReps
+            is NextTarget.Hold -> false
+        }
+        if (alreadyApplied) {
+            return HistoryUi(lastLine, (last.volumeKg * volumeUnit(workout)).toInt(), null, null, false)
+        }
         val (text, applicable) = when (next) {
-            is NextTarget.RaiseWeight -> "${formatActiveWeight(next.toKg, workout.usePounds)}$unitLabel 로 올려봐" to true
+            is NextTarget.RaiseWeight -> "${formatActiveWeight(next.toKg, workout.usePounds)}${unitLabel}로 올려봐" to true
             is NextTarget.AddRep -> "전체 반복 1회 더" to true
             is NextTarget.Hold -> "중량 유지" to false
         }
