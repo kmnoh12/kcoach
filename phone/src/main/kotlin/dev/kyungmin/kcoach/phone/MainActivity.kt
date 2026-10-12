@@ -40,6 +40,8 @@ import androidx.compose.ui.platform.ComposeView
 import dev.kyungmin.kcoach.phone.ui.ActiveWorkoutScreen
 import dev.kyungmin.kcoach.phone.ui.ExerciseUi
 import dev.kyungmin.kcoach.core.TrainingLoad
+import dev.kyungmin.kcoach.core.PersonalRecords
+import dev.kyungmin.kcoach.core.RecordKind
 import dev.kyungmin.kcoach.core.WorkoutLog
 import dev.kyungmin.kcoach.core.WorkoutStats
 import dev.kyungmin.kcoach.core.ExerciseHistory
@@ -917,6 +919,7 @@ class MainActivity : ComponentActivity() {
             title = result.title,
             subtitle = "${result.durationMinutes}분 · ${result.completedSets}세트 · 세션 ${result.sessionId.takeLast(8)}",
             sections = sections,
+            records = if (lastWorkoutResult?.sessionId == result.sessionId) lastWorkoutRecords else emptyList(),
             footnote = "확정 반복수는 워치 표시값이 아니라 폰이 센서 기록을 다시 분석한 결과를 기준으로 해요.",
         )
         showStandalone(ComposeView(this).apply {
@@ -1380,12 +1383,25 @@ class MainActivity : ComponentActivity() {
     private fun volumeUnit(workout: ActiveWorkout) = if (workout.usePounds) 2.20462 else 1.0
 
     /** Remembers what was really done today, so the next session can compare and build on it. */
+    private var newRecords = mutableListOf<Pair<String, String>>()
+    private var lastWorkoutRecords: List<Pair<String, String>> = emptyList()
+
     private fun recordHistory(workout: ActiveWorkout) {
+        newRecords = mutableListOf()
         val today = LocalDate.now().toEpochDay()
         workout.routine.exercises.forEach { item ->
             val done = item.sets.filter { it.completed }.map { LoggedSet(it.weightKg, it.targetReps) }
-            if (done.isNotEmpty()) historyCache = historyStore.add(ExerciseLog(item.exercise.id, today, done))
+            if (done.isEmpty()) return@forEach
+            val log = ExerciseLog(item.exercise.id, today, done)
+            PersonalRecords.detect(history, log).forEach { hit ->
+                val label = if (hit.kind == RecordKind.HEAVIEST_WEIGHT) "최고 중량" else "최고 볼륨"
+                val unit = volumeUnit(workout)
+                val value = "%s → %s".format(cleanWeight(hit.previous * unit), cleanWeight(hit.value * unit)) + if (workout.usePounds) "lb" else "kg"
+                newRecords += "${item.exercise.name} · $label" to value
+            }
+            historyCache = historyStore.add(log)
         }
+        lastWorkoutRecords = newRecords.toList()
     }
 
     private fun recordWorkoutLog(workout: ActiveWorkout) {

@@ -96,4 +96,17 @@ class ScreenshotTest {
         )
         CalibrationScreen(ui, { false }, { CalibrationButtonUi("보정 시작", true) }, CalibrationActions({}, {}, {}))
     }
+
+    @Test
+    fun result() = shot("result") {
+        WorkoutResultScreen(
+            ResultUi(
+                "등·이두", "68분 · 22세트 · 세션 12345678",
+                listOf(ResultSectionUi("랫 풀 다운 · 세트 1", listOf("워치 측정값" to "10회", "확정 반복수" to "10회"))),
+                "확정 반복수는 폰이 센서 기록을 다시 분석한 결과를 기준으로 해요.",
+                listOf("랫 풀 다운 · 최고 중량" to "60 → 62.5kg", "시티드 로우 · 최고 볼륨" to "2,400 → 2,640kg"),
+            ),
+            {}, {},
+        )
+    }
 }

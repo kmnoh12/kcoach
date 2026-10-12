@@ -198,22 +198,38 @@ private fun NumberCard(title: String, initial: String, modifier: Modifier) {
 
 class ResultSectionUi(val title: String, val values: List<Pair<String, String>>)
 
-class ResultUi(val title: String, val subtitle: String, val sections: List<ResultSectionUi>, val footnote: String)
+class ResultUi(
+    val title: String,
+    val subtitle: String,
+    val sections: List<ResultSectionUi>,
+    val footnote: String,
+    val records: List<Pair<String, String>> = emptyList(),
+)
 
 @Composable
 fun WorkoutResultScreen(result: ResultUi, back: () -> Unit, toRecords: () -> Unit) {
     Column(Modifier.fillMaxSize().background(KColors.Bg).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 20.dp)) {
         DetailHeader("운동 완료 결과", back)
         Spacer(Modifier.height(24.dp))
-        Text(result.title, color = KColors.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+        Text(result.title, color = KColors.White, fontSize = 32.sp, fontWeight = FontWeight.Medium)
         Spacer(Modifier.height(8.dp))
         Text(result.subtitle, color = KColors.Muted, fontSize = 14.sp)
-        Spacer(Modifier.height(22.dp))
-        Text("세트별 확정 분석", color = KColors.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        if (result.records.isNotEmpty()) {
+            Spacer(Modifier.height(28.dp))
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text("${result.records.size}", color = KColors.Accent, fontSize = 56.sp, fontWeight = FontWeight.Medium, letterSpacing = (-1).sp)
+                Spacer(Modifier.width(10.dp))
+                Text("개 갱신", color = KColors.White, fontSize = 18.sp, modifier = Modifier.padding(bottom = 10.dp))
+            }
+            Spacer(Modifier.height(6.dp))
+            SectionCard("오늘 깬 기록", result.records)
+        }
+        Spacer(Modifier.height(28.dp))
+        Text("세트별 확정 분석", color = KColors.Soft, fontSize = 15.sp)
         Spacer(Modifier.height(10.dp))
         result.sections.forEach {
             SectionCard(it.title, it.values)
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(24.dp))
         }
         Spacer(Modifier.height(8.dp))
         Text(result.footnote, color = KColors.Muted, fontSize = 13.sp)
