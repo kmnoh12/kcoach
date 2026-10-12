@@ -11,7 +11,7 @@
 
 ## 현재 버전
 
-- 폰 0.7.1(배포됨; 이후 작업은 미배포), 워치 0.2.1 (둘 다 R8 축소 ota 빌드)
+- 배포됨: 폰 0.7.2, 워치 0.2.2 (R8 축소 ota 빌드). 그 뒤 커밋(실측 자동 시작 등)은 미배포.
 
 ## 지금까지 한 것
 
@@ -29,7 +29,14 @@
 10. 운동 대체는 동작 기준(`core/ExerciseSubstitutes`, `ExerciseDefinition.pattern`), 라이브러리는 부위 > 동작 > 변형 접기(`core/ExerciseTaxonomy`, `ExerciseDefinition.family`). 새로 넣은 운동(바벨 로우, 랫 풀 다운 변형 등)은 이미지가 없어 빈 칸으로 보임.
 11. 확인 못 한 것: 워치 연동 보정 흐름, 마이마운틴 화면, 센서 한 줄, 모션의 실제 체감(스크린샷으론 판단 불가). 에뮬레이터는 부하가 높으면 앱이 25초쯤 걸려 뜨니 탭 사이 대기를 넉넉히.
 
+12. (0.7.2에 포함) 디자인 언어 `docs/DESIGN.md`, 직접 그린 선 아이콘 `ui/Icons.kt`, 해요체·명사형 문구와 말투 검사 `core/KoreanToneTest`, 워치 패널 Compose(`ui/LivePanel.kt`), 완료한 운동 저장(`phone/WorkoutLogStore`, `core/WorkoutLog`)과 기록·홈 막대·통계의 실제 데이터 연결(샘플 기록 삭제됨), 신기록(`core/PersonalRecords`, 결과 화면), 최근 7일 근육 지도(`ui/BodyMap.kt`, `core/BodyLoad`, 통계 화면).
+13. 에뮬레이터 없이 화면 확인: `phone/src/test/.../ui/ScreenshotTest.kt` + `gradle :phone:recordRoborazziDebug` → `phone/build/outputs/roborazzi/*.png`. 모션·워치 연동은 실기기 필요. 이 프로젝트엔 gradlew가 없어 `안드로이드-에뮬레이터/gradle-8.11.1/bin/gradle`을 직접 쓴다.
+14. (미배포) 폰 실측 화면을 열면 워치가 자동으로 센서 전송 시작, 닫으면 중지(`WearSync.PATH_PROBE_START/STOP`, `wear/WearCommandService.handleProbe`). 워치 앱이 꺼져 있으면 실측 화면은 안 뜨고 알림만 뜰 수 있음. 실기기 미확인.
+15. 아직 실기기에서 확인 안 한 것: 운동 종료 후 기록·통계·근육 지도 반영, 신기록 표시, 워치 패널 실시간 값, 실측 자동 시작.
+
 ## 다음 할 일
+
+- 세트 완료 순간의 실시간 신기록 알림, 워치 반복 수 집중 화면(워치 필요), 새 운동 이미지, 묶음 세트(슈퍼세트).
 
 - 폰 화면은 거의 전부 Compose로 전환 완료(0.7.1 이후 작업은 로컬 커밋, 미배포): 바텀시트·다이얼로그(`ui/Overlays.kt`), 라이브러리(`ui/LibraryScreen.kt`), 운동 정보·기록(`ui/ExerciseScreens.kt`), 보정·마이마운틴·완료 결과(`ui/MiscScreens.kt`), 자유운동은 `RoutineDetailScreen` 재사용. 남은 View: 운동 화면 위 라이브 패널(`buildLivePanel`), `exerciseAnimationView`(GIF), `ProbeActivity`, 화면 껍데기 `showScaffold/showDetail/showStandalone`. 실제 폰 체감 미확인.
 - 4단계 디자인 레퍼런스 정하기 (루틴 상세 위 285dp 빈 박스는 인체 그림 placeholder)

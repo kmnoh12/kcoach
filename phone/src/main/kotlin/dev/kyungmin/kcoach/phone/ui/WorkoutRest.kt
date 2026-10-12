@@ -84,7 +84,7 @@ fun RestBar(
                 Text("휴식 시간", color = KColors.Muted, fontSize = 11.sp, fontWeight = FontWeight.Medium)
                 Row(verticalAlignment = Alignment.Bottom) {
                     FlipText((if (active) rest.leftSeconds else idleSeconds).toString(), 26.sp, KColors.White)
-                    Text(" 초", color = KColors.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Text(" 초", color = KColors.White, fontSize = 18.sp, fontWeight = FontWeight.Medium)
                 }
             }
             RoundButton(KIcon.Minus, KColors.SurfaceRaised) { onAdjust(-10) }
@@ -121,7 +121,7 @@ fun ExpandedRestPanel(
     ) {
         Box(Modifier.padding(top = 10.dp).width(34.dp).height(4.dp).clip(RoundedCornerShape(2.dp)).background(KColors.Faint))
         Row(Modifier.fillMaxWidth().padding(top = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("휴식", color = KColors.White, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text("휴식", color = KColors.White, fontSize = 18.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
             Box(Modifier.clickable { onClose() }.padding(8.dp)) { KIcon(KIcon.Close, KColors.Muted, size = 22.dp) }
         }
         Spacer(Modifier.height(28.dp))
@@ -173,10 +173,10 @@ fun NextSetBanner(text: String, leftMs: Long, onSkip: () -> Unit) {
                 String.format(Locale.US, "%.1f", leftMs / 1000.0),
                 color = KColors.Bg,
                 fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.Medium,
             )
         }
-        Text("건너뛰기", color = KColors.Bg, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { onSkip() }.padding(8.dp))
+        Text("건너뛰기", color = KColors.Bg, fontSize = 14.sp, fontWeight = FontWeight.Medium, modifier = Modifier.clickable { onSkip() }.padding(8.dp))
     }
 }
 

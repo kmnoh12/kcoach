@@ -189,7 +189,7 @@ private fun CalendarGrid(month: YearMonth, records: List<WorkoutRecord>) {
     Column {
         Row(Modifier.fillMaxWidth()) {
             listOf("일", "월", "화", "수", "목", "금", "토").forEach {
-                Text(it, color = KColors.Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+                Text(it, color = KColors.Muted, fontSize = 12.sp, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
             }
         }
         cells.chunked(7).forEach { week ->
@@ -201,7 +201,7 @@ private fun CalendarGrid(month: YearMonth, records: List<WorkoutRecord>) {
                             val has = day in recorded
                             val fill by animateColorAsState(if (has) KColors.Accent else Color.Transparent, Motion.ui(), label = "day")
                             Box(Modifier.clip(CircleShape).background(fill).padding(horizontal = 9.dp, vertical = 4.dp)) {
-                                Text(day.toString(), color = if (has) KColors.OnAccent else KColors.Muted, fontSize = 15.sp, fontWeight = if (has) FontWeight.Bold else FontWeight.Normal)
+                                Text(day.toString(), color = if (has) KColors.OnAccent else KColors.Muted, fontSize = 15.sp, fontWeight = if (has) FontWeight.Medium else FontWeight.Normal)
                             }
                             if (has) Text("•", color = KColors.Accent, fontSize = 13.sp)
                         }

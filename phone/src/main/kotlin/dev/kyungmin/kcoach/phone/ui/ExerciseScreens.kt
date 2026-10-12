@@ -54,12 +54,12 @@ fun ExerciseInfoScreen(info: ExerciseInfoUi, back: () -> Unit, animation: (heigh
             Box(Modifier.size(54.dp, 58.dp).pressable(back), contentAlignment = Alignment.Center) {
                 KIcon(KIcon.Back, KColors.White, size = 28.dp)
             }
-            Text(info.name, color = KColors.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text(info.name, color = KColors.White, fontSize = 18.sp, fontWeight = FontWeight.Medium)
         }
         Spacer(Modifier.height(6.dp))
         AndroidView(factory = { animation(220) }, modifier = Modifier.fillMaxWidth().height(220.dp))
         Spacer(Modifier.height(6.dp))
-        Text(info.name, color = KColors.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Text(info.name, color = KColors.White, fontSize = 20.sp, fontWeight = FontWeight.Medium)
         Spacer(Modifier.height(2.dp))
         Text(info.muscles, color = KColors.Muted, fontSize = 13.sp)
         Spacer(Modifier.height(8.dp))
@@ -67,7 +67,7 @@ fun ExerciseInfoScreen(info: ExerciseInfoUi, back: () -> Unit, animation: (heigh
             listOf("설명", "나의 기록", "통계").forEachIndexed { index, title ->
                 val color by animateColorAsState(if (index == tab) KColors.Accent else KColors.White, Motion.ui(), label = "infoTab")
                 Text(
-                    title, color = color, fontSize = 14.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center,
+                    title, color = color, fontSize = 14.sp, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center,
                     modifier = Modifier.weight(1f).pressable { tab = index }.padding(vertical = 12.dp),
                 )
             }
@@ -84,7 +84,7 @@ fun ExerciseInfoScreen(info: ExerciseInfoUi, back: () -> Unit, animation: (heigh
                     1 -> {
                         info.myRecord.forEachIndexed { i, (title, body) ->
                             if (i > 0) Spacer(Modifier.height(22.dp))
-                            Text(title, color = KColors.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                            Text(title, color = KColors.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
                             Spacer(Modifier.height(8.dp))
                             InfoText(body)
                         }
@@ -92,7 +92,7 @@ fun ExerciseInfoScreen(info: ExerciseInfoUi, back: () -> Unit, animation: (heigh
                     else -> {
                         MetricGrid(info.stats)
                         Spacer(Modifier.height(20.dp))
-                        Text("● 분석 메모", color = KColors.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                        Text("분석 메모", color = KColors.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
                         Spacer(Modifier.height(8.dp))
                         InfoText(info.analysisNote)
                     }
@@ -104,7 +104,7 @@ fun ExerciseInfoScreen(info: ExerciseInfoUi, back: () -> Unit, animation: (heigh
 
 @Composable
 private fun InfoText(text: String) {
-    Text(text, color = KColors.White, fontSize = 13.sp, lineHeight = 19.sp)
+    Text(text, color = KColors.Soft, fontSize = 14.sp, lineHeight = 21.sp)
 }
 
 class RecordSetUi(val index: Int, val reps: Int, val completed: Boolean)
@@ -133,7 +133,6 @@ fun ExerciseRecordScreen(record: ExerciseRecordUi, back: () -> Unit, openInfo: (
                 KIcon(KIcon.Back, KColors.White, size = 28.dp)
             }
             Spacer(Modifier.weight(1f))
-            Text("●●●●●●", color = KColors.Muted, fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.width(120.dp))
             Box(Modifier.size(54.dp, 58.dp), contentAlignment = Alignment.Center) {
                 KIcon(KIcon.Dots, KColors.Muted, size = 24.dp)
             }
@@ -142,7 +141,7 @@ fun ExerciseRecordScreen(record: ExerciseRecordUi, back: () -> Unit, openInfo: (
         AndroidView(factory = { animation(320) }, modifier = Modifier.fillMaxWidth().height(animationHeight))
         Spacer(Modifier.height(24.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(record.name, color = KColors.White, fontSize = 25.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text(record.name, color = KColors.White, fontSize = 25.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
             Box(Modifier.size(54.dp, 58.dp).pressable(openInfo), contentAlignment = Alignment.Center) {
                 KIcon(KIcon.Info, KColors.Muted, size = 24.dp)
             }
@@ -151,9 +150,9 @@ fun ExerciseRecordScreen(record: ExerciseRecordUi, back: () -> Unit, openInfo: (
         Text(record.muscles, color = KColors.Muted, fontSize = 14.sp)
         Spacer(Modifier.height(12.dp))
         Row {
-            Text("횟수 ${record.targetTotal}회", color = KColors.Accent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text("횟수 ${record.targetTotal}회", color = KColors.Accent, fontSize = 18.sp, fontWeight = FontWeight.Medium)
             Spacer(Modifier.width(22.dp))
-            Text("${record.performed}회", color = KColors.Muted, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text("${record.performed}회", color = KColors.Muted, fontSize = 18.sp, fontWeight = FontWeight.Medium)
         }
         Spacer(Modifier.height(22.dp))
         Row(verticalAlignment = Alignment.CenterVertically) { KIcon(KIcon.Forward, KColors.Muted, size = 18.dp); Spacer(Modifier.width(6.dp)); Text("메모", color = KColors.White, fontSize = 17.sp, fontWeight = FontWeight.Medium) }
@@ -161,15 +160,15 @@ fun ExerciseRecordScreen(record: ExerciseRecordUi, back: () -> Unit, openInfo: (
         Row(verticalAlignment = Alignment.CenterVertically) { KIcon(KIcon.Forward, KColors.Muted, size = 18.dp); Spacer(Modifier.width(6.dp)); Text("기록", color = KColors.White, fontSize = 17.sp, fontWeight = FontWeight.Medium) }
         Spacer(Modifier.height(16.dp))
         Row(Modifier.fillMaxWidth().height(42.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("세트", color = KColors.Muted, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            Text("회", color = KColors.Muted, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            Text("완료", color = KColors.Muted, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text("세트", color = KColors.Muted, fontSize = 14.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+            Text("회", color = KColors.Muted, fontSize = 14.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+            Text("완료", color = KColors.Muted, fontSize = 14.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
             Box(Modifier.width(42.dp), contentAlignment = Alignment.Center) { KIcon(KIcon.Dots, KColors.Muted, size = 20.dp) }
         }
         record.sets.forEach { set ->
             Row(Modifier.fillMaxWidth().height(58.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("${set.index + 1}", color = KColors.White, fontSize = 16.sp, modifier = Modifier.weight(1f))
-                Text("${set.reps}", color = KColors.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text("${set.reps}", color = KColors.White, fontSize = 16.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
                 Box(Modifier.weight(1f)) { if (set.completed) KIcon(KIcon.Check, KColors.Accent, size = 20.dp) }
                 Box(Modifier.width(42.dp), contentAlignment = Alignment.Center) { KIcon(KIcon.Dots, KColors.Muted, size = 20.dp) }
             }
@@ -180,17 +179,17 @@ fun ExerciseRecordScreen(record: ExerciseRecordUi, back: () -> Unit, openInfo: (
             Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) { KIcon(KIcon.Minus, KColors.Soft, size = 18.dp); Spacer(Modifier.width(6.dp)); Text("세트 삭제", color = KColors.Soft, fontSize = 16.sp, fontWeight = FontWeight.Medium) }
         }
         Spacer(Modifier.height(28.dp))
-        Text("현재 기록", color = KColors.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Text("현재 기록", color = KColors.White, fontSize = 18.sp, fontWeight = FontWeight.Medium)
         Spacer(Modifier.height(12.dp))
-        MetricGrid(listOf("${record.performed}회" to "REP MAX", "${record.performed}회" to "REPS TOTAL"))
+        MetricGrid(listOf("${record.performed}회" to "최대 반복", "${record.performed}회" to "총 반복"))
         if (record.recent.isNotEmpty()) {
             Spacer(Modifier.height(28.dp))
-            Text("최근 기록", color = KColors.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text("최근 기록", color = KColors.White, fontSize = 18.sp, fontWeight = FontWeight.Medium)
             Spacer(Modifier.height(12.dp))
             Row(Modifier.horizontalScroll(rememberScrollState())) {
                 record.recent.forEach { log ->
                     Column(Modifier.width(190.dp).clip(KShape.Control).background(KColors.Surface).padding(14.dp, 12.dp)) {
-                        Text(log.date, color = KColors.Accent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Text(log.date, color = KColors.Accent, fontSize = 13.sp, fontWeight = FontWeight.Medium)
                         Spacer(Modifier.height(8.dp))
                         Text(log.lines, color = KColors.White, fontSize = 14.sp, lineHeight = 20.sp)
                     }
@@ -203,7 +202,7 @@ fun ExerciseRecordScreen(record: ExerciseRecordUi, back: () -> Unit, openInfo: (
             SectionCard("최고 기록", record.best)
         }
         Spacer(Modifier.height(26.dp))
-        Text("휴식 시간", color = KColors.Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-        Text("${record.restSeconds}초", color = KColors.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+        Text("휴식 시간", color = KColors.Accent, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+        Text("${record.restSeconds}초", color = KColors.White, fontSize = 32.sp, fontWeight = FontWeight.Medium)
     }
 }

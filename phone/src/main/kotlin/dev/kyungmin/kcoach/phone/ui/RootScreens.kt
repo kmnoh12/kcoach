@@ -90,7 +90,7 @@ fun RootBottomNav(selected: Int, onSelect: (Int) -> Unit) {
             ) {
                 KIcon(icon, tint, size = 24.dp)
                 Spacer(Modifier.height(2.dp))
-                Text(title, color = tint, fontSize = 12.sp, fontWeight = if (index == selected) FontWeight.Bold else FontWeight.Normal)
+                Text(title, color = tint, fontSize = 12.sp, fontWeight = if (index == selected) FontWeight.Medium else FontWeight.Normal)
             }
         }
     }
@@ -132,7 +132,7 @@ fun HomeScreen(ui: HomeUi, running: RunningUi?, actions: HomeActions) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.Bottom) {
                 Text("홈", color = KColors.White, fontSize = 32.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
                 Text("이번 주 ", color = KColors.Muted, fontSize = 13.sp)
-                Text("${ui.weekCount}회", color = KColors.Accent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                Text("${ui.weekCount}회", color = KColors.Accent, fontSize = 13.sp, fontWeight = FontWeight.Medium)
             }
             Spacer(Modifier.height(10.dp))
             WeekStrip(ui.week)
@@ -200,7 +200,7 @@ private fun WeekStrip(week: List<WeekDayUi>) {
                     day.label,
                     color = if (day.isToday) KColors.White else KColors.Faint,
                     fontSize = 10.sp,
-                    fontWeight = if (day.isToday) FontWeight.Bold else FontWeight.Normal,
+                    fontWeight = if (day.isToday) FontWeight.Medium else FontWeight.Normal,
                 )
             }
         }

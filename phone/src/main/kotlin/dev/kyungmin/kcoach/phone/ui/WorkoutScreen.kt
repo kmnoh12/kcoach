@@ -263,7 +263,7 @@ private fun TopBar(model: WorkoutUiModel, now: Long, actions: WorkoutActions) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(44.dp).clickable { actions.onBack() }, contentAlignment = Alignment.Center) { KIcon(KIcon.Back, KColors.White, size = 26.dp) }
         Column(Modifier.weight(1f)) {
-            Text(model.routineName, color = KColors.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+            Text(model.routineName, color = KColors.White, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1)
             PageDots(model.exercises.size, model.exerciseIndex, Modifier.padding(top = 5.dp))
         }
         // Long-press the clock to pause; the timer dims while paused.
@@ -272,7 +272,7 @@ private fun TopBar(model: WorkoutUiModel, now: Long, actions: WorkoutActions) {
             String.format("%02d:%02d", elapsed / 60, elapsed % 60),
             color = clockColor,
             fontSize = 18.sp,
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.Medium,
             modifier = Modifier.combinedClickable(onClick = {}, onLongClick = { if (!model.isPreview) actions.onTogglePause() }).padding(horizontal = 8.dp),
         )
         Box(Modifier.size(44.dp).clickable { actions.onMenu() }, contentAlignment = Alignment.Center) { KIcon(KIcon.Dots, KColors.Muted, size = 22.dp) }
@@ -303,19 +303,19 @@ private fun ExercisePage(
         )
         Spacer(Modifier.height(10.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(exercise.name, color = KColors.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text(exercise.name, color = KColors.White, fontSize = 20.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
             Box(Modifier.size(40.dp).clickable { actions.onExerciseInfo(exerciseIndex) }, contentAlignment = Alignment.Center) { KIcon(KIcon.Info, KColors.Muted, size = 20.dp) }
         }
         Text(exercise.muscles, color = KColors.Muted, fontSize = 13.sp)
         Spacer(Modifier.height(6.dp))
         Row(verticalAlignment = Alignment.Bottom) {
-            Text("목표 ", color = KColors.Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Text("목표 ", color = KColors.Accent, fontSize = 14.sp, fontWeight = FontWeight.Medium)
             FlipText(exercise.targetReps.toString(), 14.sp, KColors.Accent)
-            Text("회", color = KColors.Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Text("회", color = KColors.Accent, fontSize = 14.sp, fontWeight = FontWeight.Medium)
             Spacer(Modifier.weight(1f))
-            Text("수행 ", color = if (exercise.performedReps > 0) KColors.Accent else KColors.Muted, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Text("수행 ", color = if (exercise.performedReps > 0) KColors.Accent else KColors.Muted, fontSize = 14.sp, fontWeight = FontWeight.Medium)
             FlipText(exercise.performedReps.toString(), 14.sp, if (exercise.performedReps > 0) KColors.Accent else KColors.Muted)
-            Text("회", color = if (exercise.performedReps > 0) KColors.Accent else KColors.Muted, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Text("회", color = if (exercise.performedReps > 0) KColors.Accent else KColors.Muted, fontSize = 14.sp, fontWeight = FontWeight.Medium)
         }
         if (exercise.volumeTarget > 0) {
             Spacer(Modifier.height(10.dp))
@@ -355,7 +355,7 @@ private fun ExercisePage(
                         Box(
                             Modifier.fillMaxSize().padding(vertical = 3.dp).clip(KShape.Control).background(KColors.Red),
                             contentAlignment = Alignment.CenterEnd,
-                        ) { Text("삭제", color = KColors.White, fontWeight = FontWeight.Bold, modifier = Modifier.padding(end = 18.dp)) }
+                        ) { Text("삭제", color = KColors.White, fontWeight = FontWeight.Medium, modifier = Modifier.padding(end = 18.dp)) }
                     },
                     modifier = Modifier.bringIntoViewRequester(requester),
                 ) {
@@ -388,7 +388,7 @@ private fun ExercisePage(
             "현재 ${exercise.sets.getOrNull(exercise.currentSetIndex)?.label ?: "-"}세트 · 완료 ${exercise.completedWorkSets}/${exercise.workSetCount}세트",
             color = KColors.Accent,
             fontSize = 13.sp,
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.Medium,
             modifier = Modifier.padding(top = 8.dp),
         )
         Spacer(Modifier.height(if (keypadOpen) 24.dp else 40.dp))
@@ -410,7 +410,7 @@ private fun SetHeader(weighted: Boolean, usePounds: Boolean) {
 
 @Composable
 private fun androidx.compose.foundation.layout.RowScope.HeaderCell(text: String, weight: Float) {
-    Text(text, color = KColors.Muted, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(weight), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+    Text(text, color = KColors.Muted, fontSize = 12.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(weight), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
 }
 
 @Composable
@@ -485,11 +485,11 @@ private fun NextTargetRow(text: String, reason: String?, applicable: Boolean, on
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.Bottom) {
                 Text("다음 목표  ", color = KColors.Muted, fontSize = 11.sp)
-                Text(text, color = KColors.Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Text(text, color = KColors.Accent, fontSize = 14.sp, fontWeight = FontWeight.Medium)
             }
             if (reason != null) Text(reason, color = KColors.Muted, fontSize = 11.sp)
         }
-        if (applicable) Text("적용", color = KColors.Accent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        if (applicable) Text("적용", color = KColors.Accent, fontSize = 13.sp, fontWeight = FontWeight.Medium)
     }
 }
 

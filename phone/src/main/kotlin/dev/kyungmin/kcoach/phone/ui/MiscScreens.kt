@@ -43,7 +43,7 @@ private fun DetailHeader(title: String, back: () -> Unit) {
         Box(Modifier.size(54.dp, 58.dp).pressable(back), contentAlignment = Alignment.Center) {
             KIcon(KIcon.Back, KColors.White, size = 28.dp)
         }
-        Text(title, color = KColors.White, fontSize = 25.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+        Text(title, color = KColors.White, fontSize = 25.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
         Box(Modifier.size(54.dp, 58.dp), contentAlignment = Alignment.Center) {
             KIcon(KIcon.Dots, KColors.Muted, size = 24.dp)
         }
@@ -62,7 +62,7 @@ private fun WideButton(text: String, background: Color, content: Color, height: 
             .then(if (enabled) Modifier.pressable(onClick) else Modifier),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text, color = content, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Text(text, color = content, fontSize = 18.sp, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -158,7 +158,7 @@ fun MyMountainScreen(back: () -> Unit, start: () -> Unit, finish: () -> Unit) {
     Column(Modifier.fillMaxSize().background(KColors.Bg).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp)) {
         DetailHeader("마이마운틴", back)
         Spacer(Modifier.height(28.dp))
-        Text("오늘 설정", color = KColors.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+        Text("오늘 설정", color = KColors.White, fontSize = 28.sp, fontWeight = FontWeight.Medium)
         Spacer(Modifier.height(8.dp))
         Text("경사, 속도, 시간은 매번 바꿀 수 있어요.", color = KColors.Muted, fontSize = 15.sp)
         Spacer(Modifier.height(24.dp))
@@ -180,14 +180,14 @@ fun MyMountainScreen(back: () -> Unit, start: () -> Unit, finish: () -> Unit) {
 private fun NumberCard(title: String, initial: String, modifier: Modifier) {
     var value by remember { mutableStateOf(initial) }
     Column(modifier.heightIn(min = 118.dp).clip(KShape.Control).background(KColors.Surface).padding(start = 16.dp, top = 14.dp, end = 16.dp, bottom = 10.dp)) {
-        Text(title, color = KColors.Muted, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        Text(title, color = KColors.Muted, fontSize = 13.sp, fontWeight = FontWeight.Medium)
         Spacer(Modifier.height(12.dp))
         BasicTextField(
             value = value,
             onValueChange = { value = it },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            textStyle = TextStyle(color = KColors.White, fontSize = 28.sp, fontWeight = FontWeight.Bold),
+            textStyle = TextStyle(color = KColors.White, fontSize = 28.sp, fontWeight = FontWeight.Medium),
             cursorBrush = SolidColor(KColors.Accent),
             modifier = Modifier.fillMaxWidth(),
         )
