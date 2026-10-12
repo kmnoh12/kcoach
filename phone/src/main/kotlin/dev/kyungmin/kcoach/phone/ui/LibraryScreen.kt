@@ -32,6 +32,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -143,19 +145,19 @@ fun LibraryScreen(
                 KIcon(KIcon.Plus, KColors.White, size = 28.dp)
             }
         }
-        Spacer(Modifier.height(14.dp))
-        ChipStrip(Bodies, body) { body = it }
-        Spacer(Modifier.height(8.dp))
-        ChipStrip(Modes, mode) { mode = it }
-        Spacer(Modifier.height(8.dp))
-        ChipStrip(Equipments, equipment) { equipment = it }
+        Spacer(Modifier.height(6.dp))
+        TabStrip(Bodies, body) { body = it }
+        Spacer(Modifier.height(10.dp))
+        FilterStrip(Modes, mode) { mode = it }
+        Spacer(Modifier.height(2.dp))
+        FilterStrip(Equipments, equipment) { equipment = it }
         Spacer(Modifier.height(4.dp))
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 20.dp)) {
             item(key = "custom") {
-                Row(Modifier.fillMaxWidth().pressable(actions.custom).padding(14.dp, 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().pressable(actions.custom).padding(6.dp, 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     KIcon(KIcon.Plus, KColors.Accent, size = 18.dp)
                     Spacer(Modifier.width(8.dp))
-                    Text("커스텀 운동 추가", color = KColors.Accent, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                    Text("커스텀 운동 추가", color = KColors.Accent, fontSize = 15.sp, fontWeight = FontWeight.Medium)
                 }
             }
             if (rows.isEmpty()) {
@@ -171,8 +173,8 @@ fun LibraryScreen(
                 }
             }) { row ->
                 when (row) {
-                    is LibRow.Header -> Row(Modifier.fillMaxWidth().padding(start = 6.dp, top = 16.dp, bottom = 6.dp)) {
-                        Text(row.title, color = KColors.Soft, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    is LibRow.Header -> Row(Modifier.fillMaxWidth().padding(start = 4.dp, top = 20.dp, bottom = 6.dp)) {
+                        Text(row.title, color = KColors.Muted, fontSize = 13.sp)
                         Spacer(Modifier.width(6.dp))
                         Text("${row.count}", color = KColors.Faint, fontSize = 13.sp)
                     }
@@ -192,7 +194,7 @@ private fun FamilyRow(row: LibRow.Family, onToggle: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.width(30.dp), contentAlignment = Alignment.CenterStart) { KIcon(KIcon.Forward, KColors.Muted, Modifier.rotate(rotation), 20.dp) }
-        Text(row.title, color = KColors.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+        Text(row.title, color = KColors.White, fontSize = 16.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
         Text("${row.count}가지", color = KColors.Muted, fontSize = 13.sp)
     }
 }
@@ -208,7 +210,7 @@ private fun ExerciseRow(exercise: ExerciseDefinition, indented: Boolean, thumbna
         AndroidView(factory = { thumbnail(exercise) }, modifier = Modifier.size(56.dp).alpha(fade))
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text(exercise.name, color = KColors.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text(exercise.name, color = KColors.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
             Spacer(Modifier.height(2.dp))
             Text("${exercise.muscles} · ${exercise.equipment}", color = KColors.Muted, fontSize = 12.sp)
         }
@@ -217,21 +219,32 @@ private fun ExerciseRow(exercise: ExerciseDefinition, indented: Boolean, thumbna
 }
 
 @Composable
-private fun ChipStrip(values: List<String>, selected: String, onSelect: (String) -> Unit) {
+private fun TabStrip(values: List<String>, selected: String, onSelect: (String) -> Unit) {
+    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).drawBehind {
+        drawLine(KColors.Hairline, Offset(0f, size.height), Offset(size.width, size.height), strokeWidth = 1f)
+    }) {
+        values.forEach { value ->
+            val isSelected = value == selected
+            val text by animateColorAsState(if (isSelected) KColors.White else KColors.Muted, Motion.ui(), label = "tabText")
+            val bar by animateColorAsState(if (isSelected) KColors.Accent else Color.Transparent, Motion.ui(), label = "tabBar")
+            Column(Modifier.pressable { onSelect(value) }.padding(horizontal = 14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(value, color = text, fontSize = 15.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 10.dp, bottom = 9.dp))
+                Box(Modifier.width(24.dp).height(2.dp).background(bar))
+            }
+        }
+    }
+}
+
+@Composable
+private fun FilterStrip(values: List<String>, selected: String, onSelect: (String) -> Unit) {
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
         values.forEach { value ->
             val isSelected = value == selected
-            val background by animateColorAsState(if (isSelected) KColors.AccentWash else Color.Transparent, Motion.ui(), label = "chipBg")
-            val text by animateColorAsState(if (isSelected) KColors.Accent else KColors.Muted, Motion.ui(), label = "chipText")
+            val text by animateColorAsState(if (isSelected) KColors.Accent else KColors.Muted, Motion.ui(), label = "filterText")
             Text(
-                value, color = text, fontSize = 15.sp, fontWeight = FontWeight.Bold,
-                modifier = Modifier
-                    .clip(KShape.Control)
-                    .background(background)
-                    .pressable { onSelect(value) }
-                    .padding(horizontal = 14.dp, vertical = 9.dp),
+                value, color = text, fontSize = 13.sp, fontWeight = FontWeight.Medium,
+                modifier = Modifier.pressable { onSelect(value) }.padding(horizontal = 14.dp, vertical = 9.dp),
             )
-            Spacer(Modifier.width(8.dp))
         }
     }
 }

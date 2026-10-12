@@ -71,4 +71,14 @@ class ScreenshotTest {
         )
         shot("records") { RecordsScreen(records, month, "가슴·삼두", RecordsActions({}, {})) }
     }
+
+    @Test
+    fun library() = shot("library") {
+        val context = androidx.compose.ui.platform.LocalContext.current
+        val entries = WorkoutData.catalog.map { item ->
+            val (order, title) = dev.kyungmin.kcoach.core.ExerciseTaxonomy.section(item.bodyCategory, item.pattern)
+            LibraryEntry(item, order, title, dev.kyungmin.kcoach.core.ExerciseTaxonomy.bodyRank(item.bodyCategory))
+        }
+        LibraryScreen(entries, setOf("pull_up", "lat_pull_down"), LibraryActions({}, {}, {})) { android.view.View(context) }
+    }
 }
