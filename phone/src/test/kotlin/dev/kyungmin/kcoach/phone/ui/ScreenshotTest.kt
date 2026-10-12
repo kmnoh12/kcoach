@@ -2,6 +2,10 @@ package dev.kyungmin.kcoach.phone.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.Density
@@ -207,5 +211,14 @@ class ScreenshotTest {
     @Test
     fun sheetBig() = overlayShot("sheet_big", true) { dismiss ->
         BigChoiceSheet("▶", KColors.Accent, "운동을 시작할까요?", "워치 앱을 열어 두면 반복을 자동으로 세요.", KColors.Muted, "취소", "시작", dismiss, {}, {}, true)
+    }
+
+    @Test
+    fun swipeRevealOpen() = shot("swipe_open") {
+        androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.background(KColors.Bg).padding(16.dp)) {
+            SwipeRevealDelete(enabled = true, onDelete = {}) {
+                androidx.compose.material3.Text("세트 행", color = KColors.White, modifier = androidx.compose.ui.Modifier.fillMaxWidth().height(64.dp).background(KColors.Surface))
+            }
+        }
     }
 }

@@ -339,24 +339,9 @@ private fun ExercisePage(
                     // Keep the edited row above the keypad once it has slid in.
                     if (focused && keypadOpen) { delay(Motion.PANEL_MS.toLong()); requester.bringIntoView() }
                 }
-                val dismissState = rememberSwipeToDismissBoxState(
-                    confirmValueChange = { value ->
-                        if (value == SwipeToDismissBoxValue.EndToStart && exercise.sets.size > 1) {
-                            onRemoveSet(setIndex)
-                            true
-                        } else false
-                    },
-                    positionalThreshold = { it * 0.4f },
-                )
-                SwipeToDismissBox(
-                    state = dismissState,
-                    enableDismissFromStartToEnd = false,
-                    backgroundContent = {
-                        Box(
-                            Modifier.fillMaxSize().padding(vertical = 3.dp).clip(KShape.Control).background(KColors.Red),
-                            contentAlignment = Alignment.CenterEnd,
-                        ) { Text("삭제", color = KColors.White, fontWeight = FontWeight.Medium, modifier = Modifier.padding(end = 18.dp)) }
-                    },
+                SwipeRevealDelete(
+                    enabled = exercise.sets.size > 1,
+                    onDelete = { onRemoveSet(setIndex) },
                     modifier = Modifier.bringIntoViewRequester(requester),
                 ) {
                     SetRow(
