@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -51,7 +52,7 @@ private fun TabPage(title: String, right: String, rightIcon: KIcon? = null, cont
             .padding(horizontal = 20.dp, vertical = 20.dp),
     ) {
         Row(Modifier.fillMaxWidth().heightIn(min = 52.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(title, color = KColors.White, fontSize = 26.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text(title, color = KColors.White, fontSize = 32.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
             if (right.isNotEmpty()) Text(right, color = KColors.Muted, fontSize = 14.sp)
             if (rightIcon != null) KIcon(rightIcon, KColors.Muted, Modifier.padding(start = 4.dp), 22.dp)
         }
@@ -61,33 +62,34 @@ private fun TabPage(title: String, right: String, rightIcon: KIcon? = null, cont
 
 @Composable
 fun SectionCard(title: String, values: List<Pair<String, String>>, modifier: Modifier = Modifier) {
-    Column(modifier.fillMaxWidth().clip(KShape.Control).background(KColors.Surface).padding(18.dp)) {
-        Text(title, color = KColors.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(12.dp))
+    Column(modifier.fillMaxWidth()) {
+        Text(title, color = KColors.Muted, fontSize = 13.sp, modifier = Modifier.padding(bottom = 6.dp))
+        HairlineRule()
         values.forEach { (name, value) ->
-            Row(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-                Text(name, color = KColors.White, fontSize = 15.sp, modifier = Modifier.weight(1f))
-                Text(value, color = KColors.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(name, color = KColors.Soft, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                Text(value, color = KColors.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
             }
+            HairlineRule()
         }
     }
 }
 
 @Composable
+private fun HairlineRule() {
+    Box(Modifier.fillMaxWidth().height(0.5.dp).background(KColors.Hairline))
+}
+
+@Composable
 fun MetricGrid(metrics: List<Pair<String, String>>) {
-    metrics.chunked(2).forEach { pair ->
-        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    metrics.chunked(2).forEachIndexed { index, pair ->
+        if (index > 0) HairlineRule()
+        Row(Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
             pair.forEach { (value, title) ->
-                Column(
-                    Modifier
-                        .weight(1f)
-                        .heightIn(min = 92.dp)
-                        .clip(KShape.Control)
-                        .background(KColors.Surface)
-                        .padding(18.dp),
-                ) {
-                    Text(value, color = KColors.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                    Text(title, color = KColors.Muted, fontSize = 14.sp)
+                Column(Modifier.weight(1f)) {
+                    Text(value, color = KColors.White, fontSize = 30.sp, fontWeight = FontWeight.Medium, letterSpacing = (-0.5).sp)
+                    Spacer(Modifier.height(2.dp))
+                    Text(title, color = KColors.Muted, fontSize = 12.sp)
                 }
             }
         }
@@ -112,11 +114,11 @@ fun RecordsScreen(
                     .fillMaxWidth()
                     .height(58.dp)
                     .clip(KShape.Control)
-                    .background(KColors.SurfaceRaised)
+                    .border(0.5.dp, Color(0xFF3A4240), KShape.Control)
                     .pressable(actions.openResult),
                 contentAlignment = Alignment.Center,
             ) {
-                Text("최근 완료 결과 · $lastResultTitle", color = KColors.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text("최근 완료 결과 · $lastResultTitle", color = KColors.White, fontSize = 16.sp, fontWeight = FontWeight.Medium)
             }
             Spacer(Modifier.height(18.dp))
         }
@@ -137,7 +139,7 @@ fun RecordsScreen(
                 ) { m ->
                     Text(
                         "${m.year}년 ${m.monthValue}월",
-                        color = KColors.White, fontSize = 21.sp, fontWeight = FontWeight.Bold,
+                        color = KColors.White, fontSize = 20.sp, fontWeight = FontWeight.Medium,
                         textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
                     )
                 }
@@ -159,8 +161,8 @@ fun RecordsScreen(
             ) { m -> CalendarGrid(m, records) }
         }
         Spacer(Modifier.height(26.dp))
-        Text("최근 운동", color = KColors.White, fontSize = 25.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(14.dp))
+        Text("최근 운동", color = KColors.Muted, fontSize = 13.sp)
+        Spacer(Modifier.height(6.dp))
         Box(Modifier.fillMaxWidth().height(0.5.dp).background(KColors.Hairline))
         records.take(4).forEach { record -> RecordCard(record) }
     }
@@ -228,15 +230,15 @@ private fun RecordCard(record: WorkoutRecord) {
 fun StatsScreen() {
     TabPage("통계", "7월", KIcon.Down) {
         Spacer(Modifier.height(30.dp))
-        Text("최근 4분할", color = KColors.White, fontSize = 27.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(16.dp))
+        Text("최근 4분할", color = KColors.Soft, fontSize = 15.sp)
+        Spacer(Modifier.height(6.dp))
         MetricGrid(listOf("4회" to "운동", "270분" to "총 시간", "96세트" to "총 세트", "40,809kg" to "총 볼륨"))
-        Spacer(Modifier.height(22.dp))
+        Spacer(Modifier.height(28.dp))
         SectionCard(
             "부위별 흐름",
             listOf("어깨" to "특화 · 주 2회", "등" to "풀업 총 26회", "가슴" to "프레스 8세트", "팔·하체" to "29세트"),
         )
-        Spacer(Modifier.height(18.dp))
+        Spacer(Modifier.height(28.dp))
         SectionCard(
             "다음 목표",
             listOf("풀업" to "총 28회", "벤치프레스" to "60kg 총 반복 +1~2", "덤벨 레터럴 레이즈" to "10kg 16회"),
@@ -259,9 +261,9 @@ fun MenuScreen(version: String, actions: MenuActions) {
     TabPage("메뉴", "") {
         Spacer(Modifier.height(28.dp))
         SectionCard("기기", listOf("Galaxy Watch8" to "연결 대기", "착용 손" to "왼손", "센서 기록" to "세트 중에만"))
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(28.dp))
         SectionCard("앱", listOf("현재 버전" to version, "데이터 저장" to "이 기기에만"))
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(24.dp))
         Text(state.message, color = KColors.Muted, fontSize = 14.sp)
         Spacer(Modifier.height(10.dp))
         MenuButton(if (state.readyToInstall) "다운로드 완료 · 설치" else "업데이트 확인") {
@@ -277,21 +279,21 @@ fun MenuScreen(version: String, actions: MenuActions) {
             }
         }
         Spacer(Modifier.height(10.dp))
-        MenuButton("실측 모드", actions.openProbe)
+        MenuButton("실측 모드", filled = false, onClick = actions.openProbe)
     }
 }
 
 @Composable
-private fun MenuButton(text: String, onClick: () -> Unit) {
+private fun MenuButton(text: String, filled: Boolean = true, onClick: () -> Unit) {
     Box(
         Modifier
             .fillMaxWidth()
             .height(58.dp)
             .clip(KShape.Control)
-            .background(KColors.Accent)
+            .then(if (filled) Modifier.background(KColors.Accent) else Modifier.border(0.5.dp, Color(0xFF3A4240), KShape.Control))
             .pressable(onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text, color = KColors.OnAccent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Text(text, color = if (filled) KColors.OnAccent else KColors.White, fontSize = 16.sp, fontWeight = FontWeight.Medium)
     }
 }

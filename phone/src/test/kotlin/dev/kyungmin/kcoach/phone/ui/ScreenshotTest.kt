@@ -7,6 +7,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.runtime.CompositionLocalProvider
 import com.github.takahirom.roborazzi.captureRoboImage
 import dev.kyungmin.kcoach.phone.WorkoutData
+import dev.kyungmin.kcoach.phone.WorkoutRecord
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -41,5 +42,22 @@ class ScreenshotTest {
         )
         val actions = HomeActions({}, {}, {}, {}, {}, {}, {})
         shot("home") { HomeScreen(ui, null, actions) }
+    }
+
+    @Test
+    fun stats() = shot("stats") { StatsScreen() }
+
+    @Test
+    fun menu() = shot("menu") { MenuScreen("0.7.1", MenuActions({}, { null }, {})) }
+
+    @Test
+    fun records() {
+        val month = java.time.YearMonth.now()
+        val records = listOf(
+            WorkoutRecord("${month}-03", "어깨전문", 74, 24, 9120),
+            WorkoutRecord("${month}-05", "등·이두", 68, 22, 7840),
+            WorkoutRecord("${month}-09", "가슴·삼두", 81, 26, 10450),
+        )
+        shot("records") { RecordsScreen(records, month, "가슴·삼두", RecordsActions({}, {})) }
     }
 }
