@@ -68,3 +68,8 @@
 - 라이브러리·기록·통계·보정·메뉴 화면의 글자 크기와 여백을 위 규칙에 맞춰 한 번 더 정리.
 - 근육 지도(민트 농도), 신기록 순간, 실시간 반복 수 집중 화면.
 - 새 운동 이미지 자산(지금은 빈 칸).
+
+## 화면 확인 (에뮬레이터 없이)
+
+`phone/src/test/.../ui/ScreenshotTest.kt`가 샘플 데이터로 화면을 PNG로 그린다 (Robolectric + Roborazzi).
+`gradle :phone:recordRoborazziDebug` 실행 후 `phone/build/outputs/roborazzi/*.png`를 본다. 모션과 워치 연동은 여전히 에뮬레이터나 실기기로 확인한다.
