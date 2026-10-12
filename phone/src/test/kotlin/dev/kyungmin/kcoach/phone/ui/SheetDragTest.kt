@@ -32,7 +32,7 @@ class SheetDragTest {
             state.show(Overlay(true) {
                 SetSheet(
                     "1세트", "케이블 익스터널 로테이션 · 25회",
-                    listOf(SheetValueRow("세트 종류", "일반") {}),
+                    listOf(SegGroup("세트 종류", listOf(SegOption("일반", true) {}, SegOption("웜업", false) {}))),
                     listOf(SheetAction("세트 삭제", true) {}),
                 )
             })

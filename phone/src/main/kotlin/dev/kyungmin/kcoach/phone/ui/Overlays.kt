@@ -16,6 +16,8 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
@@ -234,29 +236,49 @@ fun SheetOptionRow(icon: KIcon, title: String, onClick: () -> Unit) {
 
 class SheetItem(val icon: KIcon, val title: String, val onClick: () -> Unit)
 
-class SheetValueRow(val label: String, val value: String, val onClick: () -> Unit)
+class SegOption(val label: String, val selected: Boolean, val onClick: () -> Unit)
+
+class SegGroup(val label: String, val options: List<SegOption>)
 
 class SheetAction(val label: String, val destructive: Boolean, val onClick: () -> Unit)
 
-/** Sheet for one set: big title, settings as label / value rows, two plain text actions underneath. */
+/**
+ * Sheet for one set: big title, each setting as one connected bar (tap a segment to choose, no second sheet),
+ * then plain text actions underneath.
+ */
 @Composable
-fun SetSheet(title: String, subtitle: String, rows: List<SheetValueRow>, actions: List<SheetAction>) {
+fun SetSheet(title: String, subtitle: String, groups: List<SegGroup>, actions: List<SheetAction>) {
     Column(Modifier.padding(bottom = 12.dp)) {
         Column(Modifier.padding(start = 22.dp, end = 22.dp, bottom = 14.dp)) {
             Text(title, color = KColors.White, fontSize = 28.sp, fontWeight = FontWeight.Medium)
             Spacer(Modifier.height(2.dp))
             Text(subtitle, color = KColors.Muted, fontSize = 13.sp)
         }
-        rows.forEach { row ->
+        groups.forEach { group ->
             Box(Modifier.padding(horizontal = 22.dp).fillMaxWidth().height(0.5.dp).background(KColors.Hairline))
-            Row(
-                Modifier.fillMaxWidth().height(56.dp).pressable(row.onClick).padding(horizontal = 22.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(row.label, color = KColors.Soft, fontSize = 15.sp, modifier = Modifier.weight(1f))
-                Text(row.value, color = KColors.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-                Spacer(Modifier.width(6.dp))
-                KIcon(KIcon.Forward, KColors.Faint, size = 18.dp)
+            Column(Modifier.padding(horizontal = 22.dp, vertical = 12.dp)) {
+                Text(group.label, color = KColors.Muted, fontSize = 12.sp)
+                Spacer(Modifier.height(8.dp))
+                Row(Modifier.fillMaxWidth().height(42.dp).clip(KShape.Control).background(KColors.SurfaceRaised)) {
+                    group.options.forEach { option ->
+                        val wash by animateColorAsState(if (option.selected) KColors.AccentWash else Color.Transparent, Motion.ui(), label = "segWash")
+                        val edge by animateColorAsState(if (option.selected) KColors.Accent else Color.Transparent, Motion.ui(), label = "segEdge")
+                        val text by animateColorAsState(if (option.selected) KColors.Accent else KColors.Soft, Motion.ui(), label = "segText")
+                        Box(
+                            Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .padding(2.dp)
+                                .clip(KShape.Control)
+                                .background(wash)
+                                .border(1.dp, edge, KShape.Control)
+                                .pressable(option.onClick),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(option.label, color = text, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                        }
+                    }
+                }
             }
         }
         Box(Modifier.padding(horizontal = 22.dp).fillMaxWidth().height(0.5.dp).background(KColors.Hairline))
