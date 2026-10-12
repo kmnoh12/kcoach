@@ -1,6 +1,7 @@
 package dev.kyungmin.kcoach.phone
 
 import android.content.Intent
+import android.os.Build
 import com.google.android.gms.wearable.DataEvent
 import com.google.android.gms.wearable.DataEventBuffer
 import com.google.android.gms.wearable.DataMapItem
@@ -35,14 +36,23 @@ import java.util.concurrent.atomic.AtomicBoolean
 /** Receives both small messages and large set capture Assets from Wear OS. */
 class PhoneWearListenerService : WearableListenerService() {
     private val prefs by lazy { getSharedPreferences("wear-sync", MODE_PRIVATE) }
+    private val commandOutbox by lazy { PhoneCommandOutbox(this) }
+    private val sessionController by lazy {
+        PhoneSessionController(SessionStore(this)) { path, payload -> PhoneWorkoutService.send(this, path, payload) }
+    }
     private var emulatorBridge: EmulatorBridgeClient? = null
     private lateinit var captureInbox: CaptureInbox
+    private val attemptedCaptures = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    private val assetRecoveryRequested = AtomicBoolean(false)
+    private val assetRecoveryQueued = AtomicBoolean(false)
+    private val recoveryQueued = AtomicBoolean(false)
+    private val recoveryRequested = AtomicBoolean(false)
     private val analysisExecutor = ThreadPoolExecutor(
         1,
         1,
         30L,
         TimeUnit.SECONDS,
-        ArrayBlockingQueue(64),
+        ArrayBlockingQueue(1),
         { runnable -> Thread(runnable, "kcoach-capture-analysis").apply { isDaemon = true } },
         ThreadPoolExecutor.AbortPolicy(),
     )
@@ -55,12 +65,34 @@ class PhoneWearListenerService : WearableListenerService() {
     override fun onCreate() {
         super.onCreate()
         captureInbox = CaptureInbox(this, prefs)
-        emulatorBridge = EmulatorBridgeClient(::handlePayload).also { it.start() }
+        if (Build.FINGERPRINT.contains("generic", true) || Build.MODEL.contains("sdk", true)) emulatorBridge = EmulatorBridgeClient(::handlePayload).also { it.start() }
         inboxExecutor.execute {
-            captureInbox.pendingAnalysis().forEach { received ->
-                Log.i(TAG, "retrying persisted capture id=${received.validated.captureId}")
-                scheduleAnalysis(received)
+            runCatching { FinishedWorkoutStore(this).replay() }
+                .onSuccess { count -> if (count > 0) sendBroadcast(Intent(PhoneWorkoutService.ACTION_SESSION_CHANGED).setPackage(packageName).putExtra("recordsRecovered", true)) }
+                .onFailure { Log.e(TAG, "workout recording recovery failed", it) }
+            scheduleRecovery()
+        }
+        recoverCachedAssets()
+    }
+
+    private fun scheduleRecovery() {
+        recoveryRequested.set(true)
+        if (inboxExecutor.isShutdown || !recoveryQueued.compareAndSet(false, true)) return
+        try {
+            inboxExecutor.execute {
+                try {
+                    recoveryRequested.set(false)
+                    captureInbox.pendingAnalysis(excluded = attemptedCaptures).firstOrNull()?.let(::scheduleAnalysis)
+                    runCatching { captureInbox.compressSuccessfulCaptures(); captureInbox.storageReport() }
+                        .onFailure { Log.w(TAG, "capture storage maintenance deferred", it) }
+                } finally {
+                    recoveryQueued.set(false)
+                    if (recoveryRequested.get() && !inboxExecutor.isShutdown) scheduleRecovery()
+                }
             }
+        } catch (error: RejectedExecutionException) {
+            recoveryQueued.set(false)
+            Log.w(TAG, "capture recovery retained for next available worker", error)
         }
     }
 
@@ -77,34 +109,76 @@ class PhoneWearListenerService : WearableListenerService() {
     }
 
     override fun onDataChanged(dataEvents: DataEventBuffer) {
-        for (event in dataEvents) {
-            if (event.type != DataEvent.TYPE_CHANGED) continue
-            val item = event.dataItem
-            if (!item.uri.path.orEmpty().startsWith(WearSync.PATH_CAPTURE_ASSET_V3)) continue
-            receiveCaptureAsset(item)
+        if (dataEvents.any { it.type == DataEvent.TYPE_CHANGED && it.dataItem.uri.path.orEmpty().startsWith(WearSync.PATH_CAPTURE_ASSET_V3) }) {
+            recoverCachedAssets()
         }
     }
 
-    private fun receiveCaptureAsset(item: com.google.android.gms.wearable.DataItem) {
-        val map = DataMapItem.fromDataItem(item).dataMap
-        val encodedManifest = map.getString("wireManifest") ?: return
-        val manifest = runCatching { WireCodec.decode(encodedManifest) }.getOrNull() ?: return
-        if (manifest.messageType.name != "CAPTURE_MANIFEST" || manifest.source != WireSource.WATCH) return
-        val captureId = manifest.payload[WirePayloadKeys.CAPTURE_ID].orEmpty()
-        val asset = map.getAsset("captureAsset") ?: return
-        val sourceNodeId = item.uri.host.orEmpty()
-        if (captureId.isBlank() || sourceNodeId.isBlank()) return
-        if (prefs.getBoolean("capture:$captureId:acked", false)) {
-            sendCaptureAck(sourceNodeId, manifest.sessionId, manifest.messageId, captureId)
-                .addOnSuccessListener { Wearable.getDataClient(this).deleteDataItems(item.uri) }
-            return
+    /** Identical retransmissions need not produce another change event; also inspect the cache on restart. */
+    private fun recoverCachedAssets() {
+        assetRecoveryRequested.set(true)
+        if (inboxExecutor.isShutdown || !assetRecoveryQueued.compareAndSet(false, true)) return
+        assetRecoveryRequested.set(false)
+        val settled = AtomicBoolean(false)
+        val handler = Handler(Looper.getMainLooper())
+        val timeout = Runnable {
+            if (settled.compareAndSet(false, true)) {
+                assetRecoveryQueued.set(false)
+                Log.w(TAG, "cached capture scan timed out; retained for reconnect")
+            }
         }
+        handler.postDelayed(timeout, CAPTURE_ASSET_TIMEOUT_MS)
+        runCatching {
+            Wearable.getDataClient(this).getDataItems(
+                android.net.Uri.parse("wear://*${WearSync.PATH_CAPTURE_ASSET_V3}"),
+                com.google.android.gms.wearable.DataClient.FILTER_PREFIX,
+            ).addOnFailureListener { error ->
+                if (settled.compareAndSet(false, true)) {
+                    handler.removeCallbacks(timeout); assetRecoveryQueued.set(false)
+                    Log.w(TAG, "cached capture scan deferred", error)
+                }
+            }.addOnSuccessListener { buffer ->
+                val items = try {
+                    if (!settled.compareAndSet(false, true)) return@addOnSuccessListener
+                    buffer.map { it.freeze() }
+                } finally { buffer.release() }
+                handler.removeCallbacks(timeout)
+                val pending = java.util.ArrayDeque(items)
+                fun next() {
+                    if (inboxExecutor.isShutdown || pending.isEmpty()) {
+                        assetRecoveryQueued.set(false)
+                        if (assetRecoveryRequested.get() && !inboxExecutor.isShutdown) recoverCachedAssets()
+                        return
+                    }
+                    runCatching { receiveCaptureAsset(pending.removeFirst()) { handler.post { next() } } }
+                        .onFailure { Log.w(TAG, "cached capture read deferred", it); handler.post { next() } }
+                }
+                next()
+            }
+        }.onFailure { error ->
+            if (settled.compareAndSet(false, true)) {
+                handler.removeCallbacks(timeout); assetRecoveryQueued.set(false)
+                Log.w(TAG, "cached capture scan unavailable", error)
+            }
+        }
+    }
+
+    private fun receiveCaptureAsset(item: com.google.android.gms.wearable.DataItem, finished: () -> Unit = {}) {
+        val map = runCatching { DataMapItem.fromDataItem(item).dataMap }.getOrElse { finished(); return }
+        val encodedManifest = map.getString("wireManifest") ?: run { finished(); return }
+        val manifest = runCatching { WireCodec.decode(encodedManifest) }.getOrNull() ?: run { finished(); return }
+        if (manifest.messageType.name != "CAPTURE_MANIFEST" || manifest.source != WireSource.WATCH) { finished(); return }
+        val captureId = manifest.payload[WirePayloadKeys.CAPTURE_ID].orEmpty()
+        val asset = map.getAsset("captureAsset") ?: run { finished(); return }
+        val sourceNodeId = item.uri.host.orEmpty()
+        if (captureId.isBlank() || sourceNodeId.isBlank()) { finished(); return }
 
         val fdSettled = AtomicBoolean(false)
         val fdHandler = Handler(Looper.getMainLooper())
         val fdTimeout = Runnable {
             if (fdSettled.compareAndSet(false, true)) {
                 reportCaptureError(manifest, TimeoutException("asset fd timeout"), "asset_fd")
+                finished()
             }
         }
         fdHandler.postDelayed(fdTimeout, CAPTURE_ASSET_TIMEOUT_MS)
@@ -113,6 +187,7 @@ class PhoneWearListenerService : WearableListenerService() {
                 if (fdSettled.compareAndSet(false, true)) {
                     fdHandler.removeCallbacks(fdTimeout)
                     reportCaptureError(manifest, error, "asset_fd")
+                    finished()
                 }
             }
             .addOnSuccessListener { response ->
@@ -124,7 +199,17 @@ class PhoneWearListenerService : WearableListenerService() {
             try {
                 inboxExecutor.execute {
                     runCatching {
-                        val bytes = response.inputStream.use { it.readBytes() }
+                        val bytes = response.inputStream.use { input ->
+                            val output = java.io.ByteArrayOutputStream()
+                            val buffer = ByteArray(8192)
+                            while (true) {
+                                val count = input.read(buffer)
+                                if (count < 0) break
+                                require(output.size() + count <= dev.kyungmin.kcoach.core.CaptureValidator.MAX_CAPTURE_BYTES) { "capture exceeds size limit" }
+                                output.write(buffer, 0, count)
+                            }
+                            output.toByteArray()
+                        }
                         response.release()
                         logEvent(KCoachEventMarker.CAPTURE_ASSET_RECEIVED, manifest)
                         enqueueCapture(manifest, bytes) {
@@ -138,10 +223,12 @@ class PhoneWearListenerService : WearableListenerService() {
                         runCatching { response.release() }
                         reportCaptureError(manifest, it, "asset_read")
                     }
+                    finished()
                 }
             } catch (error: RejectedExecutionException) {
                 runCatching { response.release() }
                 reportCaptureError(manifest, error, "inbox_queue")
+                finished()
             }
         }
     }
@@ -179,19 +266,14 @@ class PhoneWearListenerService : WearableListenerService() {
         acknowledge: () -> Unit,
     ) {
         val captureId = manifest.payload[WirePayloadKeys.CAPTURE_ID].orEmpty()
-        if (prefs.getBoolean("capture:$captureId:acked", false)) {
-            runCatching(acknowledge).onFailure { reportCaptureError(manifest, it, "ack") }
-            return
-        }
-        if (
-            captureInbox.analysisAttempted(captureId) ||
-            captureInbox.state(captureId) == CaptureState.ANALYZING
-        ) {
-            runCatching(acknowledge).onFailure { reportCaptureError(manifest, it, "ack") }
-            return
-        }
         val received = captureInbox.receive(manifest, bytes).getOrElse {
             reportCaptureError(manifest, it, "validation")
+            return
+        }
+        if (prefs.getBoolean("capture:$captureId:acked", false) || captureInbox.analysisSucceeded(captureId) ||
+            captureInbox.state(captureId) == CaptureState.ANALYZING) {
+            runCatching(acknowledge).onFailure { reportCaptureError(manifest, it, "ack") }
+            scheduleRecovery()
             return
         }
         logEvent(KCoachEventMarker.CAPTURE_VALIDATED, manifest)
@@ -218,6 +300,7 @@ class PhoneWearListenerService : WearableListenerService() {
     private fun scheduleAnalysis(received: ReceivedCapture) {
         val manifest = received.manifest
         val captureId = received.validated.captureId
+        if (!attemptedCaptures.add(captureId)) return
         captureInbox.markState(captureId, CaptureState.ANALYZING)
         broadcastCaptureState(manifest, CaptureState.ANALYZING)
         try {
@@ -233,8 +316,10 @@ class PhoneWearListenerService : WearableListenerService() {
                     captureInbox.markState(captureId, CaptureState.ACKED)
                     broadcastCaptureState(manifest, CaptureState.ACKED)
                 }
+                scheduleRecovery()
             }
         } catch (error: RejectedExecutionException) {
+            attemptedCaptures.remove(captureId)
             captureInbox.markState(captureId, CaptureState.ANALYSIS_FAILED, "analysis queue full")
             reportCaptureError(manifest, error, "queue")
         }
@@ -263,11 +348,9 @@ class PhoneWearListenerService : WearableListenerService() {
         }
         val analysis = PhoneRepAnalyzer.analyze(document, trackingProfile, watchReps).result
         logEvent(KCoachEventMarker.ANALYSIS_FINISHED, manifest)
-        check(
-            prefs.edit()
-            .putString("analysis:$captureId", encodeAnalysis(analysis))
-                .commit(),
-        ) { "failed to persist capture analysis" }
+        SetAnalysisStore(this).persistAnalysis(manifest, encodeAnalysis(analysis))
+        FinishedWorkoutStore(this).reconcile(manifest.sessionId)
+        PhoneWorkoutService.publishSessionChanged(this)
         logEvent(KCoachEventMarker.RESULT_SAVED, manifest)
         sendBroadcast(Intent(ACTION_CAPTURE).setPackage(packageName)
             .putExtra("captureId", captureId)
@@ -277,8 +360,8 @@ class PhoneWearListenerService : WearableListenerService() {
             .putExtra("setIndex", manifest.payload[WirePayloadKeys.SET_INDEX]?.toIntOrNull() ?: 0)
             .putExtra("sampleCount", document.sampleCount)
             .putExtra("watchReps", analysis.watchDetectedReps ?: -1)
-            .putExtra("phoneReps", analysis.phoneReanalyzedReps ?: 0)
-            .putExtra("confirmedReps", analysis.confirmedReps ?: 0)
+            .putExtra("phoneReps", analysis.phoneReanalyzedReps ?: -1)
+            .putExtra("confirmedReps", analysis.confirmedReps ?: -1)
             .putExtra("analysisConfidence", analysis.analysisConfidence)
             .putExtra("trackingMode", analysis.trackingMode.name)
             .putExtra("trackingProfileId", analysis.trackingProfileId)
@@ -365,6 +448,7 @@ class PhoneWearListenerService : WearableListenerService() {
             broadcastCaptureState(manifest, CaptureState.ACKED)
         }
         logEvent(KCoachEventMarker.CAPTURE_ACK_SENT, manifest)
+        scheduleRecovery()
     }
 
     private fun broadcastCaptureState(
@@ -431,19 +515,52 @@ class PhoneWearListenerService : WearableListenerService() {
 
     private fun handlePayload(path: String, payload: String) {
         when (path) {
+            WearSync.PATH_RECONNECT -> {
+                recoverCachedAssets()
+                sessionController.resync().onFailure { Log.e(EVENT_TAG, "watch resync failed", it) }
+                PhoneWorkoutService.retryPending(this)
+                syncPersonalProfiles()
+            }
+            WearSync.PATH_COMMAND_ACK -> {
+                when (commandOutbox.receiveAck(payload)) {
+                    CommandAckResult.RESYNC -> sessionController.resync().onFailure { Log.e(EVENT_TAG, "watch session resync failed", it) }
+                    CommandAckResult.BLOCKED -> {
+                        val reason = WearSync.parse(payload).getOrNull(3).orEmpty()
+                        Log.w(EVENT_TAG, "watch command retained without automatic delivery reason=$reason")
+                        sendBroadcast(Intent(ACTION_COMMAND_REJECTED).setPackage(packageName).putExtra("reason", reason))
+                    }
+                    else -> Unit
+                }
+            }
             WearSync.PATH_CAPTURE_ASSET_EMULATOR -> receiveEmulatorCapture(payload)
             WearSync.PATH_PAIR -> {
+                recoverCachedAssets()
                 prefs.edit().putLong("pairedAt", System.currentTimeMillis()).apply()
+                sessionController.resync().onFailure { Log.e(EVENT_TAG, "paired watch resync failed", it) }
+                PhoneWorkoutService.retryPending(this)
                 sendBroadcast(Intent(ACTION_PAIR).setPackage(packageName).putExtra("payload", payload))
                 syncPersonalProfiles()
             }
             WearSync.PATH_WATCH_UI_READY -> {
+                recoverCachedAssets()
                 prefs.edit().putLong("watchUiReadyAt", System.currentTimeMillis()).apply()
+                sessionController.resync().onFailure { Log.e(EVENT_TAG, "ready watch resync failed", it) }
+                PhoneWorkoutService.retryPending(this)
                 sendBroadcast(Intent(ACTION_WATCH_UI_READY).setPackage(packageName).putExtra("payload", payload))
                 syncPersonalProfiles()
             }
             WearSync.PATH_STATE, WearSync.PATH_LIVE -> {
                 prefs.edit().putString("state", payload).putLong("stateAt", System.currentTimeMillis()).apply()
+                if (path == WearSync.PATH_LIVE) {
+                    val fields = WearSync.parse(payload)
+                    if (fields.getOrNull(9) == "SET_COMPLETE" && !fields.getOrNull(1).orEmpty().startsWith("calibration-")) {
+                        sessionController.receiveCompletion(payload, System.currentTimeMillis())
+                            .onSuccess { result ->
+                                if (result is dev.kyungmin.kcoach.core.SetCompletionResult.Applied) PhoneWorkoutService.publishSessionChanged(this)
+                            }
+                            .onFailure { Log.e(EVENT_TAG, "background set completion failed", it) }
+                    }
+                }
                 sendBroadcast(Intent(ACTION_STATE).setPackage(packageName).putExtra("payload", payload))
                 if (path == WearSync.PATH_LIVE) {
                     sendBroadcast(Intent(ACTION_LIVE).setPackage(packageName).putExtra("payload", payload))
@@ -500,6 +617,7 @@ class PhoneWearListenerService : WearableListenerService() {
         private const val CAPTURE_ASSET_TIMEOUT_MS = 15_000L
         private const val EVENT_TAG = "KCoachEvent"
         const val ACTION_PAIR = "dev.kyungmin.kcoach.WEAR_PAIR"
+        const val ACTION_COMMAND_REJECTED = "dev.kyungmin.kcoach.WEAR_COMMAND_REJECTED"
         const val ACTION_WATCH_UI_READY = "dev.kyungmin.kcoach.WATCH_UI_READY"
         const val ACTION_STATE = "dev.kyungmin.kcoach.WEAR_STATE"
         const val ACTION_LIVE = "dev.kyungmin.kcoach.WEAR_LIVE"

@@ -13,7 +13,11 @@ object PersonalRecords {
     fun detect(history: ExerciseHistory, today: ExerciseLog): List<RecordHit> {
         val id = today.exerciseId
         if (history.recent(id, 1).isEmpty()) return emptyList()
-        val before = ExerciseHistory(history.all.filter { it.exerciseId == id && it.epochDay != today.epochDay })
+        val before = ExerciseHistory(history.all.filter {
+            it.exerciseId == id &&
+                (if (today.sessionId != null) it.sessionId != today.sessionId else it.epochDay != today.epochDay) &&
+                (today.startedAtMs == 0L || it.startedAtMs == 0L || it.startedAtMs < today.startedAtMs)
+        })
         if (before.last(id) == null) return emptyList()
         return buildList {
             val heaviest = today.topWeightKg

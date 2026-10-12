@@ -9,19 +9,19 @@ import dev.kyungmin.kcoach.core.ExerciseLog
 class ExerciseHistoryStore(context: Context) {
     private val prefs = context.getSharedPreferences("exercise-history", Context.MODE_PRIVATE)
 
-    @Synchronized
-    fun load(): ExerciseHistory =
+    fun load(): ExerciseHistory = synchronized(lock) {
         runCatching { ExerciseHistory(ExerciseHistoryCodec.decode(prefs.getString(KEY, "").orEmpty())) }
             .getOrDefault(ExerciseHistory())
+    }
 
-    @Synchronized
-    fun add(log: ExerciseLog): ExerciseHistory {
+    fun add(log: ExerciseLog): ExerciseHistory = synchronized(lock) {
         val updated = load().with(log)
-        prefs.edit().putString(KEY, ExerciseHistoryCodec.encode(updated.all)).apply()
-        return updated
+        check(prefs.edit().putString(KEY, ExerciseHistoryCodec.encode(updated.all)).commit()) { "Failed to save exercise history" }
+        updated
     }
 
     private companion object {
+        val lock = Any()
         const val KEY = "logs"
     }
 }

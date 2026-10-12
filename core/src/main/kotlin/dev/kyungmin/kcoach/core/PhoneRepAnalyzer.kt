@@ -34,6 +34,8 @@ object PhoneRepAnalyzer {
         watchDetectedReps: Int? = null,
     ): Output {
         if (profile.mode == TrackingMode.MANUAL_REQUIRED) return sanitizeOutput(emptyOutput(watchDetectedReps, profile))
+        if (!document.sampleRateRequestedHz.isFinite() || document.sampleRateRequestedHz <= 0.0 ||
+            document.validateTimestamps().isNotEmpty()) return sanitizeOutput(emptyOutput(watchDetectedReps, profile))
         val records = document.records
         if (records.size < 3) return sanitizeOutput(emptyOutput(watchDetectedReps, profile))
         if (profile.signal == TrackingSignal.FOREARM_ROTATION) {
@@ -68,7 +70,8 @@ object PhoneRepAnalyzer {
         val tempoVariance = variance(durations)
         val amplitudeVariance = variance(amplitudes)
         val rawConfidence = events.map { it.confidence }.average().takeUnless { it.isNaN() } ?: 0.0
-        val confidence = (rawConfidence * if (profile.mode == TrackingMode.WRIST_IMU) 0.95 else 0.85)
+        val signalQuality = calculateSignalQuality(records, document.sampleRateRequestedHz)
+        val confidence = (rawConfidence * signalQuality * if (profile.mode == TrackingMode.WRIST_IMU) 0.95 else 0.85)
             .coerceIn(0.0, 1.0)
         val consistency = scoreConsistency(durations, amplitudes)
         val stability = (confidence * 100.0).toInt().coerceIn(0, 100)
@@ -78,8 +81,7 @@ object PhoneRepAnalyzer {
             (amplitudes.average() / (profile.minimumLobeDisplacement * 2.0).coerceAtLeast(0.001))
                 .coerceIn(0.0, 1.0)
         }
-        val signalQuality = calculateSignalQuality(records)
-        val trackingStatus = when (profile.mode) {
+        val trackingStatus = if (signalQuality < 0.85) "센서 기록 품질 부족 · 반복 수 확인 필요" else when (profile.mode) {
             TrackingMode.WRIST_IMU -> "손목 IMU 자동 추정"
             TrackingMode.WRIST_IMU_CAUTION -> "손목 기반 추정 · 실제 기준 세트 검증 필요"
             TrackingMode.MANUAL_REQUIRED -> "수동 입력 필요"
@@ -146,10 +148,10 @@ object PhoneRepAnalyzer {
         val durations = events.map { it.durationMs.toDouble() }
         val amplitudes = events.map { it.amplitude }
         val heartRates = document.records.mapNotNull { it.heartRateBpm }.filter { it in 20..240 }
-        val signalQuality = calculateSignalQuality(document.records)
+        val signalQuality = calculateSignalQuality(document.records, document.sampleRateRequestedHz)
         val rawConfidence = events.map { it.confidence }.average().takeUnless { it.isNaN() } ?: 0.0
         val confidence = (rawConfidence * signalQuality * 0.90).coerceIn(0.0, 1.0)
-        val trackingStatus = "손목 관측 외회전 · 회전축 왕복 신호 · 손목 IMU가 팔꿈치 고정/관절 ROM을 확인하지 않음 · Watch8 실물/영상 검증 필요"
+        val trackingStatus = if (signalQuality < 0.85) "센서 기록 품질 부족 · 반복 수 확인 필요" else "손목 관측 외회전 · 회전축 왕복 신호 · 손목 IMU가 팔꿈치 고정/관절 ROM을 확인하지 않음 · Watch8 실물/영상 검증 필요"
         val result = SetAnalysisResult(
             watchDetectedReps = watchDetectedReps,
             phoneReanalyzedReps = events.size,
@@ -210,16 +212,22 @@ object PhoneRepAnalyzer {
         )
     }
 
-    private fun calculateSignalQuality(records: List<SensorCaptureRecord>): Double {
-        if (records.size < 2) return 0.0
-        val intervalsMs = records.zipWithNext { a, b ->
-            (b.sample.timestampNs - a.sample.timestampNs).coerceAtLeast(0L) / 1_000_000.0
+    private fun calculateSignalQuality(records: List<SensorCaptureRecord>, requestedHz: Double): Double {
+        if (records.size < 2 || !requestedHz.isFinite() || requestedHz <= 0.0) return 0.0
+        val intervalsNs = records.zipWithNext { a, b ->
+            b.sample.timestampNs.toDouble() - a.sample.timestampNs.toDouble()
         }
-        if (intervalsMs.isEmpty()) return 0.0
-        val median = intervalsMs.sorted()[intervalsMs.size / 2].coerceAtLeast(1.0)
-        val gapRate = intervalsMs.count { it > median * 2.5 }.toDouble() / intervalsMs.size
-        val invalidTimestampRate = intervalsMs.count { it <= 0.0 }.toDouble() / intervalsMs.size
-        return (1.0 - gapRate - invalidTimestampRate).coerceIn(0.0, 1.0)
+        if (intervalsNs.any { it <= 0.0 || !it.isFinite() }) return 0.0
+        val expectedIntervalNs = 1_000_000_000.0 / requestedHz
+        // Use elapsed coverage, not the observed median: uniformly lost samples can still look regular.
+        // Averaging also avoids treating ordinary short/long scheduling jitter as missing samples.
+        val coverage = (intervalsNs.size * expectedIntervalNs / intervalsNs.sum()).coerceIn(0.0, 1.0)
+        val gapRate = intervalsNs.count { it > expectedIntervalNs * 2.5 }.toDouble() / intervalsNs.size
+        val reliableFraction = 1.0 - records.count { it.sample.sensorAccuracy == 0 }.toDouble() / records.size
+        var quality = (coverage * (1.0 - gapRate) * reliableFraction).coerceIn(0.0, 1.0)
+        // The motion detector resets across >450ms. Remaining clear reps cannot prove a complete set.
+        if (intervalsNs.any { it > 450_000_000.0 }) quality = quality.coerceAtMost(0.70)
+        return quality
     }
 
     private fun variance(values: List<Double>): Double? {

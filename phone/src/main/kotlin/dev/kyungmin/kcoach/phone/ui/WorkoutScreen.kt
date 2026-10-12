@@ -106,7 +106,7 @@ fun ActiveWorkoutScreen(
         val exercise = model.exercises.getOrNull(target.exerciseIndex) ?: return
         val set = exercise.sets.getOrNull(target.setIndex) ?: return
         editing = target
-        buffer = if (target.field == SetField.WEIGHT) set.weightText.takeIf { it != "체중" }.orEmpty() else set.reps.toString()
+        buffer = if (target.field == SetField.WEIGHT) set.weightText.takeIf { it != "체중" }.orEmpty() else set.reps?.toString().orEmpty()
         freshEdit = true
     }
 
@@ -425,7 +425,7 @@ private fun SetRow(
     ) {
         Cell(set.label, Modifier.weight(SetWeights[0]), if (set.warmup) KColors.Accent else if (isCurrent) KColors.White else KColors.Muted, null, onLabel, sub = set.previous)
         if (weighted) Cell(set.weightText, Modifier.weight(SetWeights[1]), KColors.White, editingField == SetField.WEIGHT, onWeight)
-        Cell(set.reps.toString(), Modifier.weight(SetWeights[2]), KColors.White, editingField == SetField.REPS, onReps)
+        Cell(set.reps?.toString() ?: "—", Modifier.weight(SetWeights[2]), KColors.White, editingField == SetField.REPS, onReps)
         CheckCell(set.completed, Modifier.weight(SetWeights[3]).padding(horizontal = 4.dp).height(40.dp).clickable { onCheck() })
         Box(Modifier.weight(SetWeights[4]).clickable { onMore() }, contentAlignment = Alignment.Center) { KIcon(KIcon.Dots, KColors.Muted, size = 18.dp) }
     }

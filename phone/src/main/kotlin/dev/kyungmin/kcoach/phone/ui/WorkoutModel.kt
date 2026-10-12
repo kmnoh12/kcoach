@@ -48,7 +48,7 @@ data class SetUi(
     val uid: Int,
     val label: String,
     val weightText: String,
-    val reps: Int,
+    val reps: Int?,
     val completed: Boolean,
     val warmup: Boolean,
     val grip: String,

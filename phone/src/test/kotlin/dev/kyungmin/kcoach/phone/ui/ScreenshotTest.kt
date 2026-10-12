@@ -22,6 +22,8 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.runtime.CompositionLocalProvider
 import com.github.takahirom.roborazzi.captureRoboImage
+import dev.kyungmin.kcoach.phone.SetAnalysisUi
+import dev.kyungmin.kcoach.phone.repMetricRows
 import dev.kyungmin.kcoach.phone.WorkoutData
 import dev.kyungmin.kcoach.phone.WorkoutRecord
 import org.junit.Rule
@@ -123,6 +125,17 @@ class ScreenshotTest {
                 "확정 반복수는 폰이 센서 기록을 다시 분석한 결과를 기준으로 해요.",
                 listOf("랫 풀 다운 · 최고 중량" to "60 → 62.5kg", "시티드 로우 · 최고 볼륨" to "2,400 → 2,640kg"),
             ),
+            {}, {},
+        )
+    }
+
+    @Test
+    fun resultUnknown() = shot("result_unknown") {
+        val analysis = SetAnalysisUi("external_rotation", "외회전", 0, 10, 0, null, 0.0)
+        WorkoutResultScreen(
+            ResultUi("어깨전문", "12분 · 2세트 · 세션 12345678",
+                listOf(ResultSectionUi("외회전 · 세트 1", analysis.repMetricRows())),
+                "확정 반복수는 폰이 센서 기록을 다시 분석한 결과를 기준으로 해요."),
             {}, {},
         )
     }

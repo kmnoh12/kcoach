@@ -7,21 +7,23 @@ data class WorkoutLog(
     val minutes: Int,
     val sets: Int,
     val volumeKg: Int,
+    val sessionId: String? = null,
 )
 
 object WorkoutLogCodec {
     fun encode(logs: List<WorkoutLog>): String =
-        logs.joinToString("\n") { listOf(it.epochDay, it.title.replace('\t', ' ').replace('\n', ' '), it.minutes, it.sets, it.volumeKg).joinToString("\t") }
+        logs.joinToString("\n") { listOf(it.epochDay, it.title.replace('\t', ' ').replace('\n', ' '), it.minutes, it.sets, it.volumeKg).joinToString("\t") + (it.sessionId?.let { id -> "\t$id" } ?: "") }
 
     fun decode(text: String): List<WorkoutLog> = text.lines().mapNotNull { line ->
         val f = line.split('\t')
-        if (f.size != 5) return@mapNotNull null
+        if (f.size !in 5..6) return@mapNotNull null
         WorkoutLog(
             f[0].toLongOrNull() ?: return@mapNotNull null,
             f[1],
             f[2].toIntOrNull() ?: return@mapNotNull null,
             f[3].toIntOrNull() ?: return@mapNotNull null,
             f[4].toIntOrNull() ?: return@mapNotNull null,
+            f.getOrNull(5)?.takeIf { it.isNotBlank() },
         )
     }
 }

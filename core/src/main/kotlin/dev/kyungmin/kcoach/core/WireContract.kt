@@ -151,6 +151,7 @@ object WirePayloadKeys {
     const val EXERCISE_VARIANT_ID = "exerciseVariantId"
     const val EXERCISE_NAME = "exerciseName"
     const val SET_INDEX = "setIndex"
+    const val ATTEMPT_ID = "attemptId"
     const val TARGET_REPS = "targetReps"
     const val WEIGHT_KG = "weightKg"
     const val REST_SECONDS = "restSeconds"
@@ -274,6 +275,7 @@ object WireMessages {
         exerciseId: String = exerciseSessionId,
         exerciseName: String = exerciseId,
         setIndex: Int = 0,
+        attemptId: String = "",
     ): WireEnvelope = base(
         type = WireMessageType.CAPTURE_MANIFEST,
         source = WireSource.WATCH,
@@ -282,6 +284,7 @@ object WireMessages {
         setId = setId,
         payload = mapOf(
             WirePayloadKeys.CAPTURE_ID to captureId,
+            WirePayloadKeys.ATTEMPT_ID to attemptId,
             WirePayloadKeys.EXERCISE_ID to exerciseId,
             WirePayloadKeys.EXERCISE_NAME to exerciseName,
             WirePayloadKeys.SET_INDEX to setIndex.toString(),

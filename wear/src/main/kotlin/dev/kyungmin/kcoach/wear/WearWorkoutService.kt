@@ -54,6 +54,9 @@ import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import android.util.Log
+import org.json.JSONObject
+import org.json.JSONArray
+import java.util.UUID
 
 /**
  * Owns the watch workout runtime. MainActivity only renders the state
@@ -83,6 +86,9 @@ class WearWorkoutService : Service(), SensorEventListener {
     private var exerciseId = ""
     private var exerciseName = "운동 대기 중"
     private var setIndex = 0
+    private var setId = ""
+    private var attemptId = ""
+    private val dataCleanupInFlight = java.util.concurrent.atomic.AtomicBoolean(false)
     private var targetReps = 10
     private var trackingProfile = ExerciseTrackingProfiles.resolve("", "")
     private var forearmRotationDetector: ForearmRotationRepDetector? = null
@@ -106,6 +112,11 @@ class WearWorkoutService : Service(), SensorEventListener {
     private var lastGyro = FloatArray(3)
     private val captureRecords = ArrayList<SensorCaptureRecord>(CAPTURE_CHUNK_SAMPLES)
     private val captureChunkFiles = mutableListOf<File>()
+    private var captureSegmentId = ""
+    private var captureBootCount: Int? = null
+    private var sensorClockNeedsCheck = false
+    private var captureAttemptInterrupted = false
+    private var captureRecoveryError: String? = null
     private var captureSampleCount = 0
     private var captureChunkIndex = 0
     private var captureLimitLogged = false
@@ -137,6 +148,11 @@ class WearWorkoutService : Service(), SensorEventListener {
         ThreadPoolExecutor.AbortPolicy(),
     )
     private var serviceDestroyed = false
+    private val runtimePrefs by lazy { getSharedPreferences("workout-runtime", MODE_PRIVATE) }
+    private var pendingCompletion: String? = null
+    private var lastAppliedCommand = ""
+    private var lastCommandRevision = 0L
+    private val completionRetry = Runnable { replayCompletion() }
     private val pendingCaptureRetry = Runnable { retryPendingCaptures() }
 
     override fun onCreate() {
@@ -160,14 +176,59 @@ class WearWorkoutService : Service(), SensorEventListener {
         } else {
             startForeground(NOTIFICATION_ID, buildNotification())
         }
-        emulatorBridge.start()
+        if (isEmulator) emulatorBridge.start()
+        restoreRuntime()
+        retryDataCleanup()
+        writeStorageReport()
         startPhoneWatchdog()
         schedulePendingCaptureRetry(1_500L)
         broadcastState(force = true)
+        if (pendingCompletion != null) replayCompletion()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.getStringExtra(EXTRA_COMMAND)) {
+        val type = intent?.getStringExtra(EXTRA_COMMAND)
+        if (type in MUTATING_COMMANDS && intent != null) {
+            val rejected = commandStatus(intent)
+            if (rejected != null) {
+                if (rejected == "DUPLICATE") markPhoneAlive()
+                acknowledgeCommand(intent, rejected)
+                if (rejected == "WAITING_COMPLETION") replayCompletion()
+                val mode = restartMode()
+                if (mode == START_NOT_STICKY) stopRuntimeService(startId)
+                return mode
+            }
+            if (captureRecoveryError != null && !recoverCaptureChunks(captureSampleCount.takeIf { it > 0 || captureChunkFiles.isEmpty() })) {
+                val replacement = type in setOf("START", "SET", "REST", "SYNC") &&
+                    (intent.getStringExtra("session") != sessionId || intent.getStringExtra("exerciseId") != exerciseId || !sameSet(intent))
+                if (replacement || type in setOf("STOP", "END", "COMPLETE")) {
+                    if (!quarantineIncompleteCapture()) { acknowledgeCommand(intent, "CAPTURE_RECOVERY_REQUIRED"); return restartMode() }
+                } else {
+                    acknowledgeCommand(intent, "CAPTURE_RECOVERY_REQUIRED")
+                    if (pendingCompletion != null) replayCompletion()
+                    broadcastState(force = true)
+                    return restartMode()
+                }
+            }
+            val incoming = intent.getStringExtra("session").orEmpty()
+            if (sessionId.isNotBlank() && incoming != sessionId) {
+                val saved = runCatching {
+                    check(checkpoint())
+                    if (captureSampleCount > 0) {
+                        val capture = saveCapture()
+                        check(captureSampleCount == 0 || capture != null) { "Previous session capture could not be saved" }
+                        capture?.let(::sendCaptureToPhone); resetCaptureBuffer(deleteChunks = true)
+                    }
+                    closeSessionId(sessionId)
+                    pendingCompletion = null // Explicit replacement closes the old session after preserving its raw capture.
+                }
+                if (saved.isFailure) { Log.e(TAG, "Session switch deferred; original capture retained", saved.exceptionOrNull()); return restartMode() }
+            }
+        }
+        val applied = runCatching {
+        when (type) {
+            "SYNC" -> applySync(intent!!)
+            "SET_ACK" -> acknowledgeCompletion(intent?.getStringExtra("payload").orEmpty())
             "QUERY" -> {
                 broadcastState(force = true)
                 sendLiveState(currentPhase(), running, force = true)
@@ -177,7 +238,7 @@ class WearWorkoutService : Service(), SensorEventListener {
                 // Phone heartbeat messages can arrive after COMPLETE and would
                 // otherwise recreate the foreground workout service forever.
                 // Keep the service alive only while a session is still owned.
-                if (sessionId.isBlank() && !running && !resting && !paused) {
+                if (sessionId.isBlank() && pendingCompletion == null && capturePrefs.getStringSet(KEY_PENDING_CAPTURE_IDS, emptySet()).orEmpty().isEmpty()) {
                     stopRuntimeService(startId)
                 }
             }
@@ -194,15 +255,31 @@ class WearWorkoutService : Service(), SensorEventListener {
                 startRest(intent)
             }
         }
-        return START_NOT_STICKY
+        }
+        if (applied.isFailure) { Log.e(TAG, "Command deferred; durable state retained", applied.exceptionOrNull()); if (captureRecoveryError == null) checkpoint(); return restartMode() }
+        if (type in MUTATING_COMMANDS && intent != null) {
+            val previousRevision = lastCommandRevision
+            val previousCommand = lastAppliedCommand
+            lastCommandRevision = maxOf(lastCommandRevision, intent.getLongExtra("commandRevision", 0))
+            lastAppliedCommand = commandFingerprint(intent)
+            if (checkpoint()) acknowledgeCommand(intent, "APPLIED") else {
+                lastCommandRevision = previousRevision
+                lastAppliedCommand = previousCommand
+            }
+        }
+        val mode = restartMode()
+        if (mode == START_NOT_STICKY) stopRuntimeService(startId)
+        return mode
     }
 
     override fun onDestroy() {
         serviceDestroyed = true
+        checkpoint()
         stopRestTicker()
         phoneWatchdog?.let(handler::removeCallbacks)
         phoneWatchdog = null
         handler.removeCallbacks(pendingCaptureRetry)
+        handler.removeCallbacks(completionRetry)
         sensorManager.unregisterListener(this)
         emulatorBridge.stop()
         outboundExecutor.shutdown()
@@ -212,10 +289,274 @@ class WearWorkoutService : Service(), SensorEventListener {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    private fun commandStatus(intent: Intent): String? {
+        val revision = intent.getLongExtra("commandRevision", 0)
+        if (revision > 0 && revision <= lastCommandRevision) {
+            return if (revision == lastCommandRevision && lastAppliedCommand.isNotBlank() && lastAppliedCommand == commandFingerprint(intent)) "DUPLICATE" else "STALE"
+        }
+        val incoming = intent.getStringExtra("session").orEmpty()
+        val type = intent.getStringExtra(EXTRA_COMMAND).orEmpty()
+        if (incoming.isBlank()) return "INVALID"
+        if (runtimePrefs.getString("closedSessions", "").orEmpty().lines().contains(incoming)) return "CLOSED_SESSION"
+        if (incoming != sessionId && type !in setOf("START", "SYNC") && !(sessionId.isBlank() && type == "SET")) return "WRONG_SESSION"
+        if (incoming != sessionId && sessionId.isNotBlank() && revision == 0L && lastCommandRevision > 0) return "STALE"
+        if (type == "SYNC" && intent.getStringExtra("syncPhase") !in setOf("WORKING", "RESTING", "PAUSED")) return "INVALID"
+        if (pendingCompletion != null && incoming == sessionId && (type in setOf("START", "SET") || (type == "SYNC" && intent.getStringExtra("syncPhase") == "WORKING"))) return "WAITING_COMPLETION"
+        return null
+    }
+
+    private fun commandFingerprint(intent: Intent): String {
+        val fields = listOf(
+            intent.getStringExtra(EXTRA_COMMAND).orEmpty(), intent.getStringExtra("session").orEmpty(),
+            intent.getStringExtra("exerciseId").orEmpty(), intent.getStringExtra("exerciseName").orEmpty(),
+            intent.getStringExtra("setId").orEmpty(), intent.getStringExtra("attemptId").orEmpty(),
+            intent.getIntExtra("setIndex", 0).toString(), intent.getIntExtra("targetReps", 10).toString(),
+            intent.getDoubleExtra("weightKg", Double.NaN).toString(), intent.getIntExtra("restSeconds", 60).toString(),
+            intent.getLongExtra("restEndAtMs", 0L).toString(), intent.getStringExtra("syncPhase").orEmpty(),
+            intent.getLongExtra("pausedRestRemainingMs", 0L).toString(),
+        )
+        return SensorCaptureFormat.sha256(JSONArray(fields).toString().toByteArray(Charsets.UTF_8))
+    }
+
+    private fun acknowledgeCommand(intent: Intent, status: String) {
+        val revision = intent.getLongExtra("commandRevision", 0)
+        if (revision <= 0) return
+        val payload = listOf("1", intent.getStringExtra("session").orEmpty(), revision, status, lastCommandRevision).joinToString("|")
+        sendToPhone(WearSync.PATH_COMMAND_ACK, payload, coalescible = false)
+    }
+
+    private fun applySync(intent: Intent) {
+        val same = sessionId == intent.getStringExtra("session") && exerciseId == intent.getStringExtra("exerciseId") && sameSet(intent)
+        if (same) setIndex = intent.getIntExtra("setIndex", setIndex)
+        when (intent.getStringExtra("syncPhase")) {
+            "RESTING" -> startRest(intent)
+            "PAUSED" -> {
+                val remaining = intent.getLongExtra("pausedRestRemainingMs", 0)
+                if (remaining > 0) {
+                    startRest(Intent(intent).putExtra("restEndAtMs", System.currentTimeMillis() + remaining))
+                    pauseSession()
+                    pausedRestRemainingMs = remaining
+                } else {
+                    if (!same || (!running && !paused)) startSession(intent)
+                    pauseSession()
+                }
+            }
+            "WORKING" -> {
+                if (same && paused && pausedRestRemainingMs == 0L) resumeSession() else startSession(intent)
+            }
+        }
+    }
+
+    private fun replayCompletion() {
+        handler.removeCallbacks(completionRetry)
+        val payload = pendingCompletion ?: return
+        if (checkpoint()) sendToPhone(WearSync.PATH_LIVE, payload, coalescible = false)
+        if (!serviceDestroyed) handler.postDelayed(completionRetry, 3_000L)
+    }
+
+    private fun acknowledgeCompletion(payload: String) {
+        val ack = WearSync.parse(payload)
+        val pending = pendingCompletion?.let(WearSync::parse) ?: return
+        if (ack.size !in setOf(5, 7) || ack[0] != "1" || pending.size < 17 ||
+            ack[1] != pending[1] || ack[2] != pending[2] || ack[3] != pending[4] || ack[4] != pending[16]) return
+        if (pending.getOrNull(17).orEmpty().isNotBlank() && (ack.getOrNull(5) != pending[17] || ack.getOrNull(6) != pending.getOrNull(18))) return
+        pendingCompletion = null
+        if (!persistRuntime()) {
+            pendingCompletion = pending.joinToString("|")
+            return
+        }
+        handler.removeCallbacks(completionRetry)
+        sendToPhone(WearSync.PATH_RECONNECT, WearSync.watchUiReady(sessionId), coalescible = false)
+        if (sessionId.isBlank() && capturePrefs.getStringSet(KEY_PENDING_CAPTURE_IDS, emptySet()).orEmpty().isEmpty()) stopRuntimeService()
+    }
+
+    private fun closeSessionId(id: String) {
+        if (id.isBlank()) return
+        val closed = (runtimePrefs.getString("closedSessions", "").orEmpty().lines().filter { it.isNotBlank() } + id).distinct().takeLast(32)
+        check(runtimePrefs.edit().putString("closedSessions", closed.joinToString("\n")).commit()) { "Failed to close watch session" }
+    }
+
+    private fun restartMode(): Int = if (sessionId.isNotBlank() || pendingCompletion != null || capturePrefs.getStringSet(KEY_PENDING_CAPTURE_IDS, emptySet()).orEmpty().isNotEmpty()) START_STICKY else START_NOT_STICKY
+
+    private fun checkpoint(): Boolean = flushCaptureChunk() && persistRuntime()
+
+    private fun persistRuntime(): Boolean = runCatching {
+        val state = JSONObject().put("session", sessionId).put("exerciseId", exerciseId).put("exerciseName", exerciseName)
+            .put("setIndex", setIndex).put("setId", setId).put("attemptId", attemptId).put("targetReps", targetReps).put("weightKg", weightKg ?: JSONObject.NULL)
+            .put("restSeconds", restSeconds).put("restEndAtMs", restEndAtMs).put("pausedRestRemainingMs", pausedRestRemainingMs)
+            .put("running", running).put("resting", resting).put("paused", paused).put("reps", reps).put("heartRate", heartRate)
+            .put("calibrationStage", calibrationStage?.name ?: JSONObject.NULL).put("pendingCompletion", pendingCompletion ?: JSONObject.NULL)
+            .put("chunks", JSONArray(captureChunkFiles.map { it.name })).put("captureSampleCount", captureSampleCount)
+            .put("captureRecoveryError", captureRecoveryError ?: JSONObject.NULL).put("lastCaptureTimestampNs", lastCaptureTimestampNs)
+            .put("captureAttemptInterrupted", captureAttemptInterrupted).put("captureSegmentId", captureSegmentId)
+            .put("sensorClockNeedsCheck", sensorClockNeedsCheck)
+            .put("bootCount", captureBootCount ?: currentBootCount() ?: JSONObject.NULL)
+            .put("runtimeElapsedMs", android.os.SystemClock.elapsedRealtime())
+        runtimePrefs.edit().putString("state", state.toString()).putLong("commandRevision", lastCommandRevision).putString("lastAppliedCommand", lastAppliedCommand).commit()
+    }.onFailure { Log.e(TAG, "watch runtime persistence failed", it) }.getOrDefault(false)
+
+    private fun restoreRuntime() {
+        lastCommandRevision = runtimePrefs.getLong("commandRevision", 0)
+        lastAppliedCommand = runtimePrefs.getString("lastAppliedCommand", "").orEmpty()
+        val encoded = runtimePrefs.getString("state", null) ?: return
+        runCatching {
+            val state = JSONObject(encoded)
+            sessionId = state.getString("session"); exerciseId = state.getString("exerciseId"); exerciseName = state.getString("exerciseName")
+            setIndex = state.getInt("setIndex"); setId = state.optString("setId"); attemptId = state.optString("attemptId"); targetReps = state.getInt("targetReps")
+            weightKg = if (state.isNull("weightKg")) null else state.getDouble("weightKg")
+            restSeconds = state.getInt("restSeconds"); restEndAtMs = state.getLong("restEndAtMs")
+            pausedRestRemainingMs = state.getLong("pausedRestRemainingMs")
+            running = state.getBoolean("running"); resting = state.getBoolean("resting"); paused = state.getBoolean("paused")
+            reps = state.getInt("reps"); heartRate = 0 // A persisted reading is not a new sensor measurement.
+            calibrationStage = state.optString("calibrationStage").let { name -> CalibrationStage.entries.firstOrNull { it.name == name } }
+            pendingCompletion = if (state.isNull("pendingCompletion")) null else state.getString("pendingCompletion")
+            lastCaptureTimestampNs = state.optLong("lastCaptureTimestampNs")
+            captureAttemptInterrupted = state.optBoolean("captureAttemptInterrupted", false)
+            captureSegmentId = state.optString("captureSegmentId", "")
+            captureBootCount = if (state.has("bootCount") && !state.isNull("bootCount")) state.getInt("bootCount") else null
+            val currentBoot = currentBootCount()
+            val bootChanged = if (captureBootCount != null && currentBoot != null) captureBootCount != currentBoot
+                else state.has("runtimeElapsedMs") && android.os.SystemClock.elapsedRealtime() < state.getLong("runtimeElapsedMs")
+            sensorClockNeedsCheck = state.optBoolean("sensorClockNeedsCheck", false) || (!bootChanged && (captureBootCount == null || currentBoot == null) && lastCaptureTimestampNs > 0L)
+            captureChunkFiles.clear()
+            val chunks = state.getJSONArray("chunks")
+            for (i in 0 until chunks.length()) {
+                val name = chunks.getString(i)
+                require(name == File(name).name && name.startsWith(".capture-"))
+                captureChunkFiles.add(File(filesDir, name))
+            }
+            val expectedCount = if (state.has("captureSampleCount")) state.getInt("captureSampleCount") else null
+            if (bootChanged) {
+                recoverCaptureChunks(expectedCount) // A bad old chunk still belongs to the previous clock domain.
+                if (!separateSensorBoot(currentBoot)) return@runCatching
+            } else if (!recoverCaptureChunks(expectedCount)) return@runCatching
+            captureChunkIndex = (captureChunkFiles.mapNotNull { it.name.removeSuffix(".kcs.part").substringAfterLast('-').toIntOrNull() }.maxOrNull() ?: -1) + 1
+            paired = false; lastPhoneHeartbeatAtMs = 0
+            configureTracking()
+            if (pendingCompletion != null && captureSampleCount > 0) {
+                saveCapture()?.let { sendCaptureToPhone(it); resetCaptureBuffer(deleteChunks = true); persistRuntime() }
+            }
+            if (running && reps >= targetReps) completeSet() else if (running) registerSensors()
+            // The phone resynchronizes an unfinished rest when the heartbeat reconnects.
+        }.onFailure {
+            running = false; resting = false; paused = true
+            captureRecoveryError = it.message ?: "Invalid saved capture runtime"
+            Log.e(TAG, "watch runtime recovery failed; stored state retained", it)
+        }
+    }
+
+    private fun currentBootCount(): Int? = runCatching {
+        android.provider.Settings.Global.getInt(contentResolver, android.provider.Settings.Global.BOOT_COUNT, -1).takeIf { it >= 0 }
+    }.getOrNull()
+
+    /** Sensor timestamps are boot-relative: retain the old stream rather than joining two clocks. */
+    private fun separateSensorBoot(currentBoot: Int?): Boolean {
+        val interrupted = captureAttemptInterrupted || captureSampleCount > 0 || reps > 0 || captureChunkFiles.isNotEmpty() || captureRecords.isNotEmpty()
+        if (captureSampleCount > 0 || captureChunkFiles.isNotEmpty() || captureRecords.isNotEmpty()) {
+            captureRecoveryError = "Sensor time base changed across boot" + captureRecoveryError?.let { ": $it" }.orEmpty()
+            if (!quarantineIncompleteCapture()) {
+                running = false; resting = false; paused = true
+                persistRuntime()
+                return false
+            }
+        } else resetCaptureBuffer(deleteChunks = false)
+        captureAttemptInterrupted = interrupted
+        captureBootCount = currentBoot
+        sensorClockNeedsCheck = false
+        persistRuntime()
+        return true
+    }
+
+    /** Every referenced chunk must exist and validate before the set can be treated as complete. */
+    private fun readCaptureChunks(expectedCount: Int? = null): List<dev.kyungmin.kcoach.core.SensorCaptureDocument> {
+        val documents = captureChunkFiles.map { file ->
+            require(file.canonicalFile.parentFile == filesDir.canonicalFile && file.name.startsWith(".capture-")) { "Invalid capture chunk path" }
+            require(file.isFile) { "Missing capture chunk: ${file.name}" }
+            require(file.length() in 20L..(20L + MAX_CAPTURE_SAMPLES * 40L)) { "Invalid capture chunk size: ${file.name}" }
+            java.io.DataInputStream(file.inputStream()).use { header ->
+                header.skipBytes(8)
+                val count = header.readInt()
+                require(count in 0..MAX_CAPTURE_SAMPLES && file.length() == 20L + count * 40L) { "Invalid capture chunk header: ${file.name}" }
+            }
+            SensorCaptureFormat.read(file.inputStream())
+        }
+        val count = documents.sumOf { it.sampleCount }
+        require(count <= MAX_CAPTURE_SAMPLES && (expectedCount == null || count == expectedCount)) { "Saved capture sample count mismatch" }
+        documents.zipWithNext().forEach { (a, b) ->
+            require(a.endMonotonicNs == null || b.startMonotonicNs == null || a.endMonotonicNs!! < b.startMonotonicNs!!) { "Capture chunks overlap" }
+        }
+        return documents
+    }
+
+    private fun recoverCaptureChunks(expectedCount: Int?): Boolean {
+        if (captureRecords.isNotEmpty() && !flushCaptureChunk()) return false
+        val recovered = runCatching { readCaptureChunks(expectedCount) }
+        if (recovered.isSuccess) {
+            captureSampleCount = recovered.getOrThrow().sumOf { it.sampleCount }
+            captureRecoveryError = null
+            captureChunkIndex = (captureChunkFiles.mapNotNull { it.name.removeSuffix(".kcs.part").substringAfterLast('-').toIntOrNull() }.maxOrNull() ?: -1) + 1
+            return true
+        }
+        // A crash after finalization can leave an old runtime pointing at chunks already replaced by
+        // a durable complete outbox capture. Verify that exact record before declaring anything lost.
+        if (recoverFinalizedCapture(expectedCount)) {
+            resetCaptureBuffer(deleteChunks = false)
+            running = false; resting = false; paused = true
+            persistRuntime()
+            return true
+        }
+        captureSampleCount = expectedCount?.coerceIn(0, MAX_CAPTURE_SAMPLES) ?: captureSampleCount
+        captureRecoveryError = recovered.exceptionOrNull()?.message ?: "Capture recovery failed"
+        running = false; resting = false; paused = true
+        stopRestTicker()
+        sensorManager.unregisterListener(this)
+        persistRuntime()
+        Log.e(TAG, "capture recovery blocked; every original reference retained", recovered.exceptionOrNull())
+        return false
+    }
+
+    private fun recoverFinalizedCapture(expectedCount: Int?): Boolean =
+        capturePrefs.getStringSet(KEY_PENDING_CAPTURE_IDS, emptySet()).orEmpty().any { id ->
+            runCatching {
+                require(id.matches(Regex("[A-Za-z0-9._-]{1,160}")))
+                val raw = File(filesDir, "$id.kcs")
+                require(raw.isFile && raw.length() <= dev.kyungmin.kcoach.core.CaptureValidator.MAX_CAPTURE_BYTES)
+                val manifest = WireCodec.decode(File(filesDir, "$id.manifest").readText())
+                require(manifest.payload[dev.kyungmin.kcoach.core.WirePayloadKeys.CAPTURE_ID] == id && manifest.sessionId == sessionId)
+                require(manifest.payload[dev.kyungmin.kcoach.core.WirePayloadKeys.EXERCISE_ID] == exerciseId)
+                if (setId.isNotBlank()) require(manifest.setId == setId && manifest.payload[dev.kyungmin.kcoach.core.WirePayloadKeys.ATTEMPT_ID] == attemptId)
+                else require(manifest.payload[dev.kyungmin.kcoach.core.WirePayloadKeys.ATTEMPT_ID].isNullOrBlank() && manifest.payload[dev.kyungmin.kcoach.core.WirePayloadKeys.SET_INDEX]?.toIntOrNull() == setIndex)
+                val validated = dev.kyungmin.kcoach.core.CaptureValidator.validate(manifest, raw.readBytes())
+                require(expectedCount == null || validated.document.sampleCount == expectedCount)
+                require(lastCaptureTimestampNs == 0L || validated.document.endMonotonicNs == lastCaptureTimestampNs)
+                true
+            }.getOrDefault(false)
+        }
+
+    /** Retain the incomplete original and its binding before accepting an explicit replacement/end. */
+    private fun quarantineIncompleteCapture(): Boolean = runCatching {
+        check(flushCaptureChunk()) { "Incomplete original could not be flushed" }
+        val record = JSONObject().put("state", "INCOMPLETE").put("session", sessionId).put("exerciseId", exerciseId)
+            .put("setId", setId).put("attemptId", attemptId).put("setIndex", setIndex).put("expectedSamples", captureSampleCount)
+            .put("reason", captureRecoveryError).put("chunks", JSONArray(captureChunkFiles.map { it.name }))
+            .put("runtime", runtimePrefs.getString("state", null)).put("savedAtMs", System.currentTimeMillis())
+        atomicWrite(File(filesDir, "capture-incomplete-${UUID.randomUUID()}.json"), record.toString().toByteArray(Charsets.UTF_8))
+        resetCaptureBuffer(deleteChunks = false)
+        writeStorageReport()
+        true
+    }.onFailure { Log.e(TAG, "incomplete capture quarantine failed; runtime retained", it) }.getOrDefault(false)
+
     private fun markPhoneAlive() {
+        val reconnected = !paired
         lastPhoneHeartbeatAtMs = System.currentTimeMillis()
         if (!paired) paired = true
         broadcastState(force = true)
+        if (reconnected) {
+            retryDataCleanup()
+            replayCompletion()
+            retryPendingCaptures()
+            sendToPhone(WearSync.PATH_RECONNECT, WearSync.watchUiReady(sessionId), coalescible = false)
+        }
     }
 
     private fun startPhoneWatchdog() {
@@ -235,20 +576,17 @@ class WearWorkoutService : Service(), SensorEventListener {
 
     private fun resetForPhoneDisconnect() {
         if (!paired && !running && !resting && !paused) return
-        saveCapture()?.let(::sendCaptureToPhone)
-        stopRestTicker()
-        cancelMeasurementPreparation()
-        sensorManager.unregisterListener(this)
-        running = false
-        resting = false
-        paused = false
         paired = false
-        pausedRestRemainingMs = 0L
         lastPhoneHeartbeatAtMs = 0L
-        restEndAtMs = 0L
-        resetSessionFields()
+        checkpoint()
         broadcastState(force = true)
-        stopRuntimeService()
+    }
+
+    private fun sameSet(intent: Intent): Boolean {
+        val incomingId = intent.getStringExtra("setId").orEmpty()
+        val incomingAttempt = intent.getStringExtra("attemptId").orEmpty()
+        return if (incomingId.isNotBlank() || incomingAttempt.isNotBlank()) incomingId == setId && incomingAttempt == attemptId
+        else setId.isBlank() && attemptId.isBlank() && intent.getIntExtra("setIndex", 0) == setIndex
     }
 
     private fun startSession(intent: Intent) {
@@ -257,22 +595,10 @@ class WearWorkoutService : Service(), SensorEventListener {
         val incomingExerciseId = intent.getStringExtra("exerciseId").orEmpty()
         val incomingSetIndex = intent.getIntExtra("setIndex", 0)
         if (
-            resting && incomingSessionId == sessionId &&
-            (incomingExerciseId != exerciseId || incomingSetIndex != setIndex)
-        ) {
-            Log.w(
-                TAG,
-                "ignored stale set command during rest session=$incomingSessionId " +
-                    "exercise=$incomingExerciseId set=$incomingSetIndex " +
-                    "restTarget=$exerciseId:$setIndex",
-            )
-            broadcastState(force = true)
-            return
-        }
-        if (
             running && incomingSessionId == sessionId && incomingExerciseId == exerciseId &&
-            incomingSetIndex == setIndex
+            sameSet(intent)
         ) {
+            setIndex = incomingSetIndex
             targetReps = intent.getIntExtra("targetReps", targetReps).coerceAtLeast(1)
             weightKg = intent.getDoubleExtra("weightKg", Double.NaN).takeUnless { it.isNaN() }
             restSeconds = intent.getIntExtra("restSeconds", restSeconds).coerceAtLeast(0)
@@ -281,14 +607,51 @@ class WearWorkoutService : Service(), SensorEventListener {
             broadcastState(force = true)
             return
         }
+        if (captureSampleCount > 0 && (incomingSessionId != sessionId || incomingExerciseId != exerciseId || !sameSet(intent))) {
+            val oldCapture = saveCapture()
+            check(captureSampleCount == 0 || oldCapture != null) { "Previous capture could not be saved" }
+            oldCapture?.let(::sendCaptureToPhone)
+            resetCaptureBuffer(deleteChunks = true)
+        }
         stopRestTicker()
         cancelMeasurementPreparation()
         resting = false
         paused = false
         pausedRestRemainingMs = 0L
+        if (incomingSessionId != sessionId) heartRate = 0
         sessionId = incomingSessionId
         exerciseId = incomingExerciseId
         exerciseName = intent.getStringExtra("exerciseName").orEmpty().ifBlank { exerciseId.replace('_', ' ') }
+        setIndex = incomingSetIndex
+        setId = intent.getStringExtra("setId").orEmpty()
+        attemptId = intent.getStringExtra("attemptId").orEmpty()
+        targetReps = intent.getIntExtra("targetReps", 10).coerceAtLeast(1)
+        weightKg = intent.getDoubleExtra("weightKg", Double.NaN).takeUnless { it.isNaN() }
+        restSeconds = intent.getIntExtra("restSeconds", 60).coerceAtLeast(0)
+        running = true
+        reps = 0
+        calibrationStage = if (sessionId.startsWith("calibration-")) CalibrationStage.BASELINE else null
+        configureTracking()
+        // Any unresolved previous chunks stay on disk instead of being erased
+        // when a replacement set starts.
+        resetCaptureBuffer(deleteChunks = false)
+        sensorEventCount = 0
+        uiBroadcastCount = 0
+        liveStateCount = 0
+        maxObservedOutboundQueue = 0
+        lastSensorAccuracy = -1
+        if (sessionId.isBlank()) sessionId = "watch-${System.currentTimeMillis()}"
+        registerSensors()
+        sendLiveState(currentWorkingPhase(), true, force = true)
+        if (calibrationStage == CalibrationStage.BASELINE) {
+            Log.i(CALIBRATION_TAG, "stage=BASELINE session=$sessionId exerciseId=$exerciseId")
+        } else if (!measurementReady) {
+            sendLiveState(currentWorkingPhase(), true, force = true)
+        }
+        broadcastState(force = true)
+    }
+
+    private fun configureTracking() {
         val genericProfile = ExerciseTrackingProfiles.resolve(exerciseId, exerciseName)
         val personalProfile = getSharedPreferences("personal-profiles", MODE_PRIVATE)
             .getString(exerciseId, null)
@@ -298,13 +661,6 @@ class WearWorkoutService : Service(), SensorEventListener {
         } else {
             PersonalCalibrationBuilder.personalizedTrackingProfile(personalProfile, genericProfile)
         }
-        setIndex = incomingSetIndex
-        targetReps = intent.getIntExtra("targetReps", 10).coerceAtLeast(1)
-        weightKg = intent.getDoubleExtra("weightKg", Double.NaN).takeUnless { it.isNaN() }
-        restSeconds = intent.getIntExtra("restSeconds", 60).coerceAtLeast(0)
-        running = true
-        reps = 0
-        calibrationStage = if (sessionId.startsWith("calibration-")) CalibrationStage.BASELINE else null
         forearmRotationDetector = if (trackingProfile.signal == TrackingSignal.FOREARM_ROTATION) {
             ForearmRotationRepDetector(trackingProfile)
         } else {
@@ -322,28 +678,19 @@ class WearWorkoutService : Service(), SensorEventListener {
         measurementArmed = measurementReady
         startPoseGate = if (measurementReady) null else
             StartPoseStabilityGate(StartPoseGateConfig.forProfile(trackingProfile))
-        // Any unresolved previous chunks stay on disk instead of being erased
-        // when a replacement set starts.
-        resetCaptureBuffer(deleteChunks = false)
-        sensorEventCount = 0
-        uiBroadcastCount = 0
-        liveStateCount = 0
-        maxObservedOutboundQueue = 0
-        lastSensorAccuracy = -1
-        if (sessionId.isBlank()) sessionId = "watch-${System.currentTimeMillis()}"
-        heartRate = heartRate.coerceAtLeast(60)
-        registerSensors()
-        sendLiveState(currentWorkingPhase(), true, force = true)
-        if (calibrationStage == CalibrationStage.BASELINE) {
-            Log.i(CALIBRATION_TAG, "stage=BASELINE session=$sessionId exerciseId=$exerciseId")
-        } else if (!measurementReady) {
-            sendLiveState(currentWorkingPhase(), true, force = true)
-        }
-        broadcastState(force = true)
     }
 
     private fun startRest(intent: Intent) {
+        if (captureSampleCount > 0 && (!sameSet(intent) || intent.getStringExtra("exerciseId").orEmpty().let { it.isNotBlank() && it != exerciseId })) {
+            val oldCapture = saveCapture()
+            check(captureSampleCount == 0 || oldCapture != null) { "Completed capture must be saved before rest changes its identity" }
+            oldCapture?.let(::sendCaptureToPhone); resetCaptureBuffer(deleteChunks = true)
+        }
         markPhoneAlive()
+        intent.getStringExtra("session")?.takeIf { it.isNotBlank() }?.let {
+            if (it != sessionId) heartRate = 0
+            sessionId = it
+        }
         running = false
         resting = true
         paused = false
@@ -357,9 +704,10 @@ class WearWorkoutService : Service(), SensorEventListener {
         intent.getStringExtra("exerciseName")?.takeIf { it.isNotBlank() && it != "휴식" }
             ?.let { exerciseName = it }
         setIndex = intent.getIntExtra("setIndex", setIndex).coerceAtLeast(0)
+        setId = intent.getStringExtra("setId").orEmpty()
+        attemptId = intent.getStringExtra("attemptId").orEmpty()
         targetReps = intent.getIntExtra("targetReps", targetReps).coerceAtLeast(1)
         weightKg = intent.getDoubleExtra("weightKg", Double.NaN).takeUnless { it.isNaN() }
-        heartRate = heartRate.coerceAtLeast(60)
         heartRateSensor?.let { sensor ->
             if (hasBodySensorPermission()) sensorManager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_NORMAL)
         }
@@ -374,6 +722,7 @@ class WearWorkoutService : Service(), SensorEventListener {
                 if (left <= 0) {
                     resting = false
                     restEndAtMs = 0L
+                    persistRuntime()
                     sendLiveState("REST_COMPLETE", false, force = true)
                     broadcastState(force = true)
                 } else {
@@ -396,6 +745,7 @@ class WearWorkoutService : Service(), SensorEventListener {
         stopRestTicker()
         cancelMeasurementPreparation()
         sensorManager.unregisterListener(this)
+        heartRate = 0
         sendLiveState("PAUSED", false, force = true)
         broadcastState(force = true)
     }
@@ -408,9 +758,12 @@ class WearWorkoutService : Service(), SensorEventListener {
             restEndAtMs = System.currentTimeMillis() + pausedRestRemainingMs
             pausedRestRemainingMs = 0L
             val synthetic = Intent(this, WearWorkoutService::class.java).putExtra(EXTRA_COMMAND, "REST")
+                .putExtra("session", sessionId).putExtra("exerciseId", exerciseId).putExtra("exerciseName", exerciseName)
+                .putExtra("setIndex", setIndex).putExtra("setId", setId).putExtra("attemptId", attemptId)
+                .putExtra("targetReps", targetReps).putExtra("weightKg", weightKg ?: Double.NaN)
                 .putExtra("restSeconds", restSeconds)
                 .putExtra("restEndAtMs", restEndAtMs)
-            startService(synthetic)
+            startRest(synthetic)
         } else {
             running = true
             registerSensors()
@@ -440,6 +793,7 @@ class WearWorkoutService : Service(), SensorEventListener {
         cancelMeasurementPreparation()
         sensorManager.unregisterListener(this)
         val savedCapture = saveCapture()
+        check(captureSampleCount == 0 || savedCapture != null) { "Session end deferred; original capture retained" }
         savedCapture?.let(::sendCaptureToPhone)
         sendLiveState(phase, false, force = true)
         sendToPhone(
@@ -447,10 +801,12 @@ class WearWorkoutService : Service(), SensorEventListener {
             WearSync.completion(sessionId, exerciseId, setIndex, reps, heartRate, phase, captureSampleCount),
         )
         restEndAtMs = 0L
+        closeSessionId(sessionId)
         resetSessionFields()
+        persistRuntime()
         broadcastState(force = true)
         val pendingCaptures = capturePrefs.getStringSet(KEY_PENDING_CAPTURE_IDS, emptySet()).orEmpty()
-        if (pendingCaptures.isEmpty()) stopRuntimeService(startId)
+        if (pendingCaptures.isEmpty() && pendingCompletion == null) stopRuntimeService(startId)
         Log.i(TAG, "finishSession end phase=$phase")
     }
 
@@ -475,6 +831,10 @@ class WearWorkoutService : Service(), SensorEventListener {
                 lastAccel = event.values.copyOf()
             }
             Sensor.TYPE_GYROSCOPE -> {
+                if (sensorClockNeedsCheck && running) {
+                    if (event.timestamp < lastCaptureTimestampNs && !separateSensorBoot(currentBootCount())) return
+                    sensorClockNeedsCheck = false
+                }
                 lastGyro = event.values.copyOf()
                 if (running && trackingProfile.mode != TrackingMode.MANUAL_REQUIRED) {
                     val sensorSample = SensorSample(
@@ -509,7 +869,10 @@ class WearWorkoutService : Service(), SensorEventListener {
                     }
                 }
             }
-            Sensor.TYPE_HEART_RATE -> if (event.values.isNotEmpty()) heartRate = event.values[0].toInt().coerceIn(0, 240)
+            Sensor.TYPE_HEART_RATE -> {
+                val reading = event.values.firstOrNull()
+                heartRate = reading?.takeIf { it.isFinite() && it in 20f..240f }?.toInt() ?: 0
+            }
         }
         lastSensorAccuracy = event.accuracy
         if (running && measurementReady && event.sensor.type == Sensor.TYPE_GYROSCOPE && nowMs - lastSampleAtMs >= 20L) {
@@ -547,23 +910,29 @@ class WearWorkoutService : Service(), SensorEventListener {
         running = false
         unregisterMotionSensors()
         cancelMeasurementPreparation()
+        if (!wasCalibration) {
+            pendingCompletion = WearSync.liveState(sessionId, exerciseId, exerciseName, setIndex, reps, targetReps,
+                weightKg, heartRate, "SET_COMPLETE", false, restEndAtMs, captureSampleCount, trackingProfile.id,
+                trackingProfile.calibrationProfileVersion != null, UUID.randomUUID().toString(), setId, attemptId)
+            if (!checkpoint()) {
+                Log.e(TAG, "completion could not be persisted; raw capture retained")
+                return
+            }
+        }
         val savedCapture = saveCapture()
         savedCapture?.let(::sendCaptureToPhone)
         if (wasCalibration) {
             Log.i(CALIBRATION_TAG, "stage=CALIBRATION_RESULT session=$sessionId exerciseId=$exerciseId reps=$reps")
         }
-        sendLiveState(
-            if (wasCalibration) "CALIBRATION_RESULT" else "SET_COMPLETE",
-            false,
-            force = true,
-        )
+        if (wasCalibration) sendLiveState("CALIBRATION_RESULT", false, force = true) else replayCompletion()
         if (wasCalibration) vibrateCompleted()
         calibrationStage = null
         measurementReady = false
         measurementArmed = false
         startPoseGate = null
         broadcastState(force = true)
-        resetCaptureBuffer(deleteChunks = savedCapture != null)
+        if (savedCapture != null || captureSampleCount == 0) resetCaptureBuffer(deleteChunks = true)
+        persistRuntime()
         Log.i(
             TAG,
             "runtime load sensorEvents=$sensorEventCount uiBroadcasts=$uiBroadcastCount " +
@@ -590,6 +959,7 @@ class WearWorkoutService : Service(), SensorEventListener {
     private fun recordDetectedRep() {
         if (!running || trackingProfile.mode == TrackingMode.MANUAL_REQUIRED) return
         reps += 1
+        checkpoint()
         vibrateShort()
         if (reps >= targetReps) completeSet()
     }
@@ -627,6 +997,7 @@ class WearWorkoutService : Service(), SensorEventListener {
                 captureSampleCount,
                 trackingProfile.id,
                 trackingProfile.calibrationProfileVersion != null,
+                setId = setId, attemptId = attemptId,
             ),
             coalescible = !critical,
         )
@@ -643,11 +1014,11 @@ class WearWorkoutService : Service(), SensorEventListener {
         }
         val task = OutboundTask(path, priority, outboundSequence.incrementAndGet()) {
             runCatching {
-                Tasks.await(Wearable.getNodeClient(this).connectedNodes).forEach { node ->
-                    Tasks.await(Wearable.getMessageClient(this).sendMessage(node.id, path, payload.toByteArray()))
+                Tasks.await(Wearable.getNodeClient(this).connectedNodes, 2, TimeUnit.SECONDS).forEach { node ->
+                    Tasks.await(Wearable.getMessageClient(this).sendMessage(node.id, path, payload.toByteArray()), 2, TimeUnit.SECONDS)
                 }
             }
-            emulatorBridge.send(path, payload)
+            if (isEmulator) emulatorBridge.send(path, payload)
         }
         synchronized(outboundQueue) {
             if (priority == PRIORITY_LIVE && coalescible) {
@@ -691,14 +1062,17 @@ class WearWorkoutService : Service(), SensorEventListener {
     )
 
     private fun saveCapture(): SavedCapture? {
-        if (captureSampleCount == 0 || sessionId.isBlank()) return null
+        if (captureSampleCount == 0 || sessionId.isBlank() || captureRecoveryError != null) return null
+        if (captureAttemptInterrupted) {
+            captureRecoveryError = "Sensor attempt was interrupted by reboot"
+            quarantineIncompleteCapture()
+            return null // Both boot streams stay recoverable; neither is a complete set analysis.
+        }
         return runCatching {
             check(flushCaptureChunk()) { "failed to flush capture chunk" }
-            val allRecords = captureChunkFiles.flatMap { chunk ->
-                SensorCaptureFormat.read(chunk.inputStream()).records
-            }
+            val allRecords = readCaptureChunks(captureSampleCount).flatMap { it.records }
             check(allRecords.size == captureSampleCount) { "capture chunk sample count mismatch" }
-            val captureId = "capture-$sessionId-${System.currentTimeMillis()}"
+            val captureId = "capture-${UUID.randomUUID()}"
             val fileName = "$captureId.kcs"
             val bytes = ByteArrayOutputStream().use { output ->
                 SensorCaptureFormat.write(output, allRecords, 50.0)
@@ -717,7 +1091,7 @@ class WearWorkoutService : Service(), SensorEventListener {
             val manifest = WireMessages.captureManifest(
                 sessionId = sessionId,
                 exerciseSessionId = exerciseId,
-                setId = "$sessionId-set-$setIndex",
+                setId = setId.ifBlank { "$sessionId-set-$setIndex" },
                 captureId = captureId,
                 formatVersion = SensorCaptureFormat.FORMAT_VERSION,
                 compression = "NONE",
@@ -732,15 +1106,20 @@ class WearWorkoutService : Service(), SensorEventListener {
                 exerciseId = exerciseId,
                 exerciseName = exerciseName,
                 setIndex = setIndex,
+                attemptId = attemptId,
             ).let(WireCodec::encode)
             atomicWrite(File(filesDir, "$captureId.manifest"), manifest.toByteArray(Charsets.UTF_8))
             rememberPendingCapture(captureId)
+            writeStorageReport()
             sendToPhone(WearSync.PATH_CAPTURE_MANIFEST_V3, manifest)
             Log.i(TAG, "capture saved id=$captureId samples=${document.sampleCount} bytes=${bytes.size}")
             captureChunkFiles.forEach(File::delete)
             captureChunkFiles.clear()
             SavedCapture(captureId, fileName, bytes, manifest)
         }.onFailure {
+            captureRecoveryError = it.message ?: "Capture finalization failed"
+            running = false; resting = false; paused = true
+            persistRuntime()
             Log.e(TAG, "capture save failed session=$sessionId set=$setIndex samples=$captureSampleCount", it)
         }.getOrNull()
     }
@@ -751,7 +1130,6 @@ class WearWorkoutService : Service(), SensorEventListener {
             output.write(bytes)
             output.fd.sync()
         }
-        if (destination.exists()) check(destination.delete()) { "failed to replace ${destination.name}" }
         check(temp.renameTo(destination)) { "failed to commit ${destination.name}" }
     }
 
@@ -772,12 +1150,16 @@ class WearWorkoutService : Service(), SensorEventListener {
         if (captureRecords.isEmpty()) return true
         return runCatching {
             val safeSession = sessionId.replace(Regex("[^A-Za-z0-9._-]"), "_").take(80)
-            val chunk = File(filesDir, ".capture-$safeSession-$setIndex-${captureChunkIndex++}.kcs.part")
-            chunk.outputStream().use { output ->
+            val identityKey = "$setId:$attemptId" + captureSegmentId.takeIf { it.isNotBlank() }?.let { ":$it" }.orEmpty()
+            val identity = UUID.nameUUIDFromBytes(identityKey.toByteArray(Charsets.UTF_8))
+            val chunk = File(filesDir, ".capture-$safeSession-$identity-${captureChunkIndex++}.kcs.part")
+            val bytes = ByteArrayOutputStream().also { output ->
                 SensorCaptureFormat.write(output, captureRecords.toList(), 50.0)
-            }
+            }.toByteArray()
+            atomicWrite(chunk, bytes)
             captureChunkFiles += chunk
             captureRecords.clear()
+            persistRuntime()
             true
         }.getOrElse {
             Log.e(TAG, "capture chunk flush failed", it)
@@ -786,6 +1168,11 @@ class WearWorkoutService : Service(), SensorEventListener {
     }
 
     private fun resetCaptureBuffer(deleteChunks: Boolean) {
+        captureSegmentId = UUID.randomUUID().toString()
+        captureBootCount = currentBootCount()
+        sensorClockNeedsCheck = false
+        captureAttemptInterrupted = false
+        captureRecoveryError = null
         captureRecords.clear()
         if (deleteChunks) captureChunkFiles.forEach(File::delete)
         captureChunkFiles.clear()
@@ -830,8 +1217,8 @@ class WearWorkoutService : Service(), SensorEventListener {
             return
         }
         submitCaptureTransfer(capture.captureId) {
-            val delivered = runCatching {
-                val request = PutDataMapRequest.create("${WearSync.PATH_CAPTURE_ASSET_V3}/${capture.captureId}")
+            runCatching {
+                val request = PutDataMapRequest.create(WearSync.captureAssetPath(capture.captureId))
                 request.dataMap.putString("wireManifest", capture.manifest)
                 request.dataMap.putAsset("captureAsset", Asset.createFromBytes(capture.bytes))
                 request.dataMap.putLong("updatedAt", System.currentTimeMillis())
@@ -840,11 +1227,16 @@ class WearWorkoutService : Service(), SensorEventListener {
                     CAPTURE_TRANSFER_TIMEOUT_MS,
                     TimeUnit.MILLISECONDS,
                 )
-                true
-            }.getOrDefault(false)
+            }.onFailure { Log.w(TAG, "capture transfer deferred id=${capture.captureId}", it) }
             handler.post {
                 captureSendInFlight.remove(capture.captureId)
-                if (!delivered) schedulePendingCaptureRetry()
+                // A DataItem write does not acknowledge reception on the phone.
+                if (capturePrefs.getStringSet(KEY_PENDING_CAPTURE_IDS, emptySet()).orEmpty().contains(capture.captureId)) schedulePendingCaptureRetry()
+                else if (capturePrefs.getString(KEY_ACKED_CAPTURE_IDS, "").orEmpty().lines().contains(capture.captureId)) {
+                    val cleanup = capturePrefs.getStringSet(KEY_PENDING_DATA_CLEANUP, emptySet()).orEmpty().toMutableSet()
+                    cleanup.add(capture.captureId)
+                    if (capturePrefs.edit().putStringSet(KEY_PENDING_DATA_CLEANUP, cleanup).commit()) retryDataCleanup()
+                }
             }
         }
     }
@@ -866,29 +1258,77 @@ class WearWorkoutService : Service(), SensorEventListener {
     }
 
     private fun acknowledgeCapture(captureId: String) {
-        if (captureId.isBlank()) return
-        Log.i(
-            EVENT_TAG,
-            KCoachEventTrace.format(
-                marker = KCoachEventMarker.CAPTURE_ACK_RECEIVED,
-                sessionId = sessionId,
-                exerciseId = exerciseId,
-                setIndex = setIndex,
-                captureId = captureId,
-            ),
-        )
-        deleteFile("$captureId.kcs")
-        deleteFile("$captureId.manifest")
-        captureSendInFlight.remove(captureId)
+        if (!captureId.matches(Regex("[A-Za-z0-9._-]{1,160}"))) return
         val pending = capturePrefs.getStringSet(KEY_PENDING_CAPTURE_IDS, emptySet()).orEmpty().toMutableSet()
-        pending.remove(captureId)
-        capturePrefs.edit().putStringSet(KEY_PENDING_CAPTURE_IDS, pending).apply()
-        if (!running && !resting && !paused && pending.isEmpty()) stopRuntimeService()
+        if (!pending.remove(captureId)) return
+        val cleanup = capturePrefs.getStringSet(KEY_PENDING_DATA_CLEANUP, emptySet()).orEmpty().toMutableSet()
+        if (!isEmulator) cleanup.add(captureId)
+        val acked = (capturePrefs.getString(KEY_ACKED_CAPTURE_IDS, "").orEmpty().lines().filter { it.isNotBlank() } + captureId).distinct().takeLast(256)
+        check(capturePrefs.edit().putStringSet(KEY_PENDING_CAPTURE_IDS, pending).putStringSet(KEY_PENDING_DATA_CLEANUP, cleanup)
+            .putString(KEY_ACKED_CAPTURE_IDS, acked.joinToString("\n")).commit()) { "Failed to persist capture acknowledgement" }
+        deleteFile("$captureId.kcs"); deleteFile("$captureId.manifest")
+        captureSendInFlight.remove(captureId)
+        retryDataCleanup(); writeStorageReport()
+        if (sessionId.isBlank() && pendingCompletion == null && pending.isEmpty()) stopRuntimeService()
+    }
+
+    /** Only transport copies with a durable phone ACK may be removed. Failed removals stay queued. */
+    private fun retryDataCleanup() {
+        if (serviceDestroyed || !dataCleanupInFlight.compareAndSet(false, true)) return
+        val id = capturePrefs.getStringSet(KEY_PENDING_DATA_CLEANUP, emptySet()).orEmpty().firstOrNull()
+        if (id == null) { dataCleanupInFlight.set(false); return }
+        val settled = java.util.concurrent.atomic.AtomicBoolean(false)
+        val timeout = Runnable {
+            if (settled.compareAndSet(false, true)) {
+                dataCleanupInFlight.set(false)
+                Log.w(TAG, "DataItem cleanup timed out; retained id=$id")
+            }
+        }
+        handler.postDelayed(timeout, CAPTURE_TRANSFER_TIMEOUT_MS)
+        runCatching {
+            val uri = android.net.Uri.parse("wear://*${WearSync.captureAssetPath(id)}")
+            com.google.android.gms.wearable.Wearable.getDataClient(this)
+                .deleteDataItems(uri, com.google.android.gms.wearable.DataClient.FILTER_LITERAL)
+                .addOnCompleteListener { task ->
+                    if (!settled.compareAndSet(false, true)) return@addOnCompleteListener
+                    handler.removeCallbacks(timeout)
+                    dataCleanupInFlight.set(false)
+                    if (task.isSuccessful) {
+                        val raw = File(filesDir, "$id.kcs"); val manifest = File(filesDir, "$id.manifest")
+                        if ((raw.isFile && !raw.delete()) || (manifest.isFile && !manifest.delete())) return@addOnCompleteListener
+                        val latest = capturePrefs.getStringSet(KEY_PENDING_DATA_CLEANUP, emptySet()).orEmpty().toMutableSet()
+                        latest.remove(id)
+                        if (capturePrefs.edit().putStringSet(KEY_PENDING_DATA_CLEANUP, latest).commit()) {
+                            writeStorageReport(); retryDataCleanup()
+                        }
+                    } else Log.w(TAG, "Acknowledged DataItem cleanup deferred id=$id", task.exception)
+                }
+        }.onFailure {
+            if (settled.compareAndSet(false, true)) { handler.removeCallbacks(timeout); dataCleanupInFlight.set(false) }
+            Log.w(TAG, "DataItem cleanup retained id=$id", it)
+        }
+    }
+
+    private fun writeStorageReport() {
+        runCatching {
+            val pending = capturePrefs.getStringSet(KEY_PENDING_CAPTURE_IDS, emptySet()).orEmpty()
+            val cleanup = capturePrefs.getStringSet(KEY_PENDING_DATA_CLEANUP, emptySet()).orEmpty()
+            val files = filesDir.listFiles().orEmpty().filter { it.isFile && (it.name.endsWith(".kcs") || it.name.endsWith(".manifest") || it.name.endsWith(".kcs.part")) }
+            val referenced = captureChunkFiles.map { it.name }.toSet() + (pending + cleanup).flatMap { listOf("$it.kcs", "$it.manifest") }
+            val incomplete = filesDir.listFiles().orEmpty().filter { it.name.startsWith("capture-incomplete-") && it.name.endsWith(".json") }
+            val report = JSONObject().put("generatedAtMs", System.currentTimeMillis()).put("queuedCaptures", pending.size)
+                .put("incompleteCaptures", incomplete.size).put("captureRecoveryRequired", captureRecoveryError != null)
+                .put("missingRuntimeChunks", captureChunkFiles.count { !it.isFile })
+                .put("missingQueuedFiles", pending.count { !File(filesDir, "$it.kcs").isFile || !File(filesDir, "$it.manifest").isFile })
+                .put("pendingDataCleanup", cleanup.size).put("storedBytes", files.sumOf { it.length() })
+                .put("retainedUnknownBytes", files.filter { it.name !in referenced }.sumOf { it.length() })
+            atomicWrite(File(filesDir, "capture-storage.json"), report.toString().toByteArray(Charsets.UTF_8))
+        }.onFailure { Log.w(TAG, "Watch storage report unavailable", it) }
     }
 
     private fun rememberPendingCapture(captureId: String) {
         val pending = capturePrefs.getStringSet(KEY_PENDING_CAPTURE_IDS, emptySet()).orEmpty().toMutableSet()
-        if (pending.add(captureId)) capturePrefs.edit().putStringSet(KEY_PENDING_CAPTURE_IDS, pending).apply()
+        if (pending.add(captureId)) check(capturePrefs.edit().putStringSet(KEY_PENDING_CAPTURE_IDS, pending).commit()) { "Failed to save pending capture" }
     }
 
     private fun retryPendingCaptures() {
@@ -896,7 +1336,8 @@ class WearWorkoutService : Service(), SensorEventListener {
             val captureFile = File(filesDir, "$captureId.kcs")
             val manifestFile = File(filesDir, "$captureId.manifest")
             if (!captureFile.isFile || !manifestFile.isFile) {
-                acknowledgeCapture(captureId)
+                Log.e(TAG, "Pending capture has missing files; delivery is not acknowledged id=$captureId")
+                writeStorageReport()
                 return@forEach
             }
             val manifest = runCatching { manifestFile.readText() }.getOrNull() ?: return@forEach
@@ -907,6 +1348,7 @@ class WearWorkoutService : Service(), SensorEventListener {
 
     private fun resetSessionFields() {
         sessionId = ""
+        setId = ""; attemptId = ""
         exerciseId = ""
         exerciseName = "운동 대기 중"
         setIndex = 0
@@ -966,6 +1408,7 @@ class WearWorkoutService : Service(), SensorEventListener {
     }
 
     private fun currentPhase(): String = when {
+        captureRecoveryError != null -> "CAPTURE_RECOVERY_REQUIRED"
         paused -> "PAUSED"
         resting -> "RESTING"
         running -> currentWorkingPhase()
@@ -1025,6 +1468,7 @@ class WearWorkoutService : Service(), SensorEventListener {
         get() = Build.FINGERPRINT.contains("generic", ignoreCase = true) || Build.MODEL.contains("sdk_gwear", ignoreCase = true)
 
     companion object {
+        private val MUTATING_COMMANDS = setOf("START", "SET", "SYNC", "REST", "PAUSE", "RESUME", "STOP", "END", "COMPLETE", "SET_COMPLETE")
         private const val TAG = "KCoachCapture"
         private const val EVENT_TAG = "KCoachEvent"
         private const val CALIBRATION_TAG = "KCoachCalibration"
@@ -1036,6 +1480,8 @@ class WearWorkoutService : Service(), SensorEventListener {
         private const val PHONE_WATCHDOG_INTERVAL_MS = 3_000L
         private const val CAPTURE_PREFS = "capture-outbox"
         private const val KEY_PENDING_CAPTURE_IDS = "pendingCaptureIds"
+        private const val KEY_PENDING_DATA_CLEANUP = "pendingDataCleanup"
+        private const val KEY_ACKED_CAPTURE_IDS = "ackedCaptureIds"
         private const val CAPTURE_RETRY_DELAY_MS = 5_000L
         private const val CAPTURE_TRANSFER_TIMEOUT_MS = 12_000L
         private const val CAPTURE_CHUNK_SAMPLES = 250

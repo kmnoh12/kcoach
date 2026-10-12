@@ -3,35 +3,35 @@ package dev.kyungmin.kcoach.core
 data class LoggedSet(val weightKg: Double?, val reps: Int)
 
 /** What was actually done for one exercise in one session. */
-data class ExerciseLog(val exerciseId: String, val epochDay: Long, val sets: List<LoggedSet>) {
+data class ExerciseLog(val exerciseId: String, val epochDay: Long, val sets: List<LoggedSet>, val sessionId: String? = null, val startedAtMs: Long = 0) {
     val volumeKg: Double get() = sets.sumOf { (it.weightKg ?: 0.0) * it.reps }
     val totalReps: Int get() = sets.sumOf { it.reps }
-    val topWeightKg: Double? get() = sets.mapNotNull { it.weightKg }.maxOrNull()
+    val topWeightKg: Double? get() = sets.filter { it.reps > 0 }.mapNotNull { it.weightKg }.maxOrNull()
 }
 
 /** One line per log: `exerciseId<TAB>epochDay<TAB>weight:reps,weight:reps` (weight `-` = bodyweight). */
 object ExerciseHistoryCodec {
     fun encode(logs: List<ExerciseLog>): String = logs.joinToString("\n") { log ->
         val sets = log.sets.joinToString(",") { "${it.weightKg?.toString() ?: "-"}:${it.reps}" }
-        "${log.exerciseId}\t${log.epochDay}\t$sets"
+        "${log.exerciseId}\t${log.epochDay}\t$sets" + (log.sessionId?.let { "\t$it\t${log.startedAtMs}" } ?: "")
     }
 
     fun decode(text: String): List<ExerciseLog> = text.lineSequence().mapNotNull { line ->
         val parts = line.split('\t')
-        if (parts.size != 3) return@mapNotNull null
+        if (parts.size !in 3..5) return@mapNotNull null
         val day = parts[1].toLongOrNull() ?: return@mapNotNull null
         val sets = parts[2].split(',').mapNotNull { cell ->
             val (w, r) = cell.split(':').takeIf { it.size == 2 } ?: return@mapNotNull null
             LoggedSet(w.toDoubleOrNull(), r.toIntOrNull() ?: return@mapNotNull null)
         }
-        if (sets.isEmpty()) null else ExerciseLog(parts[0], day, sets)
+        if (sets.isEmpty()) null else ExerciseLog(parts[0], day, sets, parts.getOrNull(3)?.takeIf { it.isNotBlank() }, parts.getOrNull(4)?.toLongOrNull() ?: 0)
     }.toList()
 }
 
 /** Per-exercise memory of past sessions; immutable, newest first. */
 class ExerciseHistory(logs: List<ExerciseLog> = emptyList()) {
     private val byExercise: Map<String, List<ExerciseLog>> =
-        logs.groupBy { it.exerciseId }.mapValues { (_, list) -> list.sortedByDescending { it.epochDay } }
+        logs.groupBy { it.exerciseId }.mapValues { (_, list) -> list.sortedWith(compareByDescending<ExerciseLog> { it.epochDay }.thenByDescending { it.startedAtMs }) }
 
     val all: List<ExerciseLog> get() = byExercise.values.flatten()
 
@@ -44,13 +44,13 @@ class ExerciseHistory(logs: List<ExerciseLog> = emptyList()) {
     /** The single heaviest set ever logged, with the day it happened. */
     fun heaviestSet(exerciseId: String): Pair<Long, LoggedSet>? =
         byExercise[exerciseId].orEmpty()
-            .flatMap { log -> log.sets.filter { it.weightKg != null }.map { log.epochDay to it } }
+            .flatMap { log -> log.sets.filter { it.weightKg != null && it.reps > 0 }.map { log.epochDay to it } }
             .maxByOrNull { it.second.weightKg!! }
 
-    /** A second session on the same day replaces the first; only the newest [MAX_PER_EXERCISE] are kept. */
+    /** New logs replace only their own session; legacy logs retain day-based replacement. */
     fun with(log: ExerciseLog): ExerciseHistory {
-        val kept = byExercise[log.exerciseId].orEmpty().filter { it.epochDay != log.epochDay }
-        val updated = (listOf(log) + kept).sortedByDescending { it.epochDay }.take(MAX_PER_EXERCISE)
+        val kept = byExercise[log.exerciseId].orEmpty().filter { if (log.sessionId != null) it.sessionId != log.sessionId else it.sessionId != null || it.epochDay != log.epochDay }
+        val updated = (listOf(log) + kept).sortedWith(compareByDescending<ExerciseLog> { it.epochDay }.thenByDescending { it.startedAtMs }).take(MAX_PER_EXERCISE)
         return ExerciseHistory(byExercise.filterKeys { it != log.exerciseId }.values.flatten() + updated)
     }
 

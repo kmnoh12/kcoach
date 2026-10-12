@@ -8,18 +8,18 @@ import dev.kyungmin.kcoach.core.WorkoutLogCodec
 class WorkoutLogStore(context: Context) {
     private val prefs = context.getSharedPreferences("workout-log", Context.MODE_PRIVATE)
 
-    @Synchronized
-    fun load(): List<WorkoutLog> =
+    fun load(): List<WorkoutLog> = synchronized(lock) {
         runCatching { WorkoutLogCodec.decode(prefs.getString(KEY, "").orEmpty()) }.getOrDefault(emptyList())
+    }
 
-    @Synchronized
-    fun add(log: WorkoutLog): List<WorkoutLog> {
-        val updated = load() + log
-        prefs.edit().putString(KEY, WorkoutLogCodec.encode(updated)).apply()
-        return updated
+    fun add(log: WorkoutLog): List<WorkoutLog> = synchronized(lock) {
+        val updated = load().filterNot { log.sessionId != null && it.sessionId == log.sessionId } + log
+        check(prefs.edit().putString(KEY, WorkoutLogCodec.encode(updated)).commit()) { "Failed to save workout log" }
+        updated
     }
 
     private companion object {
+        val lock = Any()
         const val KEY = "logs"
     }
 }

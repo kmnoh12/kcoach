@@ -12,6 +12,9 @@ object WearSync {
     const val PATH_PERSONAL_PROFILE_DELETE = "/kcoach/personal-profile/delete"
     const val PATH_ACK_V3 = "/kcoach/v3/ack"
     const val PATH_COMMAND = "/kcoach/command"
+    const val PATH_COMMAND_ACK = "/kcoach/command/ack"
+    const val PATH_SET_ACK = "/kcoach/set/ack"
+    const val PATH_RECONNECT = "/kcoach/reconnect"
     const val PATH_PROBE_START = "/kcoach/probe/start"
     const val PATH_PROBE_STOP = "/kcoach/probe/stop"
     const val PATH_STATE = "/kcoach/state"
@@ -23,6 +26,11 @@ object WearSync {
     const val PATH_COMPLETE = "/kcoach/complete"
     const val KEY_PAYLOAD = "payload"
     const val KEY_SESSION = "session"
+
+    fun captureAssetPath(captureId: String): String {
+        require(captureId.matches(Regex("[A-Za-z0-9._-]{1,160}"))) { "Invalid capture id" }
+        return "$PATH_CAPTURE_ASSET_V3/$captureId"
+    }
 
     // The emulator-only TCP relay runs on the host. Keep it separate from the
     // old adb-forwarded port so a stale forwarding rule cannot hijack traffic.
@@ -42,10 +50,20 @@ object WearSync {
         weightKg: Double?,
         restSeconds: Int,
         restEndAtMs: Long = 0L,
+        setId: String = "",
+        attemptId: String = "",
     ): String = listOf(
         "2", type, sessionId, exerciseId, exerciseName.replace('|', '/'), setIndex,
         targetReps, weightKg ?: "", restSeconds, restEndAtMs,
-    ).joinToString("|")
+    ).joinToString("|").let { withSetIdentity(it, setId, attemptId) }
+
+    fun withSetIdentity(payload: String, setId: String, attemptId: String): String {
+        if (setId.isBlank() && attemptId.isBlank()) return payload
+        val f = parse(payload).toMutableList()
+        while (f.size < 15) f.add(when (f.size) { 10, 12 -> "0"; else -> "" })
+        f[13] = setId; f[14] = attemptId
+        return f.joinToString("|")
+    }
 
     fun hello(device: String): String = listOf("1", device, System.currentTimeMillis()).joinToString("|")
 
@@ -83,11 +101,17 @@ object WearSync {
         sampleCount: Int = 0,
         trackingProfileId: String = "",
         personalized: Boolean = false,
+        completionId: String = "",
+        setId: String = "",
+        attemptId: String = "",
     ): String = listOf(
         "2", sessionId, exerciseId, exerciseName.replace('|', '/'), setIndex, reps,
         targetReps, weightKg ?: "", heartRate, phase, recording, System.currentTimeMillis(),
         restEndAtMs, sampleCount, trackingProfileId.replace('|', '/'), personalized,
-    ).joinToString("|")
+    ).let { if (setId.isNotBlank() || attemptId.isNotBlank()) it + listOf(completionId, setId, attemptId) else if (completionId.isBlank()) it else it + completionId }.joinToString("|")
+
+    fun setAck(sessionId: String, exerciseId: String, setIndex: Int, completionId: String, setId: String = "", attemptId: String = ""): String =
+        listOf("1", sessionId, exerciseId, setIndex, completionId).let { if (setId.isBlank() && attemptId.isBlank()) it else it + listOf(setId, attemptId) }.joinToString("|")
 
     fun sample(sessionId: String, timestamp: Long, ax: Float, ay: Float, az: Float, gx: Float, gy: Float, gz: Float): String =
         listOf("1", sessionId, timestamp, ax, ay, az, gx, gy, gz).joinToString("|")

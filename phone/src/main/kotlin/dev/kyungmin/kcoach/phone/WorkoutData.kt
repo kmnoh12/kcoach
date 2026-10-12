@@ -27,6 +27,11 @@ data class PlannedSet(
     var rpe: String? = null,
     /** Rest after this set; null uses the exercise default. */
     var restSeconds: Int? = null,
+    var performedReps: Int? = null,
+    var repSource: dev.kyungmin.kcoach.core.SetRepSource? = null,
+    val setId: String = java.util.UUID.randomUUID().toString(),
+    var attemptId: String = java.util.UUID.randomUUID().toString(),
+    var identityRequired: Boolean = true,
 )
 
 fun List<PlannedSet>.workSetLabel(index: Int): String {

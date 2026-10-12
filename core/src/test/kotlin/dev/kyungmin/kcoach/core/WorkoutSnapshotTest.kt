@@ -14,8 +14,8 @@ class WorkoutSnapshotTest {
         exerciseIndex = 2,
         setIndex = 1,
         plannedSets = listOf(
-            PlannedSetSnapshot(0, "external_rotation", 0, 25, 5.0, true, "WARMUP"),
-            PlannedSetSnapshot(0, "external_rotation", 1, 25, null, false),
+            PlannedSetSnapshot(0, "external_rotation", 0, 25, 5.0, true, "WARMUP", "외회전", 45, 90, 45),
+            PlannedSetSnapshot(0, "external_rotation", 1, 25, null, false, performedReps = 0, repSource = SetRepSource.PHONE_ANALYSIS),
         ),
         performedReps = mapOf("external_rotation" to 25),
         phase = WorkoutPhase.RESTING,
@@ -28,6 +28,7 @@ class WorkoutSnapshotTest {
         lastSequence = 7L,
         lastCompletedSetKey = "phone-1:external_rotation:0",
         captureStates = mapOf("capture-1" to CaptureState.ANALYZING),
+        routineName = "내 운동",
     )
 
     @Test
@@ -39,13 +40,61 @@ class WorkoutSnapshotTest {
     fun `snapshot persists the planned set type`() {
         val decoded = WorkoutSnapshotCodec.decode(WorkoutSnapshotCodec.encode(snapshot))
         assertEquals("WARMUP", decoded.plannedSets.first().setType)
+        assertEquals("외회전", decoded.plannedSets.first().exerciseName)
+        assertEquals(45, decoded.plannedSets.first().restSeconds)
+        assertEquals(90, decoded.plannedSets.first().exerciseRestSeconds)
+        assertEquals(45, decoded.plannedSets.first().restOverrideSeconds)
     }
 
     @Test
     fun `version one snapshots migrate with normal set types`() {
-        val decoded = WorkoutSnapshotCodec.decode(legacyVersionOneSnapshot())
+        val decoded = WorkoutSnapshotCodec.decode(legacySnapshot(1))
         assertEquals(WorkoutSnapshot.CURRENT_SCHEMA_VERSION, decoded.schemaVersion)
         assertEquals(listOf("NORMAL", "NORMAL"), decoded.plannedSets.map { it.setType })
+    }
+
+    @Test
+    fun `version two snapshots preserve types and default missing rest metadata`() {
+        val decoded = WorkoutSnapshotCodec.decode(legacySnapshot(2))
+        assertEquals("WARMUP", decoded.plannedSets.first().setType)
+        assertEquals("", decoded.plannedSets.first().exerciseName)
+        assertEquals(90, decoded.plannedSets.first().restSeconds)
+    }
+
+    @Test
+    fun `version three snapshots never invent per-set counts`() {
+        val restored = WorkoutSnapshotCodec.decode(legacySnapshot(3))
+        assertEquals(null, restored.plannedSets.first().performedReps)
+        assertEquals(null, restored.plannedSets.first().repSource)
+        assertEquals(45, restored.plannedSets.first().restSeconds)
+    }
+
+    @Test
+    fun `version four counts survive without inventing custom metadata`() {
+        val restored = WorkoutSnapshotCodec.decode(legacySnapshot(4))
+        assertEquals(0, restored.plannedSets[1].performedReps)
+        assertEquals(SetRepSource.PHONE_ANALYSIS, restored.plannedSets[1].repSource)
+        assertEquals("", restored.routineName)
+        assertEquals("", restored.plannedSets.first().equipment)
+    }
+
+
+    @Test fun `version five preserves custom metadata without inventing stable identities`() {
+        val restored = WorkoutSnapshotCodec.decode(legacySnapshot(5))
+        assertEquals(snapshot.routineName, restored.routineName)
+        assertEquals(snapshot.plannedSets[1].performedReps, restored.plannedSets[1].performedReps)
+        assertEquals("", restored.plannedSets.first().setId)
+        assertEquals("", restored.plannedSets.first().attemptId)
+        assertEquals(false, restored.plannedSets.first().identityRequired)
+        assertEquals(snapshot.plannedSets.first().gripType, restored.plannedSets.first().gripType)
+    }
+
+    @Test fun `set identities round trip and cannot be duplicated`() {
+        val identified = snapshot.copy(plannedSets = snapshot.plannedSets.mapIndexed { index, set ->
+            set.copy(setId = "set-$index", attemptId = "attempt-$index", identityRequired = true)
+        })
+        assertEquals(identified, WorkoutSnapshotCodec.decode(WorkoutSnapshotCodec.encode(identified)))
+        assertFails { identified.copy(plannedSets = identified.plannedSets.map { it.copy(setId = "duplicate") }) }
     }
 
     @Test
@@ -65,7 +114,7 @@ class WorkoutSnapshotTest {
         }
     }
 
-    private fun legacyVersionOneSnapshot(): String {
+    private fun legacySnapshot(version: Int): String {
         val output = ByteArrayOutputStream()
         DataOutputStream(output).use { data ->
             fun writeString(value: String) {
@@ -74,7 +123,7 @@ class WorkoutSnapshotTest {
                 data.write(bytes)
             }
             data.writeInt(0x4B435331)
-            data.writeInt(1)
+            data.writeInt(version)
             writeString(snapshot.sessionId)
             writeString(snapshot.routineId)
             data.writeInt(snapshot.exerciseIndex)
@@ -88,6 +137,20 @@ class WorkoutSnapshotTest {
                 data.writeBoolean(set.weightKg != null)
                 set.weightKg?.let(data::writeDouble)
                 data.writeBoolean(set.completed)
+                if (version >= 2) writeString(set.setType)
+                if (version >= 3) {
+                    writeString(set.exerciseName); data.writeInt(set.restSeconds); data.writeInt(set.exerciseRestSeconds)
+                    data.writeBoolean(set.restOverrideSeconds != null); set.restOverrideSeconds?.let(data::writeInt)
+                }
+                if (version >= 4) {
+                    data.writeBoolean(set.performedReps != null); set.performedReps?.let(data::writeInt)
+                    writeString(set.repSource?.name.orEmpty())
+                }
+                if (version >= 5) {
+                    writeString(set.exerciseMuscles); writeString(set.bodyCategory); writeString(set.equipment)
+                    writeString(set.pattern); writeString(set.family); writeString(set.gripType)
+                    data.writeBoolean(set.rpe != null); set.rpe?.let(::writeString)
+                }
             }
             data.writeInt(snapshot.performedReps.size)
             snapshot.performedReps.forEach { (exercise, reps) ->
@@ -109,6 +172,7 @@ class WorkoutSnapshotTest {
                 writeString(captureId)
                 data.writeInt(state.ordinal)
             }
+            if (version >= 5) writeString(snapshot.routineName)
         }
         return Base64.getUrlEncoder().withoutPadding().encodeToString(output.toByteArray())
     }

@@ -8,7 +8,12 @@ import android.content.Intent
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.SystemClock
+import android.util.Log
 import androidx.core.app.NotificationCompat
+import dev.kyungmin.kcoach.core.WearSync
+import dev.kyungmin.kcoach.core.WorkoutPhase
+import dev.kyungmin.kcoach.core.WorkoutSessionReducer
 
 /**
  * Owns the phone-to-watch liveness loop independently from MainActivity.
@@ -19,6 +24,10 @@ class PhoneWorkoutService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private val wearBridge by lazy { PhoneWearBridge(this) }
     private var heartbeatTicker: Runnable? = null
+    private var restTicker: Runnable? = null
+    private val sessionStore by lazy { SessionStore(this) }
+    private val sessionController by lazy { PhoneSessionController(sessionStore, wearBridge::sendRaw) }
+    private var idleSinceMs = -1L
 
     override fun onCreate() {
         super.onCreate()
@@ -26,21 +35,38 @@ class PhoneWorkoutService : Service() {
         startForeground(NOTIFICATION_ID, buildNotification())
         wearBridge.sendHello()
         startHeartbeat()
+        startRestTicker()
+        if (PhoneCommandOutbox(this).pending() == null) {
+            sessionController.resync().onFailure { Log.e("KCoachEvent", "initial watch resync failed", it) }
+        } else wearBridge.retryPendingCommand()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.getStringExtra(EXTRA_ACTION) == ACTION_PING) {
             wearBridge.sendHeartbeat()
         }
+        if (intent?.getStringExtra(EXTRA_ACTION) == ACTION_RETRY) wearBridge.retryPendingCommand()
         val path = intent?.getStringExtra(EXTRA_PATH)
         val payload = intent?.getStringExtra(EXTRA_PAYLOAD)
-        if (!path.isNullOrBlank() && payload != null) wearBridge.sendRaw(path, payload)
-        return START_STICKY
+        if (!path.isNullOrBlank() && payload != null) {
+            if (intent.getBooleanExtra(EXTRA_DURABLE_COMMAND, false)) wearBridge.retryPendingCommand()
+            else wearBridge.sendRaw(path, payload)
+            if (path == WearSync.PATH_COMMAND) startRestTicker()
+        }
+        return if (hasActiveRuntime()) START_STICKY else START_NOT_STICKY
+    }
+
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        // The persisted session and command outbox remain available for reconnection.
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
     override fun onDestroy() {
         heartbeatTicker?.let(handler::removeCallbacks)
         heartbeatTicker = null
+        restTicker?.let(handler::removeCallbacks)
+        restTicker = null
         wearBridge.close()
         super.onDestroy()
     }
@@ -51,12 +77,47 @@ class PhoneWorkoutService : Service() {
         heartbeatTicker?.let(handler::removeCallbacks)
         val tick = object : Runnable {
             override fun run() {
-                wearBridge.sendHeartbeat()
+                if (stopIfIdle(SystemClock.elapsedRealtime())) return
+                if (hasActiveRuntime()) wearBridge.sendHeartbeat() else wearBridge.retryPendingCommand()
                 handler.postDelayed(this, HEARTBEAT_INTERVAL_MS)
             }
         }
         heartbeatTicker = tick
         handler.post(tick)
+    }
+
+    private fun startRestTicker() {
+        restTicker?.let(handler::removeCallbacks)
+        val tick = object : Runnable {
+            override fun run() {
+                if (stopIfIdle(SystemClock.elapsedRealtime())) return
+                sessionController.advanceRest(System.currentTimeMillis())
+                    .onSuccess { if (it != null) publishSessionChanged(this@PhoneWorkoutService) }
+                    .onFailure { Log.e("KCoachEvent", "background rest transition failed", it) }
+                val snapshot = sessionStore.loadActive().getOrNull()
+                val resting = snapshot?.phase == WorkoutPhase.RESTING && !snapshot.paused
+                handler.postDelayed(this, if (resting) 250L else HEARTBEAT_INTERVAL_MS)
+            }
+        }
+        restTicker = tick
+        handler.post(tick)
+    }
+
+    private fun hasActiveRuntime(): Boolean {
+        val snapshot = sessionStore.loadActive().getOrElse { return true } ?: return false
+        return WorkoutSessionReducer.nextPendingSet(snapshot) != null || snapshot.phase == WorkoutPhase.RESTING || snapshot.paused
+    }
+
+    private fun stopIfIdle(nowMs: Long): Boolean {
+        if (hasActiveRuntime()) { idleSinceMs = -1L; return false }
+        if (idleSinceMs < 0) idleSinceMs = nowMs
+        val delivering = PhoneCommandOutbox(this).pendingForDelivery() != null || wearBridge.hasPendingDelivery()
+        if (delivering && nowMs - idleSinceMs < IDLE_DELIVERY_GRACE_MS) return false
+        heartbeatTicker?.let(handler::removeCallbacks)
+        restTicker?.let(handler::removeCallbacks)
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+        return true
     }
 
     private fun createNotificationChannel() {
@@ -80,18 +141,39 @@ class PhoneWorkoutService : Service() {
 
     companion object {
         const val ACTION_PING = "dev.kyungmin.kcoach.phone.PING"
+        const val ACTION_RETRY = "dev.kyungmin.kcoach.phone.RETRY_COMMAND"
         const val EXTRA_ACTION = "action"
         const val EXTRA_PATH = "path"
         const val EXTRA_PAYLOAD = "payload"
+        private const val EXTRA_DURABLE_COMMAND = "durableCommand"
+        const val ACTION_SESSION_CHANGED = "dev.kyungmin.kcoach.phone.SESSION_CHANGED"
         private const val CHANNEL_ID = "kcoach_workout"
         private const val NOTIFICATION_ID = 4101
         private const val HEARTBEAT_INTERVAL_MS = 3_000L
+        private const val IDLE_DELIVERY_GRACE_MS = 30_000L
+
+        fun retryPending(context: android.content.Context) {
+            if (PhoneCommandOutbox(context).pendingForDelivery() == null || SessionStore(context).loadActive().getOrNull() != null) return
+            runCatching {
+                androidx.core.content.ContextCompat.startForegroundService(context,
+                    Intent(context, PhoneWorkoutService::class.java).putExtra(EXTRA_ACTION, ACTION_RETRY))
+            }.onFailure { Log.w("KCoachEvent", "watch command retry retained until service can start", it) }
+        }
+
+        fun publishSessionChanged(context: android.content.Context) {
+            context.sendBroadcast(Intent(ACTION_SESSION_CHANGED).setPackage(context.packageName))
+        }
 
         fun send(context: android.content.Context, path: String, payload: String) {
-            context.startService(Intent(context, PhoneWorkoutService::class.java).apply {
+            val durable = path == WearSync.PATH_COMMAND && WearSync.parse(payload).getOrNull(1) != "QUERY"
+            if (durable) PhoneCommandOutbox(context).enqueue(payload)
+            val intent = Intent(context, PhoneWorkoutService::class.java).apply {
                 putExtra(EXTRA_PATH, path)
                 putExtra(EXTRA_PAYLOAD, payload)
-            })
+                putExtra(EXTRA_DURABLE_COMMAND, durable)
+            }
+            runCatching { androidx.core.content.ContextCompat.startForegroundService(context, intent) }
+                .onFailure { Log.w("KCoachEvent", "watch service start deferred; durable commands retained", it) }
         }
     }
 }

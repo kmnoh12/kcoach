@@ -325,6 +325,7 @@ class MainActivity : Activity() {
         connectionText.text = if (paired) "● 스마트폰과 연결 완료" else "○ 스마트폰 연결 대기"
         connectionText.setTextColor(if (paired) Color.rgb(0, 230, 118) else Color.rgb(255, 177, 0))
         phaseText.text = when {
+            runtimePhase == "CAPTURE_RECOVERY_REQUIRED" -> "센서 기록 복구 필요"
             running && runtimePhase == "POSITIONING" -> "준비 자세 잡기"
             running && runtimePhase in setOf("PREPARING", "BASELINE") -> "첫 자세 고정"
             running && runtimePhase == "CONTROLLED_REPS" -> "진동 후 동작 시작"
@@ -339,6 +340,7 @@ class MainActivity : Activity() {
         exerciseText.text = if (hasActiveExercise) exerciseName else ""
         val weightText = weightKg?.let { " · ${if (it % 1.0 == 0.0) it.toInt() else "%.1f".format(it)}kg" } ?: ""
         setText.text = when {
+            runtimePhase == "CAPTURE_RECOVERY_REQUIRED" -> "센서 기록이 일부 없거나 손상됐어요"
             running && runtimePhase == "POSITIONING" ->
                 "팔을 준비 위치로 옮겨 주세요"
             running && runtimePhase in setOf("PREPARING", "BASELINE") ->

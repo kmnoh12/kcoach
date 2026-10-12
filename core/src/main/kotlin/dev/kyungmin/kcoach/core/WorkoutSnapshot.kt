@@ -22,6 +22,8 @@ enum class CaptureState {
     ACKED,
 }
 
+enum class SetRepSource { MANUAL, WATCH, PHONE_ANALYSIS }
+
 data class PlannedSetSnapshot(
     val exerciseIndex: Int,
     val exerciseId: String,
@@ -30,6 +32,22 @@ data class PlannedSetSnapshot(
     val weightKg: Double?,
     val completed: Boolean,
     val setType: String = "NORMAL",
+    val exerciseName: String = "",
+    val restSeconds: Int = 90,
+    val exerciseRestSeconds: Int = 90,
+    val restOverrideSeconds: Int? = null,
+    val performedReps: Int? = null,
+    val repSource: SetRepSource? = null,
+    val exerciseMuscles: String = "",
+    val bodyCategory: String = "",
+    val equipment: String = "",
+    val pattern: String = "",
+    val family: String = "",
+    val gripType: String = "노멀",
+    val rpe: String? = null,
+    val setId: String = "",
+    val attemptId: String = "",
+    val identityRequired: Boolean = false,
 )
 
 data class WorkoutSnapshot(
@@ -50,6 +68,7 @@ data class WorkoutSnapshot(
     val lastSequence: Long,
     val lastCompletedSetKey: String?,
     val captureStates: Map<String, CaptureState>,
+    val routineName: String = "",
 ) {
     init {
         require(schemaVersion == CURRENT_SCHEMA_VERSION) { "Unsupported workout snapshot schema" }
@@ -65,10 +84,17 @@ data class WorkoutSnapshot(
         require(plannedSets.size <= MAX_COLLECTION_SIZE) { "Too many planned sets" }
         require(performedReps.size <= MAX_COLLECTION_SIZE) { "Too many rep entries" }
         require(captureStates.size <= MAX_COLLECTION_SIZE) { "Too many capture states" }
+        val identifiedSets = plannedSets.filter { it.setId.isNotBlank() }
+        require(identifiedSets.map { it.setId }.distinct().size == identifiedSets.size) { "Duplicate set id" }
         plannedSets.forEach {
             require(it.exerciseIndex >= 0 && it.exerciseId.isNotBlank() && it.setIndex >= 0 && it.targetReps >= 0) {
                 "Invalid planned set"
             }
+            require((it.setId.isBlank() && it.attemptId.isBlank() && !it.identityRequired) ||
+                (it.setId.matches(Regex("[A-Za-z0-9._-]{1,160}")) && it.attemptId.matches(Regex("[A-Za-z0-9._-]{1,160}")))) { "Invalid set identity" }
+            require(it.performedReps == null || it.performedReps >= 0) { "Negative set reps" }
+            require(it.restSeconds >= 0) { "Negative set rest" }
+            require(it.exerciseRestSeconds >= 0 && (it.restOverrideSeconds == null || it.restOverrideSeconds >= 0)) { "Negative rest setting" }
             require(it.weightKg == null || (it.weightKg.isFinite() && it.weightKg >= 0.0)) {
                 "Invalid planned weight"
             }
@@ -77,7 +103,7 @@ data class WorkoutSnapshot(
     }
 
     companion object {
-        const val CURRENT_SCHEMA_VERSION = 2
+        const val CURRENT_SCHEMA_VERSION = 6
         internal const val MAX_COLLECTION_SIZE = 10_000
     }
 }
@@ -105,6 +131,18 @@ object WorkoutSnapshotCodec {
                 set.weightKg?.let(data::writeDouble)
                 data.writeBoolean(set.completed)
                 data.writeString(set.setType)
+                data.writeString(set.exerciseName)
+                data.writeInt(set.restSeconds)
+                data.writeInt(set.exerciseRestSeconds)
+                data.writeBoolean(set.restOverrideSeconds != null)
+                set.restOverrideSeconds?.let(data::writeInt)
+                data.writeBoolean(set.performedReps != null)
+                set.performedReps?.let(data::writeInt)
+                data.writeString(set.repSource?.name.orEmpty())
+                data.writeString(set.exerciseMuscles); data.writeString(set.bodyCategory); data.writeString(set.equipment)
+                data.writeString(set.pattern); data.writeString(set.family); data.writeString(set.gripType)
+                data.writeBoolean(set.rpe != null); set.rpe?.let { data.writeString(it) }
+                data.writeString(set.setId); data.writeString(set.attemptId); data.writeBoolean(set.identityRequired)
             }
             data.writeInt(snapshot.performedReps.size)
             snapshot.performedReps.toSortedMap().forEach { (exerciseId, reps) ->
@@ -126,6 +164,7 @@ object WorkoutSnapshotCodec {
                 data.writeString(captureId)
                 data.writeInt(state.ordinal)
             }
+            data.writeString(snapshot.routineName)
         }
         return Base64.getUrlEncoder().withoutPadding().encodeToString(output.toByteArray())
     }
@@ -151,6 +190,24 @@ object WorkoutSnapshotCodec {
                     weightKg = if (data.readBoolean()) data.readDouble() else null,
                     completed = data.readBoolean(),
                     setType = if (schemaVersion >= 2) data.readString() else "NORMAL",
+                    exerciseName = if (schemaVersion >= 3) data.readString() else "",
+                    restSeconds = if (schemaVersion >= 3) data.readInt() else 90,
+                    exerciseRestSeconds = if (schemaVersion >= 3) data.readInt() else 90,
+                    restOverrideSeconds = if (schemaVersion >= 3 && data.readBoolean()) data.readInt() else null,
+                    performedReps = if (schemaVersion >= 4 && data.readBoolean()) data.readInt() else null,
+                    repSource = if (schemaVersion >= 4) data.readString().let { name ->
+                        if (name.isBlank()) null else SetRepSource.valueOf(name)
+                    } else null,
+                    exerciseMuscles = if (schemaVersion >= 5) data.readString() else "",
+                    bodyCategory = if (schemaVersion >= 5) data.readString() else "",
+                    equipment = if (schemaVersion >= 5) data.readString() else "",
+                    pattern = if (schemaVersion >= 5) data.readString() else "",
+                    family = if (schemaVersion >= 5) data.readString() else "",
+                    gripType = if (schemaVersion >= 5) data.readString() else "노멀",
+                    rpe = if (schemaVersion >= 5 && data.readBoolean()) data.readString() else null,
+                    setId = if (schemaVersion >= 6) data.readString() else "",
+                    attemptId = if (schemaVersion >= 6) data.readString() else "",
+                    identityRequired = schemaVersion >= 6 && data.readBoolean(),
                 )
             }
             val performedReps = buildMap {
@@ -176,6 +233,7 @@ object WorkoutSnapshotCodec {
                     put(captureId, state)
                 }
             }
+            val routineName = if (schemaVersion >= 5) data.readString() else ""
             require(data.read() == -1) { "Trailing workout snapshot data" }
             WorkoutSnapshot(
                 schemaVersion = WorkoutSnapshot.CURRENT_SCHEMA_VERSION,
@@ -195,6 +253,7 @@ object WorkoutSnapshotCodec {
                 lastSequence = lastSequence,
                 lastCompletedSetKey = lastCompletedSetKey,
                 captureStates = captureStates,
+                routineName = routineName,
             )
         }
     }

@@ -15,6 +15,7 @@ android {
     buildFeatures {
         buildConfig = true
     }
+    testOptions { unitTests.isIncludeAndroidResources = true }
     buildTypes {
         create("ota") {
             initWith(getByName("debug"))
@@ -32,8 +33,8 @@ android {
         applicationId = "dev.kyungmin.kcoach"
         minSdk = 30
         targetSdk = 35
-        versionCode = 30
-        versionName = "0.2.2"
+        versionCode = 31
+        versionName = "0.2.3"
         buildConfigField(
             "String",
             "UPDATE_MANIFEST_URL",
@@ -43,6 +44,8 @@ android {
 }
 
 dependencies {
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.14.1")
     implementation(project(":core"))
     implementation("androidx.core:core-ktx:1.16.0")
     implementation("androidx.health:health-services-client:1.1.0-rc02")

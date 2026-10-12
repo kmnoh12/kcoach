@@ -1,14 +1,22 @@
 package dev.kyungmin.kcoach.phone
 
 import android.content.Context
+import android.os.Build
+import android.util.Log
 import com.google.android.gms.tasks.Tasks
 import com.google.android.gms.wearable.Wearable
 import dev.kyungmin.kcoach.core.EmulatorBridgeClient
 import dev.kyungmin.kcoach.core.WearSync
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 class PhoneWearBridge(private val context: Context) {
     private val emulatorBridge = EmulatorBridgeClient { _, _ -> }
+    private val commandOutbox = PhoneCommandOutbox(context)
+    private val queueLock = Any()
+    private val pendingMessages = linkedMapOf<String, Pair<String, String>>()
+    private var draining = false
+    private var closed = false
     private val outboundExecutor = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "kcoach-phone-wear-outbound").apply { isDaemon = true }
     }
@@ -62,11 +70,19 @@ class PhoneWearBridge(private val context: Context) {
 
     fun sendComplete(sessionId: String) = sendLifecycle("COMPLETE", sessionId)
 
-    fun sendHeartbeat() = sendPath(WearSync.PATH_HEARTBEAT, WearSync.heartbeat("phone"))
+    fun sendHeartbeat() {
+        sendPath(WearSync.PATH_HEARTBEAT, WearSync.heartbeat("phone"))
+        retryPendingCommand()
+    }
+
+    fun retryPendingCommand() { commandOutbox.pendingForDelivery()?.let { dispatch(WearSync.PATH_COMMAND, it) } }
+
+    fun hasPendingDelivery(): Boolean = synchronized(queueLock) { draining || pendingMessages.isNotEmpty() }
 
     fun sendRaw(path: String, payload: String) = sendPath(path, payload)
 
     fun close() {
+        synchronized(queueLock) { closed = true; pendingMessages.clear() }
         outboundExecutor.shutdown()
         emulatorBridge.stop()
     }
@@ -76,16 +92,45 @@ class PhoneWearBridge(private val context: Context) {
     }
 
     private fun sendPath(path: String, payload: String) {
-        outboundExecutor.execute {
-            runCatching {
-                val nodes = Tasks.await(Wearable.getNodeClient(context).connectedNodes)
-                nodes.forEach { node ->
-                    Tasks.await(Wearable.getMessageClient(context).sendMessage(node.id, path, payload.toByteArray()))
+        val durable = if (path == WearSync.PATH_COMMAND) commandOutbox.enqueue(payload) else payload
+        dispatch(path, durable)
+    }
+
+    private fun dispatch(path: String, payload: String) {
+        synchronized(queueLock) {
+            if (closed) return
+            val key = if (path == WearSync.PATH_COMMAND && WearSync.parse(payload).getOrNull(1) == "QUERY") "$path:query" else path
+            pendingMessages[key] = path to payload
+            if (draining) return
+            draining = true
+            outboundExecutor.execute(::drain)
+        }
+    }
+
+    /** Coalesce repeated heartbeats/desired state while the link is down; never grow an unbounded task backlog. */
+    private fun drain() {
+        while (true) {
+            val message = synchronized(queueLock) {
+                val entry = pendingMessages.entries.minByOrNull {
+                    when (it.value.first) { WearSync.PATH_SET_ACK -> 0; WearSync.PATH_COMMAND -> 1; else -> 2 }
                 }
+                if (entry == null || closed) { draining = false; return }
+                pendingMessages.remove(entry.key)
+                entry.value
             }
+            val path = message.first
+            val payload = if (path == WearSync.PATH_COMMAND && WearSync.parse(message.second).getOrNull(1) != "QUERY") {
+                commandOutbox.pendingForDelivery() ?: continue
+            } else message.second
+            runCatching {
+                val nodes = Tasks.await(Wearable.getNodeClient(context).connectedNodes, 2, TimeUnit.SECONDS)
+                nodes.forEach { node ->
+                    Tasks.await(Wearable.getMessageClient(context).sendMessage(node.id, path, payload.toByteArray()), 2, TimeUnit.SECONDS)
+                }
+            }.onFailure { Log.w("KCoachEvent", "watch command delivery deferred path=$path", it) }
             // Deterministic local-emulator path. The host relay is only used
             // for the two emulator instances and never for a real Watch8.
-            emulatorBridge.send(path, payload)
+            if (Build.FINGERPRINT.contains("generic", true) || Build.MODEL.contains("sdk", true)) emulatorBridge.send(path, payload)
         }
     }
 }
