@@ -34,6 +34,10 @@
 14. (미배포) 폰 실측 화면을 열면 워치가 자동으로 센서 전송 시작, 닫으면 중지(`WearSync.PATH_PROBE_START/STOP`, `wear/WearCommandService.handleProbe`). 워치 앱이 꺼져 있으면 실측 화면은 안 뜨고 알림만 뜰 수 있음. 실기기 미확인.
 15. 아직 실기기에서 확인 안 한 것: 운동 종료 후 기록·통계·근육 지도 반영, 신기록 표시, 워치 패널 실시간 값, 실측 자동 시작.
 
+16. (미배포, 0.7.2 이후 로컬 커밋) 스와이프 세트 삭제 2단계(`ui/SwipeReveal.kt`), 시트 어디든 잡아 내려 닫기(`ui/Overlays.kt` SheetSurface), 세트 시트 = 항목별 막대 + 설명 한 줄(`SetSheet`, `SegmentedBar`: 선택 표시 하나가 손가락을 따라 미끄러짐), 떠 있는 탭 바(`FloatingTabBar` in `ui/RootScreens.kt`, 앱 전체에 하나만 두고 `MainActivity.navVisible/navSelected`로 제어), 운동 메뉴 시트 M2(큰 버튼 + 글자 목록, `SheetItem(featured/destructive/value)`), 값 선택 시트 P2(`ChoiceSheet`, 현재 값 강조), 실측 화면 열면 워치 실측 자동 시작(`WearSync.PATH_PROBE_START/STOP`), 말투 검사 확대.
+17. 정하지 못한 것: 세트 종류의 "슈퍼" 제거 여부, "운동 애니메이션"/"운동 정보" 메뉴 합치기, 라이브러리·운동 정보 탭에 미끄러지는 선택 표시 적용, 그립 설명 줄바꿈.
+18. 작업 규칙(사용자 요구): 시안은 3개씩 먼저 채팅에 이미지로 올리고(SendUserFile) 고른 뒤 반영, 마음대로 확정하지 않기. 배포(`tools/release.sh`)는 사용자가 "올려"라고 할 때만. 버전은 올리기 전 폰 0.7.3 / 워치 0.2.3으로.
+
 ## 다음 할 일
 
 - 세트 완료 순간의 실시간 신기록 알림, 워치 반복 수 집중 화면(워치 필요), 새 운동 이미지, 묶음 세트(슈퍼세트).
