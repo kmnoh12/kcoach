@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,6 +32,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.kyungmin.kcoach.phone.WorkoutRoutine
@@ -55,12 +55,12 @@ fun RootBottomNav(selected: Int, onSelect: (Int) -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
-            .background(Color(0xFF0E1010))
-            .border(1.dp, Color(0xFF232626))
+            .background(KColors.Bg)
+            .border(0.5.dp, KColors.Hairline)
             .padding(horizontal = 8.dp, vertical = 4.dp),
     ) {
         NavItems.forEachIndexed { index, (icon, title) ->
-            val tint by animateColorAsState(if (index == selected) KColors.Amber else KColors.Muted, Motion.ui(), label = "navTint")
+            val tint by animateColorAsState(if (index == selected) KColors.Accent else KColors.Muted, Motion.ui(), label = "navTint")
             Column(
                 Modifier
                     .weight(1f)
@@ -88,42 +88,54 @@ class HomeActions(
 
 class RunningUi(val routineName: String, val paused: Boolean, val elapsedSeconds: () -> Long)
 
+/** One weekday on the strip. [load] is null for a rest day, otherwise 0..TrainingLoad.MAX_SCORE. */
+class WeekDayUi(val label: String, val load: Double?, val isToday: Boolean, val isFuture: Boolean)
+
+class RoutineRowUi2(val routine: WorkoutRoutine, val daysAgo: Int?)
+
+class HomeUi(
+    val week: List<WeekDayUi>,
+    val weekCount: Int,
+    val rows: List<RoutineRowUi2>,
+    val longestRest: RoutineRowUi2?,
+)
+
 @Composable
-fun HomeScreen(routines: List<WorkoutRoutine>, running: RunningUi?, actions: HomeActions) {
+fun HomeScreen(ui: HomeUi, running: RunningUi?, actions: HomeActions) {
     Column(Modifier.fillMaxSize().background(KColors.Bg)) {
         Column(
             Modifier
                 .weight(1f)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 18.dp, vertical = 16.dp),
+                .padding(top = 18.dp),
         ) {
-            Row(Modifier.fillMaxWidth().heightIn(min = 52.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("홈", color = KColors.White, fontSize = 26.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                Text("☷   ◉   ●", color = KColors.Muted, fontSize = 23.sp, fontWeight = FontWeight.Bold)
-            }
-            Spacer(Modifier.height(18.dp))
-            Text("내 루틴", color = KColors.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(12.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("최근  ▾", color = KColors.Muted, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.width(16.dp))
-                Text("요약  ▾", color = KColors.Muted, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.weight(1f))
-                Text("☷", color = KColors.Amber, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.width(14.dp))
-                Text("▦", color = KColors.Muted, fontSize = 17.sp)
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.Bottom) {
+                Text("홈", color = KColors.White, fontSize = 32.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                Text("이번 주 ", color = KColors.Muted, fontSize = 13.sp)
+                Text("${ui.weekCount}회", color = KColors.Accent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
             }
             Spacer(Modifier.height(10.dp))
-            routines.forEach { routine ->
-                RoutineCard(routine, onClick = { actions.openRoutine(routine) }, onMenu = { actions.routineMenu(routine) })
-                Spacer(Modifier.height(10.dp))
+            WeekStrip(ui.week)
+            ui.longestRest?.let {
+                Spacer(Modifier.height(14.dp))
+                RestHero(it) { actions.openRoutine(it.routine) }
             }
+            Spacer(Modifier.height(14.dp))
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+                Text("내 루틴", color = KColors.Muted, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                Text("최근 ▾", color = KColors.Muted, fontSize = 13.sp)
+            }
+            Box(Modifier.fillMaxWidth().height(0.5.dp).background(KColors.Hairline))
+            ui.rows.forEach { row ->
+                RoutineRow(row, onClick = { actions.openRoutine(row.routine) }, onMenu = { actions.routineMenu(row.routine) })
+            }
+            Spacer(Modifier.height(12.dp))
         }
         if (running == null) {
-            Row(Modifier.padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 12.dp)) {
-                ActionButton("⚡  자유운동", KColors.AmberDark, KColors.White, Modifier.weight(1f), actions.freeWorkout)
-                Spacer(Modifier.width(12.dp))
-                ActionButton("＋  추가", Color.White, KColors.AmberDark, Modifier.weight(1f), actions.add)
+            Row(Modifier.padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 12.dp)) {
+                ActionButton("자유운동", KColors.Accent, KColors.OnAccent, outlined = false, modifier = Modifier.weight(1f), onClick = actions.freeWorkout)
+                Spacer(Modifier.width(8.dp))
+                ActionButton("추가", Color.Transparent, KColors.White, outlined = true, modifier = Modifier.weight(1f), onClick = actions.add)
             }
         } else {
             RunningBar(running, actions)
@@ -132,42 +144,105 @@ fun HomeScreen(routines: List<WorkoutRoutine>, running: RunningUi?, actions: Hom
 }
 
 @Composable
-private fun RoutineCard(routine: WorkoutRoutine, onClick: () -> Unit, onMenu: () -> Unit) {
+private fun WeekStrip(week: List<WeekDayUi>) {
+    val maxBar = 28.dp
+    val minBar = 4.dp
     Row(
-        Modifier
-            .fillMaxWidth()
-            .heightIn(min = 88.dp)
-            .clip(RoundedCornerShape(22.dp))
-            .background(KColors.Surface)
-            .pressable(onClick)
-            .padding(start = 16.dp, top = 12.dp, end = 6.dp, bottom = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(46.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.Bottom,
     ) {
-        Text("⚡", color = KColors.Amber, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(38.dp))
-        Column(Modifier.weight(1f)) {
-            Text(routine.name, color = KColors.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(2.dp))
-            Text(routine.muscles, color = KColors.Blue, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(2.dp))
-            Text("${routine.lastPerformed} · ${routine.exercises.size}종목", color = KColors.Muted, fontSize = 12.sp)
-        }
-        Box(Modifier.size(48.dp).clickable(onClick = onMenu), contentAlignment = Alignment.Center) {
-            Text("•••", color = KColors.Muted, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        week.forEach { day ->
+            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Bottom) {
+                val barHeight = when {
+                    day.load != null -> minBar + (maxBar - minBar) * (day.load / dev.kyungmin.kcoach.core.TrainingLoad.MAX_SCORE).toFloat()
+                    else -> minBar
+                }
+                val color = when {
+                    day.load != null -> KColors.Accent
+                    day.isToday -> KColors.White
+                    day.isFuture -> Color(0xFF161A19)
+                    else -> Color(0xFF1F2322)
+                }
+                Box(Modifier.fillMaxWidth().height(barHeight).clip(androidx.compose.foundation.shape.RoundedCornerShape(3.dp)).background(color))
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    day.label,
+                    color = if (day.isToday) KColors.White else KColors.Faint,
+                    fontSize = 10.sp,
+                    fontWeight = if (day.isToday) FontWeight.Bold else FontWeight.Normal,
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun ActionButton(text: String, background: Color, content: Color, modifier: Modifier, onClick: () -> Unit) {
+private fun RestHero(row: RoutineRowUi2, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .padding(horizontal = 16.dp)
+            .fillMaxWidth()
+            .clip(KShape.Control)
+            .border(0.5.dp, Color(0xFF333A38), KShape.Control)
+            .pressable(onClick)
+            .padding(start = 12.dp, top = 12.dp, end = 8.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.Bottom,
+    ) {
+        Text(
+            "${row.daysAgo}", color = KColors.Accent, fontSize = 64.sp, fontWeight = FontWeight.Medium,
+            letterSpacing = (-3).sp, lineHeight = 58.sp,
+        )
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f).padding(bottom = 2.dp)) {
+            Text("일째 쉬는 루틴", color = KColors.Muted, fontSize = 11.sp)
+            Text(row.routine.name, color = KColors.White, fontSize = 19.sp, fontWeight = FontWeight.Medium)
+            Text("${row.routine.muscles} · ${row.routine.exercises.size}종목", color = KColors.Soft, fontSize = 12.sp)
+        }
+        Text("›", color = KColors.Muted, fontSize = 22.sp, modifier = Modifier.padding(end = 6.dp, bottom = 4.dp))
+    }
+}
+
+@Composable
+private fun RoutineRow(row: RoutineRowUi2, onClick: () -> Unit, onMenu: () -> Unit) {
+    Column {
+        Row(
+            Modifier.fillMaxWidth().pressable(onClick).padding(start = 16.dp, top = 11.dp, bottom = 11.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(row.routine.name, color = KColors.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                Spacer(Modifier.height(2.dp))
+                Text("${row.routine.muscles} · ${row.routine.exercises.size}종목", color = KColors.Soft, fontSize = 12.sp)
+            }
+            if (row.daysAgo != null) {
+                Column(horizontalAlignment = Alignment.End) {
+                    Text("${row.daysAgo}", color = KColors.White, fontSize = 24.sp, fontWeight = FontWeight.Medium, letterSpacing = (-1).sp)
+                    Text("일 전", color = KColors.Muted, fontSize = 10.sp)
+                }
+            } else {
+                Text(row.routine.lastPerformed, color = KColors.Muted, fontSize = 12.sp)
+            }
+            Box(Modifier.size(48.dp).clickable(onClick = onMenu), contentAlignment = Alignment.Center) {
+                Text("⋮", color = KColors.Faint, fontSize = 18.sp, textAlign = TextAlign.Center)
+            }
+        }
+        Box(Modifier.fillMaxWidth().height(0.5.dp).background(KColors.Hairline))
+    }
+}
+
+@Composable
+private fun ActionButton(text: String, background: Color, content: Color, outlined: Boolean, modifier: Modifier, onClick: () -> Unit) {
     Box(
         modifier
-            .height(64.dp)
-            .clip(RoundedCornerShape(18.dp))
+            .height(52.dp)
+            .clip(KShape.Control)
             .background(background)
+            .then(if (outlined) Modifier.border(0.5.dp, Color(0xFF3A4240), KShape.Control) else Modifier)
             .pressable(onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text, color = content, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Text(text, color = content, fontSize = 15.sp, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -179,24 +254,26 @@ private fun RunningBar(running: RunningUi, actions: HomeActions) {
             delay(1_000)
         }
     }
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .heightIn(min = 78.dp)
-            .background(Color(0xFF0E1010))
-            .border(1.dp, KColors.Amber)
-            .padding(horizontal = 20.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f).pressable(actions.openRunning)) {
-            Text(running.routineName, color = KColors.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-            Text("%02d:%02d".format(elapsed / 60, elapsed % 60), color = KColors.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-        }
-        Box(Modifier.size(70.dp).pressable(actions.togglePause), contentAlignment = Alignment.Center) {
-            Text(if (running.paused) "▶" else "Ⅱ", color = KColors.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
-        }
-        Box(Modifier.size(70.dp).pressable(actions.stop), contentAlignment = Alignment.Center) {
-            Text("■", color = KColors.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+    Column {
+        Box(Modifier.fillMaxWidth().height(1.dp).background(KColors.Accent))
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 78.dp)
+                .background(KColors.Bg)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f).pressable(actions.openRunning)) {
+                Text(running.routineName, color = KColors.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                Text("%02d:%02d".format(elapsed / 60, elapsed % 60), color = KColors.Accent, fontSize = 22.sp, fontWeight = FontWeight.Medium)
+            }
+            Box(Modifier.size(64.dp).pressable(actions.togglePause), contentAlignment = Alignment.Center) {
+                Text(if (running.paused) "▶" else "Ⅱ", color = KColors.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+            }
+            Box(Modifier.size(64.dp).pressable(actions.stop), contentAlignment = Alignment.Center) {
+                Text("■", color = KColors.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            }
         }
     }
 }

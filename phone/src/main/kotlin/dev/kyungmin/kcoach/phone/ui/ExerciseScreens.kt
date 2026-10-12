@@ -65,7 +65,7 @@ fun ExerciseInfoScreen(info: ExerciseInfoUi, back: () -> Unit, animation: (heigh
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth()) {
             listOf("설명", "나의 기록", "통계").forEachIndexed { index, title ->
-                val color by animateColorAsState(if (index == tab) KColors.Amber else KColors.White, Motion.ui(), label = "infoTab")
+                val color by animateColorAsState(if (index == tab) KColors.Accent else KColors.White, Motion.ui(), label = "infoTab")
                 Text(
                     title, color = color, fontSize = 14.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center,
                     modifier = Modifier.weight(1f).pressable { tab = index }.padding(vertical = 12.dp),
@@ -149,7 +149,7 @@ fun ExerciseRecordScreen(record: ExerciseRecordUi, back: () -> Unit, openInfo: (
         Text(record.muscles, color = KColors.Muted, fontSize = 14.sp)
         Spacer(Modifier.height(12.dp))
         Row {
-            Text("횟수 ${record.targetTotal}회", color = KColors.Blue, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text("횟수 ${record.targetTotal}회", color = KColors.Accent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.width(22.dp))
             Text("${record.performed}회", color = KColors.Muted, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         }
@@ -168,14 +168,14 @@ fun ExerciseRecordScreen(record: ExerciseRecordUi, back: () -> Unit, openInfo: (
             Row(Modifier.fillMaxWidth().height(58.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("${set.index + 1}", color = KColors.White, fontSize = 16.sp, modifier = Modifier.weight(1f))
                 Text("${set.reps}", color = KColors.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                Text(if (set.completed) "✓" else "", color = KColors.Green, fontSize = 18.sp, modifier = Modifier.weight(1f))
+                Text(if (set.completed) "✓" else "", color = KColors.Accent, fontSize = 18.sp, modifier = Modifier.weight(1f))
                 Text("•••", color = KColors.Muted, fontSize = 16.sp, textAlign = TextAlign.Center, modifier = Modifier.width(42.dp))
             }
         }
         Spacer(Modifier.height(18.dp))
         Row(Modifier.fillMaxWidth().height(54.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("＋ 세트추가", color = KColors.Amber, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            Text("− 세트삭제", color = KColors.Blue, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text("＋ 세트추가", color = KColors.Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text("− 세트삭제", color = KColors.Soft, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
         }
         Spacer(Modifier.height(28.dp))
         Text("현재 기록", color = KColors.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
@@ -187,9 +187,9 @@ fun ExerciseRecordScreen(record: ExerciseRecordUi, back: () -> Unit, openInfo: (
         Row(Modifier.horizontalScroll(rememberScrollState())) {
             record.recentDates.forEach { date ->
                 Column(
-                    Modifier.width(210.dp).height(150.dp).clip(RoundedCornerShape(14.dp)).background(KColors.Surface).padding(14.dp, 12.dp),
+                    Modifier.width(210.dp).height(150.dp).clip(KShape.Control).background(KColors.Surface).padding(14.dp, 12.dp),
                 ) {
-                    Text("•  $date", color = KColors.Amber, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text("•  $date", color = KColors.Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(10.dp))
                     Text(record.recentSets, color = KColors.White, fontSize = 15.sp)
                 }
@@ -199,9 +199,9 @@ fun ExerciseRecordScreen(record: ExerciseRecordUi, back: () -> Unit, openInfo: (
         Spacer(Modifier.height(32.dp))
         Text("유튜브", color = KColors.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
-        Box(Modifier.fillMaxWidth().height(118.dp).clip(RoundedCornerShape(20.dp)).background(KColors.Surface))
+        Box(Modifier.fillMaxWidth().height(118.dp).clip(KShape.Control).background(KColors.Surface))
         Spacer(Modifier.height(26.dp))
-        Text("휴식 시간", color = KColors.Amber, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        Text("휴식 시간", color = KColors.Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
         Text("${record.restSeconds}초", color = KColors.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
     }
 }

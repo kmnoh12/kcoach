@@ -60,13 +60,13 @@ private fun TabPage(title: String, right: String, content: @Composable () -> Uni
 
 @Composable
 fun SectionCard(title: String, values: List<Pair<String, String>>, modifier: Modifier = Modifier) {
-    Column(modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(KColors.Surface).padding(18.dp)) {
+    Column(modifier.fillMaxWidth().clip(KShape.Control).background(KColors.Surface).padding(18.dp)) {
         Text(title, color = KColors.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(12.dp))
         values.forEach { (name, value) ->
             Row(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
                 Text(name, color = KColors.White, fontSize = 15.sp, modifier = Modifier.weight(1f))
-                Text(value, color = KColors.Blue, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                Text(value, color = KColors.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -81,7 +81,7 @@ fun MetricGrid(metrics: List<Pair<String, String>>) {
                     Modifier
                         .weight(1f)
                         .heightIn(min = 92.dp)
-                        .clip(RoundedCornerShape(18.dp))
+                        .clip(KShape.Control)
                         .background(KColors.Surface)
                         .padding(18.dp),
                 ) {
@@ -110,7 +110,7 @@ fun RecordsScreen(
                 Modifier
                     .fillMaxWidth()
                     .height(58.dp)
-                    .clip(RoundedCornerShape(18.dp))
+                    .clip(KShape.Control)
                     .background(KColors.SurfaceRaised)
                     .pressable(actions.openResult),
                 contentAlignment = Alignment.Center,
@@ -119,7 +119,7 @@ fun RecordsScreen(
             }
             Spacer(Modifier.height(18.dp))
         }
-        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(KColors.Surface).padding(16.dp, 18.dp)) {
+        Column(Modifier.fillMaxWidth().clip(KShape.Control).background(KColors.Surface).padding(16.dp, 18.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 MonthArrow("‹") {
                     month = month.minusMonths(1)
@@ -160,10 +160,8 @@ fun RecordsScreen(
         Spacer(Modifier.height(26.dp))
         Text("최근 운동", color = KColors.White, fontSize = 25.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(14.dp))
-        records.take(4).forEach { record ->
-            RecordCard(record)
-            Spacer(Modifier.height(10.dp))
-        }
+        Box(Modifier.fillMaxWidth().height(0.5.dp).background(KColors.Hairline))
+        records.take(4).forEach { record -> RecordCard(record) }
     }
 }
 
@@ -195,11 +193,11 @@ private fun CalendarGrid(month: YearMonth, records: List<WorkoutRecord>) {
                     Column(Modifier.weight(1f).height(44.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         if (day != null) {
                             val has = day in recorded
-                            val fill by animateColorAsState(if (has) KColors.AmberDark else Color.Transparent, Motion.ui(), label = "day")
+                            val fill by animateColorAsState(if (has) KColors.Accent else Color.Transparent, Motion.ui(), label = "day")
                             Box(Modifier.clip(CircleShape).background(fill).padding(horizontal = 9.dp, vertical = 4.dp)) {
-                                Text(day.toString(), color = if (has) KColors.White else KColors.Muted, fontSize = 15.sp, fontWeight = if (has) FontWeight.Bold else FontWeight.Normal)
+                                Text(day.toString(), color = if (has) KColors.OnAccent else KColors.Muted, fontSize = 15.sp, fontWeight = if (has) FontWeight.Bold else FontWeight.Normal)
                             }
-                            if (has) Text("•", color = KColors.Amber, fontSize = 13.sp)
+                            if (has) Text("•", color = KColors.Accent, fontSize = 13.sp)
                         }
                     }
                 }
@@ -210,18 +208,18 @@ private fun CalendarGrid(month: YearMonth, records: List<WorkoutRecord>) {
 
 @Composable
 private fun RecordCard(record: WorkoutRecord) {
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(KColors.Surface).padding(18.dp, 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(record.title, color = KColors.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            Text(record.date.replace("-", "."), color = KColors.Muted, fontSize = 13.sp)
+    Column {
+        Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(record.title, color = KColors.White, fontSize = 17.sp, fontWeight = FontWeight.Medium)
+                Text(record.date.replace("-", "."), color = KColors.Muted, fontSize = 12.sp)
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                Text("${record.minutes}분 · ${record.sets}세트", color = KColors.Soft, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Text("%,dkg".format(record.volumeKg), color = KColors.Muted, fontSize = 12.sp)
+            }
         }
-        Column(horizontalAlignment = Alignment.End) {
-            Text("${record.minutes}분 · ${record.sets}세트", color = KColors.Blue, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-            Text("%,dkg".format(record.volumeKg), color = KColors.Muted, fontSize = 13.sp)
-        }
+        Box(Modifier.fillMaxWidth().height(0.5.dp).background(KColors.Hairline))
     }
 }
 
@@ -288,11 +286,11 @@ private fun MenuButton(text: String, onClick: () -> Unit) {
         Modifier
             .fillMaxWidth()
             .height(58.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .background(KColors.AmberDark)
+            .clip(KShape.Control)
+            .background(KColors.Accent)
             .pressable(onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text, color = KColors.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Text(text, color = KColors.OnAccent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
     }
 }

@@ -72,7 +72,7 @@ fun RestBar(
     ) {
         // Thin progress line + grab handle.
         Box(Modifier.fillMaxWidth().height(3.dp).background(KColors.SurfaceRaised)) {
-            if (active) Box(Modifier.fillMaxWidth(rest.fraction).fillMaxHeight().background(KColors.Amber))
+            if (active) Box(Modifier.fillMaxWidth(rest.fraction).fillMaxHeight().background(KColors.Accent))
         }
         Box(Modifier.fillMaxWidth().padding(top = 6.dp), contentAlignment = Alignment.Center) {
             Box(Modifier.width(34.dp).height(4.dp).clip(RoundedCornerShape(2.dp)).background(KColors.Red).clickable { onExpand() })
@@ -144,12 +144,12 @@ fun ExpandedRestPanel(
             listOf(30, 60, 90, 120, 150, 180).forEach { seconds ->
                 Text(
                     String.format(Locale.US, "%d:%02d", seconds / 60, seconds % 60),
-                    color = if (seconds == idleSeconds) KColors.Amber else KColors.White,
+                    color = if (seconds == idleSeconds) KColors.Accent else KColors.White,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier
-                        .clip(RoundedCornerShape(18.dp))
-                        .border(1.dp, if (seconds == idleSeconds) KColors.Amber else KColors.Faint, RoundedCornerShape(18.dp))
+                        .clip(KShape.Control)
+                        .border(1.dp, if (seconds == idleSeconds) KColors.Accent else KColors.Faint, KShape.Control)
                         .clickable { onPreset(seconds) }
                         .padding(horizontal = 16.dp, vertical = 9.dp),
                 )
@@ -163,7 +163,7 @@ fun ExpandedRestPanel(
 fun NextSetBanner(text: String, leftMs: Long, onSkip: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().padding(12.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .clip(KShape.Control)
             .background(KColors.White)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,

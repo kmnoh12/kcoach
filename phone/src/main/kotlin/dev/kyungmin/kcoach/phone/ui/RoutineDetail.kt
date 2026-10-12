@@ -2,6 +2,7 @@ package dev.kyungmin.kcoach.phone.ui
 
 import android.view.View
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Box
@@ -29,6 +30,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
@@ -98,7 +101,7 @@ fun RoutineDetailScreen(
                         }
                     }
                     Spacer(Modifier.height(18.dp))
-                    Box(Modifier.fillMaxWidth().height(placeholderHeight).clip(RoundedCornerShape(20.dp)).background(KColors.Surface))
+                    Box(Modifier.fillMaxWidth().height(placeholderHeight).clip(KShape.Control).background(KColors.Surface))
                     Spacer(Modifier.height(10.dp))
                 }
             }
@@ -166,16 +169,21 @@ fun RoutineDetailScreen(
             }
         }
         Row(
-            Modifier.align(Alignment.BottomCenter).padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 18.dp),
+            Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .background(KColors.Bg)
+                .drawBehind { drawLine(KColors.Hairline, Offset(0f, 0f), Offset(size.width, 0f), strokeWidth = 1f) }
+                .padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 18.dp),
         ) {
             if (primaryLabel != null) {
-                RoutineButton(primaryLabel, KColors.AmberDark, KColors.White, Modifier.weight(1f), actions.primary)
+                RoutineButton(primaryLabel, KColors.Accent, KColors.OnAccent, Modifier.weight(1f), actions.primary)
                 Spacer(Modifier.width(12.dp))
             }
             RoutineButton(
                 "＋ 운동 추가",
-                if (addFilled) KColors.AmberDark else Color.White,
-                if (addFilled) KColors.White else KColors.AmberDark,
+                if (addFilled) KColors.Accent else Color.Transparent,
+                if (addFilled) KColors.OnAccent else KColors.White,
                 Modifier.weight(1f),
                 actions.addExercise,
             )
@@ -211,7 +219,7 @@ private fun ExerciseRow(
             Text("ⓘ", color = KColors.Muted, fontSize = 17.sp)
         }
         Box(Modifier.size(40.dp, 48.dp).clickable(onClick = onMenu), contentAlignment = Alignment.Center) {
-            Text(if (showHandle) "☷" else "•••", color = if (showHandle) KColors.Amber else KColors.Muted, fontSize = 15.sp)
+            Text(if (showHandle) "☷" else "•••", color = if (showHandle) KColors.Accent else KColors.Muted, fontSize = 15.sp)
         }
     }
 }
@@ -225,7 +233,12 @@ private fun RoutineButton(
     onClick: () -> Unit,
 ) {
     Box(
-        modifier.height(66.dp).clip(RoundedCornerShape(18.dp)).background(background).pressable(onClick),
+        modifier
+            .height(66.dp)
+            .clip(KShape.Control)
+            .background(background)
+            .then(if (background == Color.Transparent) Modifier.border(0.5.dp, Color(0xFF3A4240), KShape.Control) else Modifier)
+            .pressable(onClick),
         contentAlignment = Alignment.Center,
     ) {
         Text(text, color = content, fontSize = 18.sp, fontWeight = FontWeight.Bold)

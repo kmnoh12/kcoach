@@ -57,7 +57,7 @@ private fun WideButton(text: String, background: Color, content: Color, height: 
             .fillMaxWidth()
             .height(height.dp)
             .alpha(if (enabled) 1f else 0.6f)
-            .clip(RoundedCornerShape(18.dp))
+            .clip(KShape.Control)
             .background(background)
             .then(if (enabled) Modifier.pressable(onClick) else Modifier),
         contentAlignment = Alignment.Center,
@@ -103,14 +103,14 @@ fun CalibrationScreen(
         Spacer(Modifier.height(24.dp))
         Text(ui.selectedName, color = KColors.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(7.dp))
-        Text(ui.status, color = if (ui.statusAmber) KColors.Amber else KColors.Blue, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        Text(ui.status, color = if (ui.statusAmber) KColors.Accent else KColors.Soft, fontSize = 14.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(12.dp))
         Text(ui.instructions, color = KColors.Muted, fontSize = 15.sp)
         Spacer(Modifier.height(20.dp))
         WideButton(
             state.text,
-            if (active) KColors.AmberDark else KColors.SurfaceRaised,
-            if (state.textAmber) KColors.Amber else if (!active || ui.manualRequired) KColors.Muted else KColors.White,
+            if (active) KColors.Accent else KColors.SurfaceRaised,
+            if (state.textAmber) KColors.Accent else if (active) KColors.OnAccent else KColors.Muted,
             58,
             enabled = state.enabled && !ui.manualRequired,
             onClick = actions.toggle,
@@ -121,7 +121,7 @@ fun CalibrationScreen(
             Spacer(Modifier.height(8.dp))
             Text(profile.note, color = KColors.Muted, fontSize = 12.sp)
             Spacer(Modifier.height(12.dp))
-            WideButton("보정된 기록 삭제", Color(0xFF482620), KColors.Amber, 54, onClick = actions.deleteProfile)
+            WideButton("보정된 기록 삭제", Color(0xFF2A1613), KColors.Red, 54, onClick = actions.deleteProfile)
         }
         Spacer(Modifier.height(28.dp))
         Text("보정할 운동 선택", color = KColors.White, fontSize = 21.sp, fontWeight = FontWeight.Bold)
@@ -131,7 +131,7 @@ fun CalibrationScreen(
                 Modifier
                     .fillMaxWidth()
                     .alpha(if (active) 0.55f else 1f)
-                    .clip(RoundedCornerShape(16.dp))
+                    .clip(KShape.Control)
                     .background(if (row.selected) KColors.SurfaceRaised else Color.Transparent)
                     .pressable { if (!active) actions.select(row.id) }
                     .padding(8.dp),
@@ -169,7 +169,7 @@ fun MyMountainScreen(back: () -> Unit, start: () -> Unit, finish: () -> Unit) {
             NumberCard("시간", "30", Modifier.weight(1f))
         }
         Spacer(Modifier.height(28.dp))
-        WideButton("마이마운틴 시작", KColors.AmberDark, KColors.White, 64, onClick = start)
+        WideButton("마이마운틴 시작", KColors.Accent, KColors.OnAccent, 64, onClick = start)
         Spacer(Modifier.height(12.dp))
         WideButton("오늘은 종료", KColors.SurfaceRaised, KColors.White, 56, onClick = finish)
     }
@@ -178,7 +178,7 @@ fun MyMountainScreen(back: () -> Unit, start: () -> Unit, finish: () -> Unit) {
 @Composable
 private fun NumberCard(title: String, initial: String, modifier: Modifier) {
     var value by remember { mutableStateOf(initial) }
-    Column(modifier.heightIn(min = 118.dp).clip(RoundedCornerShape(18.dp)).background(KColors.Surface).padding(start = 16.dp, top = 14.dp, end = 16.dp, bottom = 10.dp)) {
+    Column(modifier.heightIn(min = 118.dp).clip(KShape.Control).background(KColors.Surface).padding(start = 16.dp, top = 14.dp, end = 16.dp, bottom = 10.dp)) {
         Text(title, color = KColors.Muted, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(12.dp))
         BasicTextField(
@@ -187,7 +187,7 @@ private fun NumberCard(title: String, initial: String, modifier: Modifier) {
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             textStyle = TextStyle(color = KColors.White, fontSize = 28.sp, fontWeight = FontWeight.Bold),
-            cursorBrush = SolidColor(KColors.Amber),
+            cursorBrush = SolidColor(KColors.Accent),
             modifier = Modifier.fillMaxWidth(),
         )
     }

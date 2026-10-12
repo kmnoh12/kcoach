@@ -100,13 +100,13 @@ private fun RowScope.Key(
     val background = when (tone) {
         KeyTone.Number -> KColors.SurfaceRaised
         KeyTone.Nav -> KColors.Surface
-        KeyTone.Done -> KColors.AmberDark
+        KeyTone.Done -> KColors.Accent
     }
     Box(
         Modifier
             .weight(weight)
             .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
+            .clip(KShape.Control)
             .background(background)
             .pointerInput(repeat) {
                 detectTapGestures(onPress = {
@@ -127,7 +127,7 @@ private fun RowScope.Key(
     ) {
         Text(
             label,
-            color = KColors.White,
+            color = if (tone == KeyTone.Done) KColors.OnAccent else KColors.White,
             fontSize = if (label.length > 1 && tone != KeyTone.Done) 18.sp else 22.sp,
             fontWeight = FontWeight.SemiBold,
         )
@@ -137,18 +137,18 @@ private fun RowScope.Key(
 @Composable
 private fun Segmented(options: List<Pair<String, Boolean>>, onToggle: () -> Unit) {
     Row(
-        Modifier.clip(RoundedCornerShape(16.dp)).background(KColors.Surface)
+        Modifier.clip(KShape.Control).background(KColors.Surface)
             .pointerInput(Unit) { detectTapGestures { onToggle() } },
     ) {
         options.forEach { (text, selected) ->
             Text(
                 text,
-                color = if (selected) KColors.Amber else KColors.Muted,
+                color = if (selected) KColors.Accent else KColors.Muted,
                 fontSize = 13.sp,
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                 modifier = Modifier
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(if (selected) Color(0xFF322A12) else Color.Transparent)
+                    .clip(KShape.Control)
+                    .background(if (selected) KColors.AccentWash else Color.Transparent)
                     .padding(horizontal = 12.dp, vertical = 6.dp),
             )
         }

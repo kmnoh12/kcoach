@@ -133,7 +133,7 @@ private fun SheetSurface(dismiss: () -> Unit, content: @Composable () -> Unit) {
         Modifier
             .offset { IntOffset(0, offset.value.roundToInt()) }
             .fillMaxWidth()
-            .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
+            .clip(KShape.Sheet)
             .background(KColors.Surface)
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
             .windowInsetsPadding(WindowInsets.navigationBars),
@@ -164,7 +164,7 @@ private fun DialogSurface(content: @Composable () -> Unit) {
         Modifier
             .padding(horizontal = 28.dp)
             .fillMaxWidth()
-            .clip(RoundedCornerShape(24.dp))
+            .clip(KShape.Panel)
             .background(KColors.SurfaceRaised)
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
             .padding(24.dp),
@@ -229,7 +229,7 @@ private fun DialogButtons(content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun TextAction(text: String, color: Color = KColors.Amber, onClick: () -> Unit) {
+private fun TextAction(text: String, color: Color = KColors.Accent, onClick: () -> Unit) {
     Box(Modifier.heightIn(min = 48.dp).pressable(onClick).padding(horizontal = 16.dp), contentAlignment = Alignment.Center) {
         Text(text, color = color, fontSize = 16.sp, fontWeight = FontWeight.Bold)
     }
@@ -263,14 +263,14 @@ fun InputDialog(title: String, hint: String, dismiss: () -> Unit, onSubmit: (Str
     LaunchedEffect(Unit) { focus.requestFocus() }
     Text(title, color = KColors.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
     Spacer(Modifier.height(16.dp))
-    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(KColors.Selected).padding(16.dp)) {
+    Box(Modifier.fillMaxWidth().clip(KShape.Control).background(KColors.Selected).padding(16.dp)) {
         if (text.isEmpty()) Text(hint, color = KColors.Faint, fontSize = 16.sp)
         BasicTextField(
             value = text,
             onValueChange = { text = it },
             singleLine = true,
             textStyle = TextStyle(color = KColors.White, fontSize = 16.sp),
-            cursorBrush = SolidColor(KColors.Amber),
+            cursorBrush = SolidColor(KColors.Accent),
             modifier = Modifier.fillMaxWidth().focusRequester(focus),
         )
     }
@@ -331,7 +331,7 @@ fun BigChoiceSheet(
             val cancelModifier = Modifier.weight(1f).height(if (filledButtons) 60.dp else 58.dp)
             if (filledButtons) {
                 BigButton(cancel, KColors.SurfaceRaised, KColors.White, cancelModifier) { dismiss(); onCancel() }
-                BigButton(confirm, KColors.AmberDark, KColors.White, Modifier.weight(1f).height(60.dp)) { dismiss(); onConfirm() }
+                BigButton(confirm, KColors.Accent, KColors.OnAccent, Modifier.weight(1f).height(60.dp)) { dismiss(); onConfirm() }
             } else {
                 TextButton(cancel, cancelModifier) { dismiss(); onCancel() }
                 TextButton(confirm, Modifier.weight(1f).height(58.dp)) { dismiss(); onConfirm() }
@@ -342,7 +342,7 @@ fun BigChoiceSheet(
 
 @Composable
 private fun BigButton(text: String, background: Color, content: Color, modifier: Modifier, onClick: () -> Unit) {
-    Box(modifier.clip(RoundedCornerShape(18.dp)).background(background).pressable(onClick), contentAlignment = Alignment.Center) {
+    Box(modifier.clip(KShape.Control).background(background).pressable(onClick), contentAlignment = Alignment.Center) {
         Text(text, color = content, fontSize = 18.sp, fontWeight = FontWeight.Bold)
     }
 }
@@ -350,6 +350,6 @@ private fun BigButton(text: String, background: Color, content: Color, modifier:
 @Composable
 private fun TextButton(text: String, modifier: Modifier, onClick: () -> Unit) {
     Box(modifier.pressable(onClick), contentAlignment = Alignment.Center) {
-        Text(text, color = KColors.Amber, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+        Text(text, color = KColors.Accent, fontSize = 17.sp, fontWeight = FontWeight.Bold)
     }
 }

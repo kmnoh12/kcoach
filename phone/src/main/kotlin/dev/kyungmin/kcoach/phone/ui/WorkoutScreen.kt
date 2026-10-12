@@ -300,7 +300,7 @@ private fun ExercisePage(
     Column(Modifier.fillMaxSize().verticalScroll(scroll).padding(horizontal = 16.dp)) {
         AndroidView(
             factory = { animationView(exerciseIndex) },
-            modifier = Modifier.fillMaxWidth().height(imageHeight).clip(RoundedCornerShape(20.dp)),
+            modifier = Modifier.fillMaxWidth().height(imageHeight).clip(KShape.Control),
             onRelease = ::stopAnimatedImages,
         )
         Spacer(Modifier.height(10.dp))
@@ -311,13 +311,13 @@ private fun ExercisePage(
         Text(exercise.muscles, color = KColors.Muted, fontSize = 13.sp)
         Spacer(Modifier.height(6.dp))
         Row(verticalAlignment = Alignment.Bottom) {
-            Text("목표 ", color = KColors.Blue, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-            FlipText(exercise.targetReps.toString(), 14.sp, KColors.Blue)
-            Text("회", color = KColors.Blue, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Text("목표 ", color = KColors.Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            FlipText(exercise.targetReps.toString(), 14.sp, KColors.Accent)
+            Text("회", color = KColors.Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.weight(1f))
-            Text("수행 ", color = if (exercise.performedReps > 0) KColors.Amber else KColors.Muted, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-            FlipText(exercise.performedReps.toString(), 14.sp, if (exercise.performedReps > 0) KColors.Amber else KColors.Muted)
-            Text("회", color = if (exercise.performedReps > 0) KColors.Amber else KColors.Muted, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Text("수행 ", color = if (exercise.performedReps > 0) KColors.Accent else KColors.Muted, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            FlipText(exercise.performedReps.toString(), 14.sp, if (exercise.performedReps > 0) KColors.Accent else KColors.Muted)
+            Text("회", color = if (exercise.performedReps > 0) KColors.Accent else KColors.Muted, fontSize = 14.sp, fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.height(12.dp))
         SetHeader(exercise.weighted, model.usePounds)
@@ -343,7 +343,7 @@ private fun ExercisePage(
                     enableDismissFromStartToEnd = false,
                     backgroundContent = {
                         Box(
-                            Modifier.fillMaxSize().padding(vertical = 3.dp).clip(RoundedCornerShape(10.dp)).background(KColors.Red),
+                            Modifier.fillMaxSize().padding(vertical = 3.dp).clip(KShape.Control).background(KColors.Red),
                             contentAlignment = Alignment.CenterEnd,
                         ) { Text("삭제", color = KColors.White, fontWeight = FontWeight.Bold, modifier = Modifier.padding(end = 18.dp)) }
                     },
@@ -368,15 +368,15 @@ private fun ExercisePage(
         }
         Spacer(Modifier.height(6.dp))
         Row {
-            TextAction("＋ 세트 추가", KColors.Amber, Modifier.weight(1f)) { actions.onAddSet(exerciseIndex) }
-            TextAction("☑ 모든 세트 완료", KColors.Blue, Modifier.weight(1f)) { actions.onAllSetsDone(exerciseIndex) }
+            TextAction("＋ 세트 추가", KColors.Accent, Modifier.weight(1f)) { actions.onAddSet(exerciseIndex) }
+            TextAction("☑ 모든 세트 완료", KColors.Accent, Modifier.weight(1f)) { actions.onAllSetsDone(exerciseIndex) }
         }
         if (exerciseIndex < model.exercises.lastIndex) {
             TextAction("다음 운동 →", KColors.White, Modifier.fillMaxWidth()) { onNextExercise() }
         }
         Text(
             "현재 ${exercise.sets.getOrNull(exercise.currentSetIndex)?.label ?: "-"}세트 · 완료 ${exercise.completedWorkSets}/${exercise.workSetCount}세트",
-            color = KColors.Green,
+            color = KColors.Accent,
             fontSize = 13.sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(top = 8.dp),
@@ -420,7 +420,7 @@ private fun SetRow(
         Modifier.fillMaxWidth().background(rowColor).height(46.dp).padding(vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Cell(set.label, Modifier.weight(SetWeights[0]), if (set.warmup) KColors.Amber else if (isCurrent) KColors.White else KColors.Muted, null, onLabel)
+        Cell(set.label, Modifier.weight(SetWeights[0]), if (set.warmup) KColors.Accent else if (isCurrent) KColors.White else KColors.Muted, null, onLabel)
         if (weighted) Cell(set.weightText, Modifier.weight(SetWeights[1]), KColors.White, editingField == SetField.WEIGHT, onWeight)
         Cell(set.reps.toString(), Modifier.weight(SetWeights[2]), KColors.White, editingField == SetField.REPS, onReps)
         CheckCell(set.completed, Modifier.weight(SetWeights[3]).padding(horizontal = 4.dp).height(40.dp).clickable { onCheck() })
@@ -433,9 +433,9 @@ private fun Cell(text: String, modifier: Modifier, color: androidx.compose.ui.gr
     val border by animateColorAsState(if (editing == true) KColors.Red else androidx.compose.ui.graphics.Color.Transparent, Motion.ui(), label = "cell")
     Box(
         modifier.padding(horizontal = 4.dp).height(40.dp)
-            .clip(RoundedCornerShape(10.dp))
+            .clip(KShape.Control)
             .background(if (editing == null) androidx.compose.ui.graphics.Color.Transparent else KColors.SurfaceRaised)
-            .border(1.5.dp, border, RoundedCornerShape(10.dp))
+            .border(1.5.dp, border, KShape.Control)
             .clickable { onClick() },
         contentAlignment = Alignment.Center,
     ) {
@@ -450,13 +450,13 @@ private fun SetRestRow(set: SetUi, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(set.grip, color = KColors.Faint, fontSize = 11.sp, modifier = Modifier.weight(1f))
-        Text("${set.restSeconds}초 ⏱", color = if (set.customRest) KColors.Amber else KColors.Faint, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+        Text("${set.restSeconds}초 ⏱", color = if (set.customRest) KColors.Accent else KColors.Faint, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
 @Composable
 private fun TextAction(text: String, color: androidx.compose.ui.graphics.Color, modifier: Modifier, onClick: () -> Unit) {
-    Box(modifier.height(46.dp).clip(RoundedCornerShape(12.dp)).clickable { onClick() }, contentAlignment = Alignment.Center) {
+    Box(modifier.height(46.dp).clip(KShape.Control).clickable { onClick() }, contentAlignment = Alignment.Center) {
         Text(text, color = color, fontSize = 15.sp, fontWeight = FontWeight.Bold)
     }
 }

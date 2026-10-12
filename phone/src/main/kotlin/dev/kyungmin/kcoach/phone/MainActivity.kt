@@ -36,7 +36,11 @@ import dev.kyungmin.kcoach.phone.ui.SheetOptions
 import androidx.compose.ui.platform.ComposeView
 import dev.kyungmin.kcoach.phone.ui.ActiveWorkoutScreen
 import dev.kyungmin.kcoach.phone.ui.ExerciseUi
+import dev.kyungmin.kcoach.core.TrainingLoad
 import dev.kyungmin.kcoach.phone.ui.HomeActions
+import dev.kyungmin.kcoach.phone.ui.HomeUi
+import dev.kyungmin.kcoach.phone.ui.RoutineRowUi2
+import dev.kyungmin.kcoach.phone.ui.WeekDayUi
 import dev.kyungmin.kcoach.phone.ui.HomeScreen
 import dev.kyungmin.kcoach.phone.ui.Motion
 import dev.kyungmin.kcoach.phone.ui.MenuActions
@@ -184,16 +188,16 @@ class MainActivity : ComponentActivity() {
         val weightKg: Double?,
     )
 
-    private val bg = Color.rgb(10, 12, 12)
-    private val surface = Color.rgb(23, 26, 26)
-    private val surfaceRaised = Color.rgb(31, 34, 34)
-    private val white = Color.rgb(245, 246, 246)
-    private val muted = Color.rgb(145, 150, 150)
-    private val faint = Color.rgb(79, 84, 84)
-    private val amber = Color.rgb(255, 177, 0)
-    private val amberDark = Color.rgb(208, 128, 0)
-    private val blue = Color.rgb(83, 142, 255)
-    private val green = Color.rgb(102, 226, 153)
+    private val bg = Color.rgb(11, 12, 12)
+    private val surface = Color.rgb(22, 26, 25)
+    private val surfaceRaised = Color.rgb(31, 35, 34)
+    private val white = Color.rgb(242, 244, 243)
+    private val muted = Color.rgb(138, 147, 144)
+    private val faint = Color.rgb(79, 86, 84)
+    private val amber = Color.rgb(45, 212, 191)
+    private val amberDark = Color.rgb(45, 212, 191)
+    private val blue = Color.rgb(152, 163, 160)
+    private val green = Color.rgb(45, 212, 191)
 
     private val routines = WorkoutData.defaultRoutines()
     private val freeExercises = mutableListOf<RoutineExercise>()
@@ -550,6 +554,24 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun weekRecords(today: LocalDate): List<WorkoutRecord> {
+        val monday = today.minusDays((today.dayOfWeek.value - 1).toLong())
+        return WorkoutData.records.filter {
+            val date = LocalDate.parse(it.date)
+            !date.isBefore(monday) && !date.isAfter(monday.plusDays(6))
+        }
+    }
+
+    private fun weekStrip(today: LocalDate): List<WeekDayUi> {
+        val monday = today.minusDays((today.dayOfWeek.value - 1).toLong())
+        val byDate = weekRecords(today).groupBy { LocalDate.parse(it.date) }
+        return listOf("월", "화", "수", "목", "금", "토", "일").mapIndexed { index, label ->
+            val date = monday.plusDays(index.toLong())
+            val load = byDate[date]?.sumOf { TrainingLoad.score(it.minutes, it.sets) }?.coerceAtMost(TrainingLoad.MAX_SCORE)
+            WeekDayUi(label, load, date == today, date.isAfter(today))
+        }
+    }
+
     private fun showHome() {
         stopTicker()
         if (activeWorkout == null) previewWorkout = null
@@ -558,6 +580,13 @@ class MainActivity : ComponentActivity() {
 
         val running = activeWorkout
         val runningUi = running?.let { RunningUi(it.routine.name, it.paused) { workoutElapsedSeconds(it) } }
+        val rows = routines.map { RoutineRowUi2(it, TrainingLoad.daysAgo(it.lastPerformed)) }
+        val homeUi = HomeUi(
+            week = weekStrip(LocalDate.now()),
+            weekCount = weekRecords(LocalDate.now()).size,
+            rows = rows,
+            longestRest = rows.filter { it.daysAgo != null }.maxByOrNull { it.daysAgo!! },
+        )
         val actions = HomeActions(
             openRoutine = { routine ->
                 selectedRoutine = routine
@@ -574,7 +603,7 @@ class MainActivity : ComponentActivity() {
             stop = ::confirmStopWorkout,
         )
         val home = ComposeView(this).apply {
-            setContent { HomeScreen(routines, runningUi, actions) }
+            setContent { HomeScreen(homeUi, runningUi, actions) }
         }
         showScaffold(home, null, RootTab.HOME)
     }
@@ -1136,7 +1165,7 @@ class MainActivity : ComponentActivity() {
         }
         showSheet { dismiss ->
             BigChoiceSheet(
-                eyebrow = "▶", eyebrowColor = KColors.Blue,
+                eyebrow = "▶", eyebrowColor = KColors.Accent,
                 title = "운동 시작",
                 body = "운동을 시작하시겠습니까?\n\n워치가 연결되면 현재 세트·횟수·심박수가 동기화됩니다.",
                 bodyColor = KColors.White,
@@ -2088,7 +2117,7 @@ class MainActivity : ComponentActivity() {
         pausedRestRemainingMs = 0L
         showSheet { dismiss ->
             BigChoiceSheet(
-                eyebrow = "웨이트 완료", eyebrowColor = KColors.Green,
+                eyebrow = "웨이트 완료", eyebrowColor = KColors.Accent,
                 title = "마이마운틴 할까?",
                 body = "오늘 컨디션에 따라 선택하면 돼.\n안 해도 루틴은 정상 완료야.",
                 bodyColor = KColors.Muted,

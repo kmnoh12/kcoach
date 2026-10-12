@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -74,12 +75,12 @@ fun FlipText(
 @Composable
 fun CheckCell(checked: Boolean, modifier: Modifier = Modifier) {
     val progress by animateFloatAsState(if (checked) 1f else 0f, tween(260, easing = Motion.UiEasing), label = "check")
-    val border by animateColorAsState(if (checked) KColors.Amber else Color.Transparent, Motion.ui(), label = "checkBorder")
+    val border by animateColorAsState(if (checked) KColors.Accent else Color.Transparent, Motion.ui(), label = "checkBorder")
     Box(
         modifier
-            .clip(RoundedCornerShape(10.dp))
+            .clip(KShape.Control)
             .background(KColors.SurfaceRaised)
-            .border(1.5.dp, border, RoundedCornerShape(10.dp)),
+            .border(1.5.dp, border, KShape.Control),
         contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.size(18.dp)) {
@@ -97,7 +98,7 @@ fun CheckCell(checked: Boolean, modifier: Modifier = Modifier) {
                     lineTo(p2.x + (p3.x - p2.x) * b, p2.y + (p3.y - p2.y) * b)
                 }
             }
-            drawPath(path, KColors.Amber, style = Stroke(width = 2.6.dp.toPx(), cap = StrokeCap.Round))
+            drawPath(path, KColors.Accent, style = Stroke(width = 2.6.dp.toPx(), cap = StrokeCap.Round))
         }
     }
 }
@@ -108,7 +109,7 @@ fun PageDots(count: Int, current: Int, modifier: Modifier = Modifier) {
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
         repeat(count) { i ->
             val width by animateDpAsState(if (i == current) 16.dp else 5.dp, tween(Motion.PAGE_MS, easing = Motion.UiEasing), label = "dot")
-            val color by animateColorAsState(if (i == current) KColors.Amber else KColors.Faint, Motion.ui(), label = "dotColor")
+            val color by animateColorAsState(if (i == current) KColors.Accent else KColors.Faint, Motion.ui(), label = "dotColor")
             Box(Modifier.width(width).height(5.dp).clip(RoundedCornerShape(3.dp)).background(color))
         }
     }
@@ -135,7 +136,7 @@ fun RestRing(fraction: Float, diameter: Dp, stroke: Dp, modifier: Modifier = Mod
         val sweep = 360f * fraction.coerceIn(0f, 1f) * intro.value
         rotate(-90f) {
             drawArc(
-                brush = Brush.sweepGradient(listOf(KColors.Amber, Color(0xFFFF7A1A), KColors.Red, KColors.Amber)),
+                brush = SolidColor(KColors.Accent),
                 startAngle = 0f,
                 sweepAngle = sweep,
                 useCenter = false,

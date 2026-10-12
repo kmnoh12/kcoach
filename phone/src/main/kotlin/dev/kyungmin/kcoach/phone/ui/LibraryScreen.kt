@@ -79,7 +79,7 @@ fun LibraryScreen(
                 Text("‹", color = KColors.White, fontSize = 48.sp)
             }
             Box(
-                Modifier.weight(1f).height(58.dp).clip(RoundedCornerShape(14.dp)).background(KColors.SurfaceRaised).padding(horizontal = 18.dp),
+                Modifier.weight(1f).height(58.dp).clip(KShape.Control).background(KColors.SurfaceRaised).padding(horizontal = 18.dp),
                 contentAlignment = Alignment.CenterStart,
             ) {
                 if (query.isEmpty()) Text("운동 검색", color = KColors.Muted, fontSize = 17.sp)
@@ -88,7 +88,7 @@ fun LibraryScreen(
                     onValueChange = { query = it },
                     singleLine = true,
                     textStyle = TextStyle(color = KColors.White, fontSize = 17.sp),
-                    cursorBrush = SolidColor(KColors.Amber),
+                    cursorBrush = SolidColor(KColors.Accent),
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -107,7 +107,7 @@ fun LibraryScreen(
         LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 20.dp)) {
             item(key = "custom") {
                 Text(
-                    "＋  커스텀 운동 추가", color = KColors.Amber, fontSize = 17.sp, fontWeight = FontWeight.Bold,
+                    "＋  커스텀 운동 추가", color = KColors.Accent, fontSize = 17.sp, fontWeight = FontWeight.Bold,
                     modifier = Modifier.fillMaxWidth().pressable(actions.custom).padding(14.dp, 16.dp),
                 )
             }
@@ -143,12 +143,12 @@ private fun ChipStrip(values: List<String>, selected: String, onSelect: (String)
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
         values.forEach { value ->
             val isSelected = value == selected
-            val background by animateColorAsState(if (isSelected) Color(0xFF322A12) else Color.Transparent, Motion.ui(), label = "chipBg")
-            val text by animateColorAsState(if (isSelected) KColors.Amber else KColors.Muted, Motion.ui(), label = "chipText")
+            val background by animateColorAsState(if (isSelected) KColors.AccentWash else Color.Transparent, Motion.ui(), label = "chipBg")
+            val text by animateColorAsState(if (isSelected) KColors.Accent else KColors.Muted, Motion.ui(), label = "chipText")
             Text(
                 value, color = text, fontSize = 15.sp, fontWeight = FontWeight.Bold,
                 modifier = Modifier
-                    .clip(RoundedCornerShape(20.dp))
+                    .clip(KShape.Control)
                     .background(background)
                     .pressable { onSelect(value) }
                     .padding(horizontal = 14.dp, vertical = 9.dp),

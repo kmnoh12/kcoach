@@ -5,6 +5,7 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.TweenSpec
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 
 /**
  * One motion language for the whole app: large panels move with a 300ms
@@ -29,16 +30,24 @@ object Motion {
 }
 
 object KColors {
-    val Bg = Color(0xFF0A0C0C)
-    val Surface = Color(0xFF171A1A)
-    val SurfaceRaised = Color(0xFF1F2222)
-    val Selected = Color(0xFF262727)
-    val White = Color(0xFFF5F6F6)
-    val Muted = Color(0xFF919696)
-    val Faint = Color(0xFF4F5454)
-    val Amber = Color(0xFFFFB100)
-    val AmberDark = Color(0xFFD08000)
+    val Bg = Color(0xFF0B0C0C)
+    val Surface = Color(0xFF161A19)
+    val SurfaceRaised = Color(0xFF1F2322)
+    val Selected = Color(0xFF262B2A)
+    val White = Color(0xFFF2F4F3)
+    val Muted = Color(0xFF8A9390)
+    val Soft = Color(0xFF98A3A0)
+    val Faint = Color(0xFF4F5654)
+    val Hairline = Color(0xFF232827)
+    val Accent = Color(0xFF2DD4BF)
+    val OnAccent = Color(0xFF04201C)
+    val AccentWash = Color(0xFF10312C)
     val Red = Color(0xFFE5483B)
-    val Blue = Color(0xFF538EFF)
-    val Green = Color(0xFF66E299)
+}
+
+/** Radii: slightly rounded rectangles, never pills. */
+object KShape {
+    val Control = androidx.compose.foundation.shape.RoundedCornerShape(6.dp)
+    val Panel = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
+    val Sheet = androidx.compose.foundation.shape.RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
 }
