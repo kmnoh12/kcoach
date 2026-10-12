@@ -69,7 +69,7 @@ import dev.kyungmin.kcoach.phone.ui.MenuActions
 import dev.kyungmin.kcoach.phone.ui.MenuScreen
 import dev.kyungmin.kcoach.phone.ui.RecordsActions
 import dev.kyungmin.kcoach.phone.ui.RecordsScreen
-import dev.kyungmin.kcoach.phone.ui.RootBottomNav
+import dev.kyungmin.kcoach.phone.ui.FloatingTabBar
 import dev.kyungmin.kcoach.phone.ui.RoutineDetailActions
 import dev.kyungmin.kcoach.phone.ui.RoutineDetailScreen
 import dev.kyungmin.kcoach.phone.ui.RoutineRowUi
@@ -509,6 +509,10 @@ class MainActivity : ComponentActivity() {
             WindowInsetsCompat.CONSUMED
         }
         setContentView(root)
+        addContentView(
+            tabBarView(),
+            FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM),
+        )
         addContentView(
             ComposeView(this).apply { setContent { OverlayHost(overlays) } },
             ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
@@ -1309,6 +1313,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
             workoutComposeView = composeView
+            navVisible.value = false
             root.removeAllViews()
             root.addView(composeView, FrameLayout.LayoutParams(-1, -1))
             updateWearConnectionStatus()
@@ -2663,8 +2668,11 @@ class MainActivity : ComponentActivity() {
         val column = vertical()
         column.addView(body, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         actions?.let { column.addView(it) }
-        column.addView(bottomNav(selected), matchParams(74))
+        // Room under the content for the floating bar, which is drawn by the app-level tab bar view.
+        column.addView(View(this), matchParams(86))
         root.addView(column, FrameLayout.LayoutParams(-1, -1))
+        navSelected.intValue = selected.ordinal
+        navVisible.value = true
         if (switchingTab) {
             body.alpha = 0f
             body.animate().alpha(1f).setDuration(Motion.UI_MS.toLong()).setInterpolator(uiInterpolator).start()
@@ -2672,6 +2680,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun showDetail(body: View, actions: View?, animateFromRight: Boolean = false) {
+        navVisible.value = false
         val frame = FrameLayout(this)
         frame.addView(body, FrameLayout.LayoutParams(-1, -1))
         actions?.let { frame.addView(it, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM)) }
@@ -2715,6 +2724,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun showStandalone(body: View, bottomOverlay: View? = null) {
+        navVisible.value = false
         root.removeAllViews()
         if (bottomOverlay == null) {
             root.addView(body, FrameLayout.LayoutParams(-1, -1))
@@ -2735,9 +2745,13 @@ class MainActivity : ComponentActivity() {
     private val panelInterpolator = PathInterpolator(0.785f, 0.135f, 0.15f, 0.86f)
     private val uiInterpolator = PathInterpolator(0.42f, 0f, 0.58f, 1f)
 
-    private fun bottomNav(selected: RootTab): View = ComposeView(this).apply {
+    private val navSelected = mutableIntStateOf(0)
+    private val navVisible = mutableStateOf(false)
+
+    /** One floating tab bar for the whole app; it lives above every screen and only shows on the tab screens. */
+    private fun tabBarView(): View = ComposeView(this).apply {
         setContent {
-            RootBottomNav(selected.ordinal) { index ->
+            FloatingTabBar(navSelected.intValue, navVisible.value) { index ->
                 when (RootTab.values()[index]) {
                     RootTab.HOME -> showHome()
                     RootTab.RECORDS -> showRecords()

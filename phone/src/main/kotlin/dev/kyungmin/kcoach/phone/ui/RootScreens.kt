@@ -47,6 +47,33 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.kyungmin.kcoach.phone.WorkoutRoutine
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.util.lerp
+import kotlin.math.abs
+import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 
 /** Tab order matches MainActivity.RootTab. */
@@ -69,29 +96,114 @@ fun Modifier.pressable(onClick: () -> Unit): Modifier {
     return this.scale(scale).clickable(interactionSource = source, indication = null, onClick = onClick)
 }
 
+/** Extra width the chosen tab takes, in units of one plain tab. */
+private const val TabExpand = 1.1f
+
+/**
+ * Tab bar that floats above the screen. Only the chosen tab shows its label and widens; press and slide to move
+ * the highlight along with the finger, release to switch. The bar stays alive across tab changes, so it can animate.
+ */
 @Composable
-fun RootBottomNav(selected: Int, onSelect: (Int) -> Unit) {
-    Row(
+fun FloatingTabBar(selected: Int, visible: Boolean, onSelect: (Int) -> Unit) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(Motion.panel()) + slideInVertically(Motion.panel()) { it / 2 },
+        exit = fadeOut(Motion.ui()) + slideOutVertically(Motion.ui()) { it / 2 },
+    ) {
+        TabBarBody(selected, onSelect)
+    }
+}
+
+@Composable
+private fun TabBarBody(selected: Int, onSelect: (Int) -> Unit) {
+    val count = NavItems.size
+    val scope = rememberCoroutineScope()
+    val haptic = LocalHapticFeedback.current
+    val density = LocalDensity.current
+    val position = remember { Animatable(selected.toFloat()) }
+    var dragging by remember { mutableStateOf(false) }
+    LaunchedEffect(selected, dragging) {
+        if (!dragging) position.animateTo(selected.toFloat(), spring(dampingRatio = 1f, stiffness = Spring.StiffnessMediumLow))
+    }
+    val shape = RoundedCornerShape(12.dp)
+    Box(
         Modifier
             .fillMaxWidth()
-            .background(KColors.Bg)
-            .border(0.5.dp, KColors.Hairline)
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+            .windowInsetsPadding(WindowInsets.navigationBars)
+            .padding(horizontal = 14.dp, vertical = 12.dp)
+            .shadow(14.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
+            .clip(shape)
+            .background(KColors.Surface.copy(alpha = 0.96f))
+            .border(0.5.dp, KColors.Hairline, shape)
+            .padding(4.dp),
     ) {
-        NavItems.forEachIndexed { index, (icon, title) ->
-            val tint by animateColorAsState(if (index == selected) KColors.Accent else KColors.Muted, Motion.ui(), label = "navTint")
-            Column(
+        BoxWithConstraints(Modifier.fillMaxWidth().height(48.dp)) {
+            val innerPx = constraints.maxWidth.toFloat()
+            val unit = innerPx / (count + TabExpand)
+            val pos = position.value
+            fun weight(i: Int) = 1f + TabExpand * (1f - abs(pos - i)).coerceAtLeast(0f)
+            fun start(i: Int) = (0 until i).sumOf { weight(it).toDouble() }.toFloat() * unit
+            val i0 = pos.toInt().coerceIn(0, count - 1)
+            val i1 = (i0 + 1).coerceAtMost(count - 1)
+            val f = (pos - i0).coerceIn(0f, 1f)
+            val thumbLeft = lerp(start(i0), start(i1), f)
+            val thumbWidth = lerp(weight(i0), weight(i1), f) * unit
+
+            Box(
                 Modifier
-                    .weight(1f)
-                    .height(66.dp)
-                    .pressable { onSelect(index) },
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-            ) {
-                KIcon(icon, tint, size = 24.dp)
-                Spacer(Modifier.height(2.dp))
-                Text(title, color = tint, fontSize = 12.sp, fontWeight = if (index == selected) FontWeight.Medium else FontWeight.Normal)
+                    .offset { IntOffset(thumbLeft.roundToInt(), 0) }
+                    .width(with(density) { thumbWidth.toDp() })
+                    .fillMaxHeight()
+                    .clip(KShape.Control)
+                    .background(KColors.AccentWash)
+                    .border(1.dp, KColors.Accent, KShape.Control),
+            )
+            Row(Modifier.fillMaxSize()) {
+                NavItems.forEachIndexed { index, (icon, title) ->
+                    val chosen = (1f - abs(pos - index)).coerceAtLeast(0f)
+                    val tint = lerp(KColors.Muted, KColors.Accent, chosen)
+                    Row(
+                        Modifier.weight(weight(index)).fillMaxHeight(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        KIcon(icon, tint, size = 22.dp)
+                        if (chosen > 0.7f) {
+                            Spacer(Modifier.width(6.dp))
+                            Text(title, color = tint, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
+                        }
+                    }
+                }
             }
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .pointerInput(count, innerPx) {
+                        awaitEachGesture {
+                            val down = awaitFirstDown()
+                            dragging = true
+                            fun target(x: Float) = (x / innerPx * count - 0.5f).coerceIn(0f, (count - 1).toFloat())
+                            var lastIndex = target(down.position.x).roundToInt()
+                            scope.launch { position.animateTo(target(down.position.x), tween(110)) }
+                            var cancelled = false
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val change = event.changes.first()
+                                if (change.isConsumed) { cancelled = true; break }
+                                val t = target(change.position.x)
+                                val index = t.roundToInt()
+                                if (index != lastIndex) {
+                                    lastIndex = index
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                }
+                                scope.launch { position.snapTo(t) }
+                                if (!change.pressed) break
+                            }
+                            dragging = false
+                            if (!cancelled && lastIndex != selected) onSelect(lastIndex)
+                        }
+                    },
+            )
         }
     }
 }
