@@ -65,6 +65,11 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.unit.Velocity
 import kotlin.math.roundToInt
 
 /** One bottom sheet or centred dialog shown above whatever screen is current. */
@@ -131,6 +136,46 @@ private fun SheetSurface(dismiss: () -> Unit, content: @Composable () -> Unit) {
     val offset = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
     val dismissDistance = with(density) { 100.dp.toPx() }
+    val flingVelocity = with(density) { 900.dp.toPx() }
+
+    fun release(velocity: Float) {
+        scope.launch {
+            if (offset.value > dismissDistance || velocity > flingVelocity) dismiss()
+            else offset.animateTo(0f, Motion.panel())
+        }
+    }
+
+    // Scrollable content (long lists) hands leftover downward drags to the sheet once it is at the top.
+    val nested = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (available.y < 0f && offset.value > 0f) {
+                    val used = maxOf(available.y, -offset.value)
+                    scope.launch { offset.snapTo(offset.value + used) }
+                    return Offset(0f, used)
+                }
+                return Offset.Zero
+            }
+
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                if (available.y > 0f && source == NestedScrollSource.UserInput) {
+                    scope.launch { offset.snapTo(offset.value + available.y) }
+                    return Offset(0f, available.y)
+                }
+                return Offset.Zero
+            }
+
+            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+                if (offset.value > 0f) {
+                    release(available.y)
+                    return available
+                }
+                return Velocity.Zero
+            }
+        }
+    }
+
+    // The whole sheet is the drag handle, not just the grabber at the top.
     Column(
         Modifier
             .offset { IntOffset(0, offset.value.roundToInt()) }
@@ -138,22 +183,15 @@ private fun SheetSurface(dismiss: () -> Unit, content: @Composable () -> Unit) {
             .clip(KShape.Sheet)
             .background(KColors.Surface)
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
+            .nestedScroll(nested)
+            .draggable(
+                orientation = Orientation.Vertical,
+                state = rememberDraggableState { delta -> scope.launch { offset.snapTo((offset.value + delta).coerceAtLeast(0f)) } },
+                onDragStopped = { velocity -> release(velocity) },
+            )
             .windowInsetsPadding(WindowInsets.navigationBars),
     ) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(36.dp)
-                .draggable(
-                    orientation = Orientation.Vertical,
-                    state = rememberDraggableState { delta -> scope.launch { offset.snapTo((offset.value + delta).coerceAtLeast(0f)) } },
-                    onDragStopped = {
-                        if (offset.value > dismissDistance) dismiss()
-                        else offset.animateTo(0f, Motion.panel())
-                    },
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
+        Box(Modifier.fillMaxWidth().height(36.dp), contentAlignment = Alignment.Center) {
             Box(Modifier.width(44.dp).height(4.dp).clip(RoundedCornerShape(2.dp)).background(KColors.Faint))
         }
         Column(Modifier.heightIn(max = 560.dp)) { content() }
@@ -195,6 +233,46 @@ fun SheetOptionRow(icon: KIcon, title: String, onClick: () -> Unit) {
 }
 
 class SheetItem(val icon: KIcon, val title: String, val onClick: () -> Unit)
+
+class SheetValueRow(val label: String, val value: String, val onClick: () -> Unit)
+
+class SheetAction(val label: String, val destructive: Boolean, val onClick: () -> Unit)
+
+/** Sheet for one set: big title, settings as label / value rows, two plain text actions underneath. */
+@Composable
+fun SetSheet(title: String, subtitle: String, rows: List<SheetValueRow>, actions: List<SheetAction>) {
+    Column(Modifier.padding(bottom = 12.dp)) {
+        Column(Modifier.padding(start = 22.dp, end = 22.dp, bottom = 14.dp)) {
+            Text(title, color = KColors.White, fontSize = 28.sp, fontWeight = FontWeight.Medium)
+            Spacer(Modifier.height(2.dp))
+            Text(subtitle, color = KColors.Muted, fontSize = 13.sp)
+        }
+        rows.forEach { row ->
+            Box(Modifier.padding(horizontal = 22.dp).fillMaxWidth().height(0.5.dp).background(KColors.Hairline))
+            Row(
+                Modifier.fillMaxWidth().height(56.dp).pressable(row.onClick).padding(horizontal = 22.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(row.label, color = KColors.Soft, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                Text(row.value, color = KColors.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                Spacer(Modifier.width(6.dp))
+                KIcon(KIcon.Forward, KColors.Faint, size = 18.dp)
+            }
+        }
+        Box(Modifier.padding(horizontal = 22.dp).fillMaxWidth().height(0.5.dp).background(KColors.Hairline))
+        Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp)) {
+            actions.forEach { action ->
+                Box(Modifier.weight(1f).height(52.dp).pressable(action.onClick), contentAlignment = Alignment.Center) {
+                    Text(
+                        action.label,
+                        color = if (action.destructive) KColors.Red else KColors.White,
+                        fontSize = 15.sp, fontWeight = FontWeight.Medium,
+                    )
+                }
+            }
+        }
+    }
+}
 
 @Composable
 fun SheetOptions(title: String, items: List<SheetItem>) {

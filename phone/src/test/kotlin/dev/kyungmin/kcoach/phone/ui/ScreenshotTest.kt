@@ -221,4 +221,13 @@ class ScreenshotTest {
             }
         }
     }
+
+    @Test
+    fun sheetSet() = overlayShot("sheet_set", true) {
+        SetSheet(
+            "1세트", "케이블 익스터널 로테이션 · 25회",
+            listOf(SheetValueRow("세트 종류", "일반") {}, SheetValueRow("그립", "노멀") {}, SheetValueRow("운동 강도 (RPE)", "선택 안 함") {}),
+            listOf(SheetAction("이전에 세트 추가", false) {}, SheetAction("세트 삭제", true) {}),
+        )
+    }
 }

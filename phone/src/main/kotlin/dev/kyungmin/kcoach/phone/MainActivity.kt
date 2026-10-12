@@ -74,6 +74,9 @@ import dev.kyungmin.kcoach.phone.ui.RunningUi
 import dev.kyungmin.kcoach.phone.ui.SetField
 import dev.kyungmin.kcoach.phone.ui.SetUi
 import dev.kyungmin.kcoach.phone.ui.StatsScreen
+import dev.kyungmin.kcoach.phone.ui.SetSheet
+import dev.kyungmin.kcoach.phone.ui.SheetAction
+import dev.kyungmin.kcoach.phone.ui.SheetValueRow
 import dev.kyungmin.kcoach.phone.ui.StatsUi
 import dev.kyungmin.kcoach.phone.ui.UpdateUi
 import dev.kyungmin.kcoach.phone.ui.WorkoutActions
@@ -2107,36 +2110,39 @@ class MainActivity : ComponentActivity() {
         val set = routineExercise.sets.getOrNull(setIndex) ?: return
         val setLabel = routineExercise.sets.workSetLabel(setIndex).let { if (it == "W") "웜업" else "${it}세트" }
         showSheet { dismiss ->
-            SheetOptions(
-                "${routineExercise.exercise.name} $setLabel · ${set.targetReps}회",
-                listOf(
-                    SheetItem(KIcon.Sliders, "세트 타입\n${set.setType.displayName}") {
-                        showChoiceSheet("세트 타입", listOf("일반" to "일반 세트", "웜업" to "근육을 준비하기 위한 워밍업", "슈퍼" to "두 운동을 쉬지 않고 연속으로", "드랍" to "휴식 없이 무게를 낮춰 이어서", "실패" to "실패까지 간 세트", "보조" to "도움을 받아 끝낸 세트")) { value ->
+            SetSheet(
+                title = setLabel,
+                subtitle = "${routineExercise.exercise.name} · ${set.targetReps}회",
+                rows = listOf(
+                    SheetValueRow("세트 종류", set.setType.displayName) {
+                        showChoiceSheet("세트 종류", listOf("일반" to "일반 세트", "웜업" to "근육을 준비하기 위한 워밍업", "슈퍼" to "두 운동을 쉬지 않고 연속으로", "드랍" to "휴식 없이 무게를 낮춰 이어서", "실패" to "실패까지 간 세트", "보조" to "도움을 받아 끝낸 세트")) { value ->
                             set.setType = SetType.fromStorage(value)
                             showActiveWorkout()
                         }
                     },
-                    SheetItem(KIcon.Sliders, "그립 타입\n${set.gripType}") {
-                        showChoiceSheet("그립 타입", listOf("노멀" to "표준 그립", "오버핸드" to "손바닥이 몸 반대쪽을 향하는 그립", "언더핸드" to "손바닥이 몸 쪽을 향하는 그립", "뉴트럴" to "양손이 서로 마주 보는 그립", "와이드" to "어깨 너비보다 넓은 손 배치", "클로즈" to "어깨 너비보다 좁은 손 배치", "얼터네이트" to "한 손은 오버핸드, 다른 한 손은 언더핸드")) { value ->
+                    SheetValueRow("그립", set.gripType) {
+                        showChoiceSheet("그립", listOf("노멀" to "표준 그립", "오버핸드" to "손바닥이 몸 반대쪽을 향하는 그립", "언더핸드" to "손바닥이 몸 쪽을 향하는 그립", "뉴트럴" to "양손이 서로 마주 보는 그립", "와이드" to "어깨 너비보다 넓은 손 배치", "클로즈" to "어깨 너비보다 좁은 손 배치", "얼터네이트" to "한 손은 오버핸드, 다른 한 손은 언더핸드")) { value ->
                             set.gripType = value
                             showActiveWorkout()
                         }
                     },
-                    SheetItem(KIcon.Stats, "운동자각도\n${set.rpe ?: "선택 안 함"}") {
-                        showChoiceSheet("RPE", listOf("선택 안 함" to "", "10" to "더는 못 해요", "9.5" to "1개 정도 더 할 수 있을 것 같아요", "9" to "확실히 1개 더 할 수 있어요", "8.5" to "아마 2개 더 할 수 있어요", "8" to "확실히 2개 더 할 수 있어요", "7" to "꽤 할 만했어요", "6" to "웜업 정도예요")) { value ->
+                    SheetValueRow("운동 강도 (RPE)", set.rpe ?: "선택 안 함") {
+                        showChoiceSheet("운동 강도 (RPE)", listOf("선택 안 함" to "", "10" to "더는 못 해요", "9.5" to "1개 정도 더 할 수 있을 것 같아요", "9" to "확실히 1개 더 할 수 있어요", "8.5" to "아마 2개 더 할 수 있어요", "8" to "확실히 2개 더 할 수 있어요", "7" to "꽤 할 만했어요", "6" to "웜업 정도예요")) { value ->
                             set.rpe = value.takeUnless { it == "선택 안 함" }
                             showActiveWorkout()
                         }
                     },
-                    SheetItem(KIcon.Minus, "세트 삭제") {
+                ),
+                actions = listOf(
+                    SheetAction("이전에 세트 추가", false) {
+                        dismiss()
+                        routineExercise.sets.add(setIndex, PlannedSet(set.weightKg, set.targetReps))
+                        showActiveWorkout()
+                    },
+                    SheetAction("세트 삭제", true) {
                         dismiss()
                         if (routineExercise.sets.size > 1) routineExercise.sets.removeAt(setIndex)
                         workout.selectedEditSetIndex = workout.selectedEditSetIndex.coerceAtMost(routineExercise.sets.lastIndex)
-                        showActiveWorkout()
-                    },
-                    SheetItem(KIcon.Plus, "이전 세트 추가") {
-                        dismiss()
-                        routineExercise.sets.add(setIndex, PlannedSet(set.weightKg, set.targetReps))
                         showActiveWorkout()
                     },
                 ),
