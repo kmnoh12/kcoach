@@ -1,5 +1,7 @@
 package dev.kyungmin.kcoach.phone.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.Density
@@ -172,5 +174,37 @@ class ScreenshotTest {
             workoutModel(true), noActions(),
             LiveLine("Watch8 연결됨", "t"), LiveLine("휴식 중 · 10/10회 · 심박 98bpm", "t"),
         ) { android.view.View(context) }
+    }
+
+    private fun overlayShot(name: String, sheet: Boolean, content: @androidx.compose.runtime.Composable (() -> Unit) -> Unit) {
+        val state = OverlayState()
+        compose.setContent {
+            androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize().background(KColors.Bg)) {
+                OverlayHost(state)
+            }
+        }
+        compose.runOnUiThread { state.show(Overlay(sheet) { dismiss -> content(dismiss) }) }
+        compose.waitForIdle()
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/$name.png")
+    }
+
+    @Test
+    fun sheetOptions() = overlayShot("sheet_options", true) {
+        SheetOptions("운동 메뉴", listOf(SheetItem(KIcon.Swap, "운동 변경") {}, SheetItem(KIcon.Reload, "순서 바꾸기") {}, SheetItem(KIcon.Trash, "운동 삭제") {}))
+    }
+
+    @Test
+    fun sheetChoice() = overlayShot("sheet_choice", true) {
+        ChoiceSheet("세트 종류", listOf("노멀" to "기본 작업 세트", "웜업" to "무게를 올리기 전 준비 세트", "드롭" to "무게를 줄여 이어가는 세트")) {}
+    }
+
+    @Test
+    fun dialogConfirm() = overlayShot("dialog_confirm", false) { dismiss ->
+        ConfirmDialog("운동을 종료할까요?", "지금까지의 기록은 저장되지 않아요.", "계속 운동", "종료", dismiss) {}
+    }
+
+    @Test
+    fun sheetBig() = overlayShot("sheet_big", true) { dismiss ->
+        BigChoiceSheet("▶", KColors.Accent, "운동을 시작할까요?", "워치 앱을 열어 두면 반복을 자동으로 세요.", KColors.Muted, "취소", "시작", dismiss, {}, {}, true)
     }
 }

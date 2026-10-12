@@ -178,7 +178,7 @@ private fun DialogSurface(content: @Composable () -> Unit) {
 @Composable
 fun SheetTitle(text: String) {
     Text(
-        text, color = KColors.White, fontSize = 18.sp, fontWeight = FontWeight.Bold,
+        text, color = KColors.White, fontSize = 18.sp, fontWeight = FontWeight.Medium,
         modifier = Modifier.padding(start = 22.dp, end = 22.dp, bottom = 14.dp),
     )
 }
@@ -235,7 +235,7 @@ private fun DialogButtons(content: @Composable () -> Unit) {
 @Composable
 private fun TextAction(text: String, color: Color = KColors.Accent, onClick: () -> Unit) {
     Box(Modifier.heightIn(min = 48.dp).pressable(onClick).padding(horizontal = 16.dp), contentAlignment = Alignment.Center) {
-        Text(text, color = color, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Text(text, color = color, fontSize = 16.sp, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -248,7 +248,7 @@ fun ConfirmDialog(
     dismiss: () -> Unit,
     onPositive: () -> Unit,
 ) {
-    Text(title, color = KColors.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+    Text(title, color = KColors.White, fontSize = 20.sp, fontWeight = FontWeight.Medium)
     Spacer(Modifier.height(12.dp))
     Text(message, color = KColors.Muted, fontSize = 15.sp)
     DialogButtons {
@@ -265,7 +265,7 @@ fun InputDialog(title: String, hint: String, dismiss: () -> Unit, onSubmit: (Str
     var text by remember { mutableStateOf("") }
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
-    Text(title, color = KColors.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+    Text(title, color = KColors.White, fontSize = 20.sp, fontWeight = FontWeight.Medium)
     Spacer(Modifier.height(16.dp))
     Box(Modifier.fillMaxWidth().clip(KShape.Control).background(KColors.Selected).padding(16.dp)) {
         if (text.isEmpty()) Text(hint, color = KColors.Faint, fontSize = 16.sp)
@@ -289,7 +289,7 @@ fun InputDialog(title: String, hint: String, dismiss: () -> Unit, onSubmit: (Str
 
 @Composable
 fun PickDialog(title: String, items: List<String>, dismiss: () -> Unit, onPick: (Int) -> Unit) {
-    Text(title, color = KColors.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+    Text(title, color = KColors.White, fontSize = 20.sp, fontWeight = FontWeight.Medium)
     Spacer(Modifier.height(8.dp))
     Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
         items.forEachIndexed { index, label ->
@@ -328,7 +328,7 @@ fun BigChoiceSheet(
         if (eyebrow == "▶") KIcon(KIcon.Play, eyebrowColor, size = 38.dp)
         else if (eyebrow != null) Text(eyebrow, color = eyebrowColor, fontSize = 15.sp, fontWeight = FontWeight.Medium)
         Spacer(Modifier.height(8.dp))
-        Text(title, color = KColors.White, fontSize = 28.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+        Text(title, color = KColors.White, fontSize = 28.sp, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center)
         Spacer(Modifier.height(14.dp))
         Text(body, color = bodyColor, fontSize = 16.sp, textAlign = TextAlign.Center)
         Spacer(Modifier.height(24.dp))
@@ -348,13 +348,13 @@ fun BigChoiceSheet(
 @Composable
 private fun BigButton(text: String, background: Color, content: Color, modifier: Modifier, onClick: () -> Unit) {
     Box(modifier.clip(KShape.Control).background(background).pressable(onClick), contentAlignment = Alignment.Center) {
-        Text(text, color = content, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Text(text, color = content, fontSize = 18.sp, fontWeight = FontWeight.Medium)
     }
 }
 
 @Composable
 private fun TextButton(text: String, modifier: Modifier, onClick: () -> Unit) {
     Box(modifier.pressable(onClick), contentAlignment = Alignment.Center) {
-        Text(text, color = KColors.Accent, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+        Text(text, color = KColors.Accent, fontSize = 17.sp, fontWeight = FontWeight.Medium)
     }
 }
