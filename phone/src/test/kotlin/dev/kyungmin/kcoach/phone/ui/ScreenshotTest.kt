@@ -81,4 +81,19 @@ class ScreenshotTest {
         }
         LibraryScreen(entries, setOf("pull_up", "lat_pull_down"), LibraryActions({}, {}, {})) { android.view.View(context) }
     }
+
+    @Test
+    fun calibration() = shot("calibration") {
+        val context = androidx.compose.ui.platform.LocalContext.current
+        val blank = { android.view.View(context) }
+        val ui = CalibrationUi(
+            "랫 풀 다운", "개인 보정 적용 중", true, "기준 자세를 잡고 자연스럽게 5회 왕복해요", false,
+            CalibrationProfileUi("보정된 값", listOf("반복 길이" to "42cm", "평균 템포" to "2.4초"), "센서 기록은 이 폰에만 남아요"),
+            listOf(
+                CalibrationRowUi("a", "랫 풀 다운", "등", "보정 완료", true, blank),
+                CalibrationRowUi("b", "시티드 로우", "등", "보정 전", false, blank),
+            ),
+        )
+        CalibrationScreen(ui, { false }, { CalibrationButtonUi("보정 시작", true) }, CalibrationActions({}, {}, {}))
+    }
 }

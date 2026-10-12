@@ -98,12 +98,12 @@ fun CalibrationScreen(
     val active = sessionActive()
     Column(Modifier.fillMaxSize().background(KColors.Bg).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 20.dp)) {
         Row(Modifier.fillMaxWidth().heightIn(min = 52.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("개인 보정", color = KColors.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+            Text("개인 보정", color = KColors.White, fontSize = 32.sp, fontWeight = FontWeight.Medium)
         }
         Spacer(Modifier.height(24.dp))
-        Text(ui.selectedName, color = KColors.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Text(ui.selectedName, color = KColors.White, fontSize = 24.sp, fontWeight = FontWeight.Medium)
         Spacer(Modifier.height(7.dp))
-        Text(ui.status, color = if (ui.statusAmber) KColors.Accent else KColors.Soft, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        Text(ui.status, color = if (ui.statusAmber) KColors.Accent else KColors.Soft, fontSize = 14.sp, fontWeight = FontWeight.Medium)
         Spacer(Modifier.height(12.dp))
         Text(ui.instructions, color = KColors.Muted, fontSize = 15.sp)
         Spacer(Modifier.height(20.dp))
@@ -116,7 +116,7 @@ fun CalibrationScreen(
             onClick = actions.toggle,
         )
         ui.profile?.let { profile ->
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(28.dp))
             SectionCard(profile.title, profile.values)
             Spacer(Modifier.height(8.dp))
             Text(profile.note, color = KColors.Muted, fontSize = 12.sp)
@@ -124,8 +124,9 @@ fun CalibrationScreen(
             WideButton("보정된 기록 삭제", Color(0xFF2A1613), KColors.Red, 54, onClick = actions.deleteProfile)
         }
         Spacer(Modifier.height(28.dp))
-        Text("보정할 운동 선택", color = KColors.White, fontSize = 21.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(10.dp))
+        Text("보정할 운동 선택", color = KColors.Muted, fontSize = 13.sp)
+        Spacer(Modifier.height(6.dp))
+        Box(Modifier.fillMaxWidth().height(0.5.dp).background(KColors.Hairline))
         ui.rows.forEach { row ->
             Row(
                 Modifier
@@ -140,12 +141,12 @@ fun CalibrationScreen(
                 AndroidView(factory = { row.thumbnail() }, modifier = Modifier.size(58.dp))
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(row.name, color = KColors.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    Text(row.name, color = KColors.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
                     Spacer(Modifier.height(2.dp))
                     Text("${row.muscles} · ${row.status}", color = KColors.Muted, fontSize = 12.sp)
                 }
             }
-            Spacer(Modifier.height(4.dp))
+            Box(Modifier.fillMaxWidth().height(0.5.dp).background(KColors.Hairline))
         }
     }
 }
