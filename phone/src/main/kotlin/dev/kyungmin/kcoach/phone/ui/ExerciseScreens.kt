@@ -116,7 +116,11 @@ class ExerciseRecordUi(
     val performed: Int,
     val sets: List<RecordSetUi>,
     val restSeconds: Int,
+    val recent: List<RecentLogUi>,
+    val best: List<Pair<String, String>>,
 )
+
+class RecentLogUi(val date: String, val lines: String)
 
 @Composable
 fun ExerciseRecordScreen(record: ExerciseRecordUi, back: () -> Unit, openInfo: () -> Unit, animation: (heightDp: Int) -> View) {
@@ -179,6 +183,25 @@ fun ExerciseRecordScreen(record: ExerciseRecordUi, back: () -> Unit, openInfo: (
         Text("현재 기록", color = KColors.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(12.dp))
         MetricGrid(listOf("${record.performed}회" to "REP MAX", "${record.performed}회" to "REPS TOTAL"))
+        if (record.recent.isNotEmpty()) {
+            Spacer(Modifier.height(28.dp))
+            Text("최근 기록", color = KColors.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(12.dp))
+            Row(Modifier.horizontalScroll(rememberScrollState())) {
+                record.recent.forEach { log ->
+                    Column(Modifier.width(190.dp).clip(KShape.Control).background(KColors.Surface).padding(14.dp, 12.dp)) {
+                        Text(log.date, color = KColors.Accent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(8.dp))
+                        Text(log.lines, color = KColors.White, fontSize = 14.sp, lineHeight = 20.sp)
+                    }
+                    Spacer(Modifier.width(8.dp))
+                }
+            }
+        }
+        if (record.best.isNotEmpty()) {
+            Spacer(Modifier.height(28.dp))
+            SectionCard("최고 기록", record.best)
+        }
         Spacer(Modifier.height(26.dp))
         Text("휴식 시간", color = KColors.Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
         Text("${record.restSeconds}초", color = KColors.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)

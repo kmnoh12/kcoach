@@ -32,6 +32,16 @@ data class ExerciseUi(
     /** Done and planned volume in the displayed unit; 0 target means bodyweight only. */
     val volumeDone: Int,
     val volumeTarget: Int,
+    val history: HistoryUi?,
+)
+
+/** What last time looked like and what to try next, for one exercise. */
+data class HistoryUi(
+    val lastLine: String,
+    val lastVolume: Int,
+    val suggestion: String?,
+    val reason: String?,
+    val applicable: Boolean,
 )
 
 data class SetUi(
@@ -44,6 +54,8 @@ data class SetUi(
     val grip: String,
     val restSeconds: Int,
     val customRest: Boolean,
+    /** Wrist-sensor remark once the watch analysis for this set has arrived. */
+    val insight: String? = null,
 )
 
 enum class SetField { WEIGHT, REPS }
@@ -68,4 +80,5 @@ interface WorkoutActions {
     fun onTogglePause()
     fun onStop()
     fun onToggleUnit()
+    fun onApplySuggestion(exerciseIndex: Int)
 }

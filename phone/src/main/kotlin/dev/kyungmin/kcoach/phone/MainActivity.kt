@@ -26,6 +26,7 @@ import dev.kyungmin.kcoach.phone.ui.ExerciseRecordUi
 import dev.kyungmin.kcoach.phone.ui.KColors
 import dev.kyungmin.kcoach.phone.ui.RecordSetUi
 import dev.kyungmin.kcoach.phone.ui.LibraryActions
+import dev.kyungmin.kcoach.phone.ui.LibraryEntry
 import dev.kyungmin.kcoach.phone.ui.LibraryScreen
 import dev.kyungmin.kcoach.phone.ui.Overlay
 import dev.kyungmin.kcoach.phone.ui.OverlayHost
@@ -37,6 +38,17 @@ import androidx.compose.ui.platform.ComposeView
 import dev.kyungmin.kcoach.phone.ui.ActiveWorkoutScreen
 import dev.kyungmin.kcoach.phone.ui.ExerciseUi
 import dev.kyungmin.kcoach.core.TrainingLoad
+import dev.kyungmin.kcoach.core.ExerciseHistory
+import dev.kyungmin.kcoach.core.ExerciseLog
+import dev.kyungmin.kcoach.core.LoggedSet
+import dev.kyungmin.kcoach.core.NextTarget
+import dev.kyungmin.kcoach.core.NextTargetAdvisor
+import dev.kyungmin.kcoach.core.ExerciseSubstitutes
+import dev.kyungmin.kcoach.core.ExerciseTaxonomy
+import dev.kyungmin.kcoach.core.SetInsight
+import dev.kyungmin.kcoach.core.SubstituteCandidate
+import dev.kyungmin.kcoach.phone.ui.HistoryUi
+import dev.kyungmin.kcoach.phone.ui.RecentLogUi
 import dev.kyungmin.kcoach.phone.ui.HomeActions
 import dev.kyungmin.kcoach.phone.ui.HomeUi
 import dev.kyungmin.kcoach.phone.ui.RoutineRowUi2
@@ -146,6 +158,7 @@ class MainActivity : ComponentActivity() {
         val signalQuality: Double? = null,
         val averageSpeed: Double? = null,
         val relativeRom: Double? = null,
+        val lateDrift: Double? = null,
     )
 
     private data class WorkoutResultUi(
@@ -382,6 +395,7 @@ class MainActivity : ComponentActivity() {
                         signalQuality = intent.getDoubleExtra("signalQuality", Double.NaN).takeUnless { it.isNaN() },
                         averageSpeed = intent.getDoubleExtra("averageAngularSpeed", Double.NaN).takeUnless { it.isNaN() },
                         relativeRom = intent.getDoubleExtra("relativeRom", Double.NaN).takeUnless { it.isNaN() },
+                        lateDrift = intent.getDoubleExtra("lateSetDegradation", Double.NaN).takeUnless { it.isNaN() },
                     )
                     activeWorkout?.takeIf { it.sessionId == sessionId }?.let { workout ->
                         workout.analyses["$exerciseId:$setIndex"] = analysis
@@ -437,6 +451,9 @@ class MainActivity : ComponentActivity() {
     }
     private lateinit var root: FrameLayout
     private val overlays = OverlayState()
+    private val historyStore by lazy { ExerciseHistoryStore(applicationContext) }
+    private var historyCache: ExerciseHistory? = null
+    private val history: ExerciseHistory get() = historyCache ?: historyStore.load().also { historyCache = it }
     private lateinit var updateManager: UpdateManager
     private lateinit var sessionStore: SessionStore
     private var currentTab = RootTab.HOME
@@ -741,7 +758,11 @@ class MainActivity : ComponentActivity() {
         )
         showStandalone(ComposeView(this).apply {
             setContent {
-                LibraryScreen(WorkoutData.catalog.toList(), frequent, actions) { exerciseAnimationView(it, 56, compact = true) }
+                val entries = WorkoutData.catalog.map { item ->
+                    val (order, title) = ExerciseTaxonomy.section(item.bodyCategory, item.pattern)
+                    LibraryEntry(item, order, title, ExerciseTaxonomy.bodyRank(item.bodyCategory))
+                }
+                LibraryScreen(entries, frequent, actions) { exerciseAnimationView(it, 56, compact = true) }
             }
         })
     }
@@ -1370,6 +1391,51 @@ class MainActivity : ComponentActivity() {
 
     private fun volumeUnit(workout: ActiveWorkout) = if (workout.usePounds) 2.20462 else 1.0
 
+    /** Remembers what was really done today, so the next session can compare and build on it. */
+    private fun recordHistory(workout: ActiveWorkout) {
+        val today = LocalDate.now().toEpochDay()
+        workout.routine.exercises.forEach { item ->
+            val done = item.sets.filter { it.completed }.map { LoggedSet(it.weightKg, it.targetReps) }
+            if (done.isNotEmpty()) historyCache = historyStore.add(ExerciseLog(item.exercise.id, today, done))
+        }
+    }
+
+    private fun plannedReps(item: RoutineExercise): Int =
+        item.sets.filter { it.setType != SetType.WARMUP }.maxOfOrNull { it.targetReps } ?: 10
+
+    private fun historyUi(item: RoutineExercise, workout: ActiveWorkout): HistoryUi? {
+        val last = history.last(item.exercise.id) ?: return null
+        val unitLabel = if (workout.usePounds) "lb" else "kg"
+        val lastLine = "지난번 " + last.sets.take(4).joinToString(" · ") { set ->
+            if (set.weightKg == null) "${set.reps}회" else "${formatActiveWeight(set.weightKg, workout.usePounds)}×${set.reps}"
+        } + if (last.sets.size > 4) " …" else ""
+        val next = NextTargetAdvisor.advise(last, plannedReps(item))
+        val (text, applicable) = when (next) {
+            is NextTarget.RaiseWeight -> "${formatActiveWeight(next.toKg, workout.usePounds)}$unitLabel 로 올려봐" to true
+            is NextTarget.AddRep -> "전체 반복 1회 더" to true
+            is NextTarget.Hold -> "중량 유지" to false
+        }
+        return HistoryUi(lastLine, (last.volumeKg * volumeUnit(workout)).toInt(), text, next.reason, applicable)
+    }
+
+    private fun applySuggestion(item: RoutineExercise) {
+        val last = history.last(item.exercise.id) ?: return
+        val pending = item.sets.filter { !it.completed && it.setType != SetType.WARMUP }
+        when (val next = NextTargetAdvisor.advise(last, plannedReps(item))) {
+            is NextTarget.RaiseWeight -> pending.forEach { it.weightKg = next.toKg }
+            is NextTarget.AddRep -> pending.lastOrNull()?.let { it.targetReps += 1 }
+            is NextTarget.Hold -> Unit
+        }
+    }
+
+    /** Replaces the not-yet-started sets of an exercise with what was done last time. */
+    private fun loadLastSets(item: RoutineExercise) {
+        val last = history.last(item.exercise.id) ?: return
+        if (item.sets.any { it.completed }) return
+        item.sets.clear()
+        last.sets.forEach { item.sets += PlannedSet(it.weightKg, it.reps) }
+    }
+
     private fun buildWorkoutModel(workout: ActiveWorkout): WorkoutUiModel {
         val next = if (activeWorkout === workout) nextWorkoutTarget(workout) else null
         val nextText = next?.takeIf { it.exerciseId.isNotEmpty() }?.let { target ->
@@ -1408,6 +1474,7 @@ class MainActivity : ComponentActivity() {
                     currentSetIndex = currentSet,
                     volumeDone = (routineExercise.sets.filter { it.completed }.sumOf { (it.weightKg ?: 0.0) * it.targetReps } * volumeUnit(workout)).toInt(),
                     volumeTarget = (routineExercise.sets.sumOf { (it.weightKg ?: 0.0) * it.targetReps } * volumeUnit(workout)).toInt(),
+                    history = historyUi(routineExercise, workout),
                     sets = routineExercise.sets.mapIndexed { setIndex, set ->
                         SetUi(
                             uid = System.identityHashCode(set),
@@ -1419,6 +1486,8 @@ class MainActivity : ComponentActivity() {
                             grip = set.gripType,
                             restSeconds = effectiveRestSeconds(routineExercise, setIndex),
                             customRest = set.restSeconds != null,
+                            insight = workout.analyses["${routineExercise.exercise.id}:$setIndex"]
+                                ?.let { SetInsight.describe(it.tempoConsistency, it.lateDrift) },
                         )
                     },
                 )
@@ -1522,6 +1591,13 @@ class MainActivity : ComponentActivity() {
             val routineExercise = exercise(exerciseIndex) ?: return
             workout.selectedEditSetIndex = setIndex
             showSetMenu(workout, routineExercise, setIndex)
+        }
+
+        override fun onApplySuggestion(exerciseIndex: Int) {
+            val routineExercise = exercise(exerciseIndex) ?: return
+            applySuggestion(routineExercise)
+            activeWorkout?.let(::persistActiveWorkout)
+            bumpWorkoutUi()
         }
 
         override fun onAddSet(exerciseIndex: Int) {
@@ -1961,7 +2037,14 @@ class MainActivity : ComponentActivity() {
                         dismiss()
                         showExerciseAlternatives(workout.routine, workout.exerciseIndex) { showActiveWorkout() }
                     },
-                ),
+                ) + if (history.last(routineExercise.exercise.id) != null && routineExercise.sets.none { it.completed }) listOf(
+                    SheetItem("↺", "지난 세트 불러오기") {
+                        dismiss()
+                        loadLastSets(routineExercise)
+                        activeWorkout?.let(::persistActiveWorkout)
+                        showActiveWorkout(forceRebuild = true)
+                    },
+                ) else emptyList(),
             )
         }
     }
@@ -2118,6 +2201,7 @@ class MainActivity : ComponentActivity() {
         lastWorkoutResult?.let(::persistLastWorkoutResult)
         if (completedWorkout != null) {
             if (!persistActiveWorkout(completedWorkout)) return
+            recordHistory(completedWorkout)
             sendWear(WearSync.PATH_COMMAND, WearSync.command("COMPLETE", completedWorkout.sessionId, "", 0, 0))
             sessionStore.clearActive()
         }
@@ -2177,6 +2261,21 @@ class MainActivity : ComponentActivity() {
                 )
             },
             restSeconds = routineExercise.restSeconds,
+            recent = history.recent(routineExercise.exercise.id, 4).map { log ->
+                RecentLogUi(
+                    date = LocalDate.ofEpochDay(log.epochDay).let { "${it.monthValue}월 ${it.dayOfMonth}일" },
+                    lines = log.sets.mapIndexed { i, set ->
+                        val weight = set.weightKg
+                        "${i + 1}  ${if (weight == null) "" else cleanWeight(weight) + "kg × "}${set.reps}회"
+                    }.take(5).joinToString("\n"),
+                )
+            },
+            best = buildList {
+                history.heaviestSet(routineExercise.exercise.id)?.let { (day, set) ->
+                    add("최고 중량" to "${cleanWeight(set.weightKg!!)}kg × ${set.reps}회")
+                }
+                history.bestVolume(routineExercise.exercise.id)?.let { add("최고 볼륨" to "%,dkg".format(it.volumeKg.toInt())) }
+            },
         )
         showStandalone(ComposeView(this).apply {
             setContent {
@@ -2353,29 +2452,21 @@ class MainActivity : ComponentActivity() {
 
     private fun showExerciseAlternatives(routine: WorkoutRoutine, index: Int, onReturn: () -> Unit) {
         val current = routine.exercises.getOrNull(index)?.exercise ?: return
-        val alternatives = WorkoutData.catalog
-            .filter { it.id != current.id }
-            .map { exercise -> exercise to exerciseSimilarity(current, exercise) }
-            .sortedByDescending { it.second }
-            .take(5)
-        val labels = alternatives.map { (exercise, score) -> "${exercise.name}  ·  유사도 ${score}%\n${exercise.muscles} · ${exercise.equipment}" }
+        fun ExerciseDefinition.candidate() = SubstituteCandidate(
+            id, muscles.split(", "), bodyCategory, equipment, pattern, favorite,
+        )
+        val byId = WorkoutData.catalog.associateBy { it.id }
+        val alternatives = ExerciseSubstitutes
+            .rank(current.candidate(), WorkoutData.catalog.map { it.candidate() })
+            .mapNotNull { byId[it.id] }
+        val labels = alternatives.map { "${it.name}\n${it.muscles} · ${it.equipment}" }
         showPopup { dismiss ->
             PickDialog("운동 대체\n${current.name}", labels, dismiss) { which ->
-                routine.exercises[index] = routine.exercises[index].copy(exercise = alternatives[which].first)
-                Toast.makeText(this, "${alternatives[which].first.name}(으)로 바꿨어", Toast.LENGTH_SHORT).show()
+                routine.exercises[index] = routine.exercises[index].copy(exercise = alternatives[which])
+                Toast.makeText(this, "${alternatives[which].name}(으)로 바꿨어", Toast.LENGTH_SHORT).show()
                 onReturn()
             }
         }
-    }
-
-    private fun exerciseSimilarity(source: ExerciseDefinition, target: ExerciseDefinition): Int {
-        var score = 0
-        if (source.bodyCategory == target.bodyCategory) score += 50
-        if (source.equipment == target.equipment) score += 20
-        val sourceMuscles = source.muscles.split(", ").toSet()
-        val targetMuscles = target.muscles.split(", ").toSet()
-        score += sourceMuscles.intersect(targetMuscles).size * 15
-        return minOf(99, score + if (target.favorite) 4 else 0)
     }
 
     private fun showAddSheet() {

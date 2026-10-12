@@ -154,7 +154,7 @@ fun RestRing(fraction: Float, diameter: Dp, stroke: Dp, modifier: Modifier = Mod
 
 /** Today's volume against the plan: rolling number plus a thin progress track. */
 @Composable
-fun VolumeBar(done: Int, target: Int, unit: String, modifier: Modifier = Modifier) {
+fun VolumeBar(done: Int, target: Int, unit: String, lastVolume: Int? = null, modifier: Modifier = Modifier) {
     val fraction by animateFloatAsState(
         if (target > 0) (done.toFloat() / target).coerceIn(0f, 1f) else 0f,
         Motion.panel(),
@@ -165,6 +165,14 @@ fun VolumeBar(done: Int, target: Int, unit: String, modifier: Modifier = Modifie
             Text("볼륨 ", color = KColors.Muted, fontSize = 13.sp)
             FlipText("%,d".format(done), 15.sp, if (done > 0) KColors.White else KColors.Muted)
             Text(" / %,d%s".format(target, unit), color = KColors.Muted, fontSize = 13.sp)
+            if (lastVolume != null && lastVolume > 0) {
+                Spacer(Modifier.weight(1f))
+                Text(
+                    "지난번 %,d%s".format(lastVolume, unit),
+                    color = if (done > lastVolume) KColors.Accent else KColors.Muted,
+                    fontSize = 12.sp,
+                )
+            }
         }
         Spacer(Modifier.height(6.dp))
         Box(Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)).background(KColors.Hairline)) {

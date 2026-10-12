@@ -321,7 +321,15 @@ private fun ExercisePage(
         }
         if (exercise.volumeTarget > 0) {
             Spacer(Modifier.height(10.dp))
-            VolumeBar(exercise.volumeDone, exercise.volumeTarget, if (model.usePounds) "lb" else "kg")
+            VolumeBar(exercise.volumeDone, exercise.volumeTarget, if (model.usePounds) "lb" else "kg", exercise.history?.lastVolume)
+        }
+        exercise.history?.let { history ->
+            Spacer(Modifier.height(6.dp))
+            Text(history.lastLine, color = KColors.Muted, fontSize = 12.sp)
+            if (history.suggestion != null && exercise.completedWorkSets == 0) {
+                Spacer(Modifier.height(8.dp))
+                NextTargetRow(history.suggestion, history.reason, history.applicable) { actions.onApplySuggestion(exerciseIndex) }
+            }
         }
         Spacer(Modifier.height(12.dp))
         SetHeader(exercise.weighted, model.usePounds)
@@ -448,12 +456,39 @@ private fun Cell(text: String, modifier: Modifier, color: androidx.compose.ui.gr
 }
 
 @Composable
+private fun NextTargetRow(text: String, reason: String?, applicable: Boolean, onApply: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(KShape.Control)
+            .border(0.5.dp, KColors.Hairline, KShape.Control)
+            .then(if (applicable) Modifier.pressable(onApply) else Modifier)
+            .padding(horizontal = 12.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text("다음 목표  ", color = KColors.Muted, fontSize = 11.sp)
+                Text(text, color = KColors.Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            }
+            if (reason != null) Text(reason, color = KColors.Muted, fontSize = 11.sp)
+        }
+        if (applicable) Text("적용", color = KColors.Accent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
 private fun SetRestRow(set: SetUi, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().clickable { onClick() }.padding(horizontal = 12.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(set.grip, color = KColors.Faint, fontSize = 11.sp, modifier = Modifier.weight(1f))
+        Text(
+            if (set.insight != null) "${set.grip} · ${set.insight}" else set.grip,
+            color = if (set.insight != null) KColors.Soft else KColors.Faint,
+            fontSize = 11.sp,
+            modifier = Modifier.weight(1f),
+        )
         Text("${set.restSeconds}초 ⏱", color = if (set.customRest) KColors.Accent else KColors.Faint, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
     }
 }

@@ -288,6 +288,7 @@ class PhoneWearListenerService : WearableListenerService() {
             .putExtra("wristMotionSpeed", analysis.wristMotionSpeed ?: Double.NaN)
             .putExtra("wristMotionRange", analysis.wristMotionRange ?: Double.NaN)
             .putExtra("tempoConsistency", analysis.tempoConsistency ?: -1)
+            .putExtra("lateSetDegradation", analysis.lateSetDegradation ?: Double.NaN)
             .putExtra("signalQuality", analysis.signalQuality ?: Double.NaN)
             .putExtra("averageAngularSpeed", analysis.averageAngularSpeed ?: Double.NaN)
             .putExtra("relativeRom", analysis.relativeRom ?: Double.NaN))
