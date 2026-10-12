@@ -1,5 +1,16 @@
 package dev.kyungmin.kcoach.phone.ui
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateIntAsState
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -40,6 +51,14 @@ import kotlinx.coroutines.delay
 
 /** Tab order matches MainActivity.RootTab. */
 private val NavItems = listOf("⌂" to "홈", "▣" to "기록", "▥" to "통계", "◉" to "보정", "☰" to "메뉴")
+
+/** False on the first frame, true right after: lets values animate in when a screen opens. */
+@Composable
+fun rememberEntered(): Boolean {
+    var entered by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { entered = true }
+    return entered
+}
 
 /** Press feedback shared by every tappable surface: a small shrink on the UI curve. */
 @Composable
@@ -86,7 +105,7 @@ class HomeActions(
     val stop: () -> Unit,
 )
 
-class RunningUi(val routineName: String, val paused: Boolean, val elapsedSeconds: () -> Long)
+class RunningUi(val routineName: String, val detail: String, val paused: Boolean, val elapsedSeconds: () -> Long)
 
 /** One weekday on the strip. [load] is null for a rest day, otherwise 0..TrainingLoad.MAX_SCORE. */
 class WeekDayUi(val label: String, val load: Double?, val isToday: Boolean, val isFuture: Boolean)
@@ -131,14 +150,21 @@ fun HomeScreen(ui: HomeUi, running: RunningUi?, actions: HomeActions) {
             }
             Spacer(Modifier.height(12.dp))
         }
-        if (running == null) {
-            Row(Modifier.padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 12.dp)) {
-                ActionButton("자유운동", KColors.Accent, KColors.OnAccent, outlined = false, modifier = Modifier.weight(1f), onClick = actions.freeWorkout)
-                Spacer(Modifier.width(8.dp))
-                ActionButton("추가", Color.Transparent, KColors.White, outlined = true, modifier = Modifier.weight(1f), onClick = actions.add)
+        // The bar for a running workout fades in over the idle buttons (and back).
+        AnimatedContent(
+            targetState = running,
+            transitionSpec = { fadeIn(Motion.ui()) togetherWith fadeOut(Motion.ui()) },
+            label = "homeBottom",
+        ) { current ->
+            if (current == null) {
+                Row(Modifier.padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 12.dp)) {
+                    ActionButton("자유운동", KColors.Accent, KColors.OnAccent, outlined = false, modifier = Modifier.weight(1f), onClick = actions.freeWorkout)
+                    Spacer(Modifier.width(8.dp))
+                    ActionButton("추가", Color.Transparent, KColors.White, outlined = true, modifier = Modifier.weight(1f), onClick = actions.add)
+                }
+            } else {
+                RunningBar(current, actions)
             }
-        } else {
-            RunningBar(running, actions)
         }
     }
 }
@@ -154,10 +180,12 @@ private fun WeekStrip(week: List<WeekDayUi>) {
     ) {
         week.forEach { day ->
             Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Bottom) {
-                val barHeight = when {
+                val entered = rememberEntered()
+                val target = when {
                     day.load != null -> minBar + (maxBar - minBar) * (day.load / dev.kyungmin.kcoach.core.TrainingLoad.MAX_SCORE).toFloat()
                     else -> minBar
                 }
+                val barHeight by animateDpAsState(if (entered) target else minBar, Motion.panel(), label = "bar")
                 val color = when {
                     day.load != null -> KColors.Accent
                     day.isToday -> KColors.White
@@ -189,8 +217,10 @@ private fun RestHero(row: RoutineRowUi2, onClick: () -> Unit) {
             .padding(start = 12.dp, top = 12.dp, end = 8.dp, bottom = 10.dp),
         verticalAlignment = Alignment.Bottom,
     ) {
+        val entered = rememberEntered()
+        val shownDays by animateIntAsState(if (entered) row.daysAgo ?: 0 else 0, tween(700, easing = LinearEasing), label = "heroDays")
         Text(
-            "${row.daysAgo}", color = KColors.Accent, fontSize = 64.sp, fontWeight = FontWeight.Medium,
+            "$shownDays", color = KColors.Accent, fontSize = 64.sp, fontWeight = FontWeight.Medium,
             letterSpacing = (-3).sp, lineHeight = 58.sp,
         )
         Spacer(Modifier.width(12.dp))
@@ -266,6 +296,7 @@ private fun RunningBar(running: RunningUi, actions: HomeActions) {
         ) {
             Column(Modifier.weight(1f).pressable(actions.openRunning)) {
                 Text(running.routineName, color = KColors.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                Text(running.detail, color = KColors.Soft, fontSize = 12.sp, maxLines = 1)
                 Text("%02d:%02d".format(elapsed / 60, elapsed % 60), color = KColors.Accent, fontSize = 22.sp, fontWeight = FontWeight.Medium)
             }
             Box(Modifier.size(64.dp).pressable(actions.togglePause), contentAlignment = Alignment.Center) {

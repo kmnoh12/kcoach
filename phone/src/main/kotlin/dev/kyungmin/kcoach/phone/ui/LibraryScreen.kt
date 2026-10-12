@@ -1,5 +1,7 @@
 package dev.kyungmin.kcoach.phone.ui
 
+import androidx.compose.ui.draw.alpha
+import androidx.compose.animation.core.animateFloatAsState
 import android.view.View
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
@@ -124,7 +126,9 @@ fun LibraryScreen(
                         color = if (exercise.favorite) Color(0xFFE06687) else KColors.Faint,
                         fontSize = 18.sp, textAlign = TextAlign.Center, modifier = Modifier.width(30.dp),
                     )
-                    AndroidView(factory = { thumbnail(exercise) }, modifier = Modifier.size(56.dp))
+                    val entered = rememberEntered()
+                    val fade by animateFloatAsState(if (entered) 1f else 0f, Motion.ui(), label = "thumb")
+                    AndroidView(factory = { thumbnail(exercise) }, modifier = Modifier.size(56.dp).alpha(fade))
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
                         Text(exercise.name, color = KColors.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)

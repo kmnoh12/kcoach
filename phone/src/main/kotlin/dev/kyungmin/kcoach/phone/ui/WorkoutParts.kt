@@ -1,5 +1,9 @@
 package dev.kyungmin.kcoach.phone.ui
 
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Column
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
@@ -144,6 +148,27 @@ fun RestRing(fraction: Float, diameter: Dp, stroke: Dp, modifier: Modifier = Mod
                 size = arcSize,
                 style = Stroke(strokePx, cap = StrokeCap.Round),
             )
+        }
+    }
+}
+
+/** Today's volume against the plan: rolling number plus a thin progress track. */
+@Composable
+fun VolumeBar(done: Int, target: Int, unit: String, modifier: Modifier = Modifier) {
+    val fraction by animateFloatAsState(
+        if (target > 0) (done.toFloat() / target).coerceIn(0f, 1f) else 0f,
+        Motion.panel(),
+        label = "volume",
+    )
+    Column(modifier) {
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text("볼륨 ", color = KColors.Muted, fontSize = 13.sp)
+            FlipText("%,d".format(done), 15.sp, if (done > 0) KColors.White else KColors.Muted)
+            Text(" / %,d%s".format(target, unit), color = KColors.Muted, fontSize = 13.sp)
+        }
+        Spacer(Modifier.height(6.dp))
+        Box(Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)).background(KColors.Hairline)) {
+            Box(Modifier.fillMaxWidth(fraction).height(3.dp).background(KColors.Accent))
         }
     }
 }

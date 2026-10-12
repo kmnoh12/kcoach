@@ -29,6 +29,9 @@ data class ExerciseUi(
     val workSetCount: Int,
     val currentSetIndex: Int,
     val sets: List<SetUi>,
+    /** Done and planned volume in the displayed unit; 0 target means bodyweight only. */
+    val volumeDone: Int,
+    val volumeTarget: Int,
 )
 
 data class SetUi(

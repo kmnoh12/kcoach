@@ -1,5 +1,6 @@
 package dev.kyungmin.kcoach.phone.ui
 
+import androidx.compose.ui.text.style.TextOverflow
 import android.view.View
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -50,7 +51,15 @@ import androidx.compose.animation.core.animateFloatAsState
 import kotlin.math.abs
 
 /** One exercise row. [key] stays stable while the row is dragged around. */
-class RoutineRowUi(val key: Int, val name: String, val subtitle: String, val thumbnail: () -> View)
+class RoutineRowUi(
+    val key: Int,
+    val name: String,
+    val subtitle: String,
+    val thumbnail: () -> View,
+    /** Completed / planned sets, only while this routine is being performed. */
+    val doneSets: Int? = null,
+    val plannedSets: Int = 0,
+)
 
 class RoutineDetailActions(
     val back: () -> Unit,
@@ -208,12 +217,24 @@ private fun ExerciseRow(
             .padding(4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AndroidView(factory = { row.thumbnail() }, modifier = Modifier.size(58.dp))
+        val entered = rememberEntered()
+        val fade by animateFloatAsState(if (entered) 1f else 0f, Motion.ui(), label = "thumb")
+        AndroidView(factory = { row.thumbnail() }, modifier = Modifier.size(58.dp).alpha(fade))
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text(row.name, color = KColors.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+            Text(row.name, color = KColors.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(2.dp))
-            Text(row.subtitle, color = KColors.Muted, fontSize = 12.sp, maxLines = 1)
+            Text(row.subtitle, color = KColors.Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        if (row.doneSets != null) {
+            val finished = row.plannedSets > 0 && row.doneSets >= row.plannedSets
+            Text(
+                "${row.doneSets}/${row.plannedSets}",
+                color = if (finished) KColors.Accent else if (row.doneSets > 0) KColors.White else KColors.Faint,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(end = 4.dp),
+            )
         }
         Box(Modifier.size(38.dp, 48.dp).clickable(onClick = onInfo), contentAlignment = Alignment.Center) {
             Text("ⓘ", color = KColors.Muted, fontSize = 17.sp)

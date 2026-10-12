@@ -319,6 +319,10 @@ private fun ExercisePage(
             FlipText(exercise.performedReps.toString(), 14.sp, if (exercise.performedReps > 0) KColors.Accent else KColors.Muted)
             Text("회", color = if (exercise.performedReps > 0) KColors.Accent else KColors.Muted, fontSize = 14.sp, fontWeight = FontWeight.Bold)
         }
+        if (exercise.volumeTarget > 0) {
+            Spacer(Modifier.height(10.dp))
+            VolumeBar(exercise.volumeDone, exercise.volumeTarget, if (model.usePounds) "lb" else "kg")
+        }
         Spacer(Modifier.height(12.dp))
         SetHeader(exercise.weighted, model.usePounds)
         exercise.sets.forEachIndexed { setIndex, set ->

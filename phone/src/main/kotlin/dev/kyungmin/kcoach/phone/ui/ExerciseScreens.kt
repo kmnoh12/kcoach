@@ -116,8 +116,6 @@ class ExerciseRecordUi(
     val performed: Int,
     val sets: List<RecordSetUi>,
     val restSeconds: Int,
-    val recentDates: List<String>,
-    val recentSets: String,
 )
 
 @Composable
@@ -181,25 +179,6 @@ fun ExerciseRecordScreen(record: ExerciseRecordUi, back: () -> Unit, openInfo: (
         Text("현재 기록", color = KColors.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(12.dp))
         MetricGrid(listOf("${record.performed}회" to "REP MAX", "${record.performed}회" to "REPS TOTAL"))
-        Spacer(Modifier.height(28.dp))
-        Text("최근 기록", color = KColors.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(12.dp))
-        Row(Modifier.horizontalScroll(rememberScrollState())) {
-            record.recentDates.forEach { date ->
-                Column(
-                    Modifier.width(210.dp).height(150.dp).clip(KShape.Control).background(KColors.Surface).padding(14.dp, 12.dp),
-                ) {
-                    Text("•  $date", color = KColors.Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(10.dp))
-                    Text(record.recentSets, color = KColors.White, fontSize = 15.sp)
-                }
-                Spacer(Modifier.width(10.dp))
-            }
-        }
-        Spacer(Modifier.height(32.dp))
-        Text("유튜브", color = KColors.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(8.dp))
-        Box(Modifier.fillMaxWidth().height(118.dp).clip(KShape.Control).background(KColors.Surface))
         Spacer(Modifier.height(26.dp))
         Text("휴식 시간", color = KColors.Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
         Text("${record.restSeconds}초", color = KColors.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)

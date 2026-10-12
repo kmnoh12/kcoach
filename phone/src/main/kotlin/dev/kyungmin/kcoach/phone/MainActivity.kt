@@ -579,7 +579,11 @@ class MainActivity : ComponentActivity() {
         currentScreen = Screen.ROOT
 
         val running = activeWorkout
-        val runningUi = running?.let { RunningUi(it.routine.name, it.paused) { workoutElapsedSeconds(it) } }
+        val runningUi = running?.let { workout ->
+            val current = workout.routine.exercises.getOrNull(workout.exerciseIndex)
+            val detail = current?.let { "${it.exercise.name} · ${it.sets.completedWorkSetCount()}/${it.sets.workSetCount()}세트" }.orEmpty()
+            RunningUi(workout.routine.name, detail, workout.paused) { workoutElapsedSeconds(workout) }
+        }
         val rows = routines.map { RoutineRowUi2(it, TrainingLoad.daysAgo(it.lastPerformed)) }
         val homeUi = HomeUi(
             week = weekStrip(LocalDate.now()),
@@ -626,6 +630,8 @@ class MainActivity : ComponentActivity() {
                 name = item.exercise.name,
                 subtitle = "${item.exercise.muscles} · ${item.sets.workSetCount()}세트 · 총 ${item.sets.sumOf { it.targetReps }}회",
                 thumbnail = { exerciseAnimationView(item.exercise, 58, compact = true) },
+                doneSets = active?.takeIf { it.routine === routine }?.let { item.sets.completedWorkSetCount() },
+                plannedSets = item.sets.workSetCount(),
             )
         }
         val actions = RoutineDetailActions(
@@ -1362,6 +1368,8 @@ class MainActivity : ComponentActivity() {
     private fun effectiveRestSeconds(routineExercise: RoutineExercise, setIndex: Int): Int =
         routineExercise.sets.getOrNull(setIndex)?.restSeconds ?: routineExercise.restSeconds
 
+    private fun volumeUnit(workout: ActiveWorkout) = if (workout.usePounds) 2.20462 else 1.0
+
     private fun buildWorkoutModel(workout: ActiveWorkout): WorkoutUiModel {
         val next = if (activeWorkout === workout) nextWorkoutTarget(workout) else null
         val nextText = next?.takeIf { it.exerciseId.isNotEmpty() }?.let { target ->
@@ -1398,6 +1406,8 @@ class MainActivity : ComponentActivity() {
                     completedWorkSets = routineExercise.sets.completedWorkSetCount(),
                     workSetCount = routineExercise.sets.workSetCount(),
                     currentSetIndex = currentSet,
+                    volumeDone = (routineExercise.sets.filter { it.completed }.sumOf { (it.weightKg ?: 0.0) * it.targetReps } * volumeUnit(workout)).toInt(),
+                    volumeTarget = (routineExercise.sets.sumOf { (it.weightKg ?: 0.0) * it.targetReps } * volumeUnit(workout)).toInt(),
                     sets = routineExercise.sets.mapIndexed { setIndex, set ->
                         SetUi(
                             uid = System.identityHashCode(set),
@@ -2167,8 +2177,6 @@ class MainActivity : ComponentActivity() {
                 )
             },
             restSeconds = routineExercise.restSeconds,
-            recentDates = listOf("2026. 7. 26.", "2026. 7. 23.", "2026. 7. 20."),
-            recentSets = routineExercise.sets.mapIndexed { i, set -> "${i + 1}  -  ${set.targetReps}회" }.take(3).joinToString("\n"),
         )
         showStandalone(ComposeView(this).apply {
             setContent {
