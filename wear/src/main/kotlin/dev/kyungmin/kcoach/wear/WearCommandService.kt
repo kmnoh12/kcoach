@@ -30,6 +30,10 @@ class WearCommandService : WearableListenerService() {
     }
 
     private fun handlePayload(path: String, payload: String) {
+        if (path == WearSync.PATH_PROBE_START || path == WearSync.PATH_PROBE_STOP) {
+            handleProbe(start = path == WearSync.PATH_PROBE_START)
+            return
+        }
         if (path == WearSync.PATH_HEARTBEAT) {
             dispatchCommand("HEARTBEAT", emptyList())
             return
@@ -89,6 +93,23 @@ class WearCommandService : WearableListenerService() {
             }
         }
         ContextCompat.startForegroundService(this, intent)
+    }
+
+    /** The phone's probe screen opened or closed: stream (or stop) without anyone touching the watch. */
+    private fun handleProbe(start: Boolean) {
+        val service = Intent(this, ProbeService::class.java)
+        if (!start) {
+            stopService(service)
+            return
+        }
+        if (!ProbeStatus.running) runCatching { ContextCompat.startForegroundService(this, service) }
+        // Bring the probe screen up when the system lets us (the app is on screen); the ongoing activity covers the rest.
+        runCatching {
+            startActivity(
+                Intent(this, ProbeActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            )
+        }
     }
 
     private fun sendPairHello() {

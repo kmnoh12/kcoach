@@ -28,6 +28,7 @@ import com.google.android.gms.wearable.Wearable
 import dev.kyungmin.kcoach.core.MotionSegment
 import dev.kyungmin.kcoach.core.ProbeWire
 import dev.kyungmin.kcoach.core.Vec3
+import dev.kyungmin.kcoach.core.WearSync
 import dev.kyungmin.kcoach.core.WristTrajectoryTracker
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
@@ -117,11 +118,20 @@ class ProbeActivity : Activity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setContentView(buildUi())
         channelClient.registerChannelCallback(channelCallback)
+        tellWatch(WearSync.PATH_PROBE_START)
         pinger.start()
         handler.post(uiTicker)
     }
 
+    /** Starts or stops the watch's streaming, so the watch never needs a button press of its own. */
+    private fun tellWatch(path: String) {
+        Wearable.getNodeClient(this).connectedNodes.addOnSuccessListener { nodes ->
+            nodes.forEach { Wearable.getMessageClient(this).sendMessage(it.id, path, ByteArray(0)) }
+        }
+    }
+
     override fun onDestroy() {
+        tellWatch(WearSync.PATH_PROBE_STOP)
         destroyed = true
         handler.removeCallbacks(uiTicker)
         channelClient.unregisterChannelCallback(channelCallback)
@@ -240,6 +250,7 @@ class ProbeActivity : Activity() {
         else "중앙 %.0fms · 95%% %.0fms".format(sortedMs[sortedMs.size / 2], sortedMs[(sortedMs.size * 95 / 100).coerceAtMost(sortedMs.size - 1)])
 
     private fun toggleRecording() {
+        if (recorder == null && !connected) tellWatch(WearSync.PATH_PROBE_START)
         synchronized(lock) {
             if (recorder != null) {
                 stopRecording()

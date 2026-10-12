@@ -12,6 +12,8 @@ object WearSync {
     const val PATH_PERSONAL_PROFILE_DELETE = "/kcoach/personal-profile/delete"
     const val PATH_ACK_V3 = "/kcoach/v3/ack"
     const val PATH_COMMAND = "/kcoach/command"
+    const val PATH_PROBE_START = "/kcoach/probe/start"
+    const val PATH_PROBE_STOP = "/kcoach/probe/stop"
     const val PATH_STATE = "/kcoach/state"
     const val PATH_LIVE = "/kcoach/live"
     const val PATH_SAMPLE = "/kcoach/sample"
