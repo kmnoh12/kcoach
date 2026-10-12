@@ -21,17 +21,17 @@ class ProgressionEngine {
         if (allAtTop && (averageRir == null || averageRir >= 1.0)) {
             return ProgressionDecision.IncreaseWeight(
                 incrementKg = minimumIncrementKg,
-                reason = "모든 작업 세트가 반복 상한에 도달했어",
+                reason = "모든 작업 세트를 목표 횟수까지 채웠어요",
             )
         }
 
         if (reps.any { it < exercise.repRange.first }) {
-            return ProgressionDecision.Hold("중량을 유지하고 모든 작업 세트를 반복 하한 이상으로 맞춰")
+            return ProgressionDecision.Hold("무게를 유지하고 모든 작업 세트를 최소 횟수 이상으로 맞춰 보세요")
         }
 
         return ProgressionDecision.AddReps(
             targetTotalRepIncrease = 1,
-            reason = "현재 중량에서 전체 반복을 1회만 늘려",
+            reason = "지금 무게에서 전체 반복을 1회만 늘려 보세요",
         )
     }
 }

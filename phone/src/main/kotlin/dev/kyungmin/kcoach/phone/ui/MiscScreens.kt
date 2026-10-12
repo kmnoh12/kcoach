@@ -159,7 +159,7 @@ fun MyMountainScreen(back: () -> Unit, start: () -> Unit, finish: () -> Unit) {
         Spacer(Modifier.height(28.dp))
         Text("오늘 설정", color = KColors.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
-        Text("경사·속도·시간은 매번 바꿀 수 있어.", color = KColors.Muted, fontSize = 15.sp)
+        Text("경사, 속도, 시간은 매번 바꿀 수 있어요.", color = KColors.Muted, fontSize = 15.sp)
         Spacer(Modifier.height(24.dp))
         Row(Modifier.fillMaxWidth()) {
             NumberCard("경사", "13", Modifier.weight(1f))
@@ -169,9 +169,9 @@ fun MyMountainScreen(back: () -> Unit, start: () -> Unit, finish: () -> Unit) {
             NumberCard("시간", "30", Modifier.weight(1f))
         }
         Spacer(Modifier.height(28.dp))
-        WideButton("마이마운틴 시작", KColors.Accent, KColors.OnAccent, 64, onClick = start)
+        WideButton("시작", KColors.Accent, KColors.OnAccent, 64, onClick = start)
         Spacer(Modifier.height(12.dp))
-        WideButton("오늘은 종료", KColors.SurfaceRaised, KColors.White, 56, onClick = finish)
+        WideButton("건너뛰기", KColors.SurfaceRaised, KColors.White, 56, onClick = finish)
     }
 }
 

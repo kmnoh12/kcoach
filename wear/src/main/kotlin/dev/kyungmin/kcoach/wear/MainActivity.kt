@@ -203,7 +203,7 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER
         }
         root.addView(exerciseText)
-        setText = label("폰에서 운동을 시작하면 현재 세트가 표시돼", 11f, Color.rgb(150, 160, 170)).apply {
+        setText = label("폰에서 운동을 시작하면 현재 세트가 표시돼요", 11f, Color.rgb(150, 160, 170)).apply {
             gravity = Gravity.CENTER
             setPadding(0, 4, 0, 6)
         }
@@ -340,15 +340,15 @@ class MainActivity : Activity() {
         val weightText = weightKg?.let { " · ${if (it % 1.0 == 0.0) it.toInt() else "%.1f".format(it)}kg" } ?: ""
         setText.text = when {
             running && runtimePhase == "POSITIONING" ->
-                "팔을 준비 위치로 옮겨"
+                "팔을 준비 위치로 옮겨 주세요"
             running && runtimePhase in setOf("PREPARING", "BASELINE") ->
-                "흔들림 없이 2초 유지해"
+                "흔들림 없이 2초 유지해 주세요"
             running && runtimePhase == "CONTROLLED_REPS" ->
                 "자연스러운 범위·속도로 5회$weightText"
             running -> "세트 ${setIndex + 1} · 목표 ${targetReps}회$weightText"
             resting -> "세트 ${setIndex + 1} 준비 · ${restSeconds}초 휴식"
             paused -> "운동 일시정지 · 폰 명령 대기"
-            paired -> "폰에서 운동을 시작하면 현재 세트가 표시돼"
+            paired -> "폰에서 운동을 시작하면 현재 세트가 표시돼요"
             else -> ""
         }
         val countdown = RestCountdownCalculator.calculate(
@@ -367,7 +367,7 @@ class MainActivity : Activity() {
         heartText.text = if (heartRate > 0) "❤️ $heartRate bpm" else "❤️ -- bpm"
         if (resting) {
             val now = System.currentTimeMillis()
-            restText.text = "휴식 후 자동으로 다음 세트를 준비해"
+            restText.text = "휴식 후 다음 세트를 자동으로 준비해요"
             restRing.setWindow(restEndAtMs - restSeconds.coerceAtLeast(1) * 1_000L, restEndAtMs)
             restRing.visibility = if (restEndAtMs > now) View.VISIBLE else View.GONE
         } else {

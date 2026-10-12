@@ -41,7 +41,7 @@ class UpdateManager(
                 val manifest = fetchManifest()
                 if (manifest.versionCode <= BuildConfig.VERSION_CODE) {
                     updateFile.delete()
-                    return@runCatching UpdateState("이미 최신 버전 ${BuildConfig.VERSION_NAME}이야")
+                    return@runCatching UpdateState("이미 최신 버전이에요 (${BuildConfig.VERSION_NAME})")
                 }
 
                 onState(UpdateState("${manifest.versionName} 다운로드 중…", busy = true))
@@ -58,7 +58,7 @@ class UpdateManager(
     }
 
     fun requestInstall(): String? {
-        if (!updateFile.isFile) return "다운로드된 업데이트가 없어"
+        if (!updateFile.isFile) return "다운로드된 업데이트가 없어요"
         if (!activity.packageManager.canRequestPackageInstalls()) {
             pendingInstall = true
             activity.startActivity(
@@ -67,7 +67,7 @@ class UpdateManager(
                     "package:${activity.packageName}".toUri(),
                 ),
             )
-            return "KCoach의 앱 설치 권한을 허용해"
+            return "KCoach의 앱 설치 권한을 허용해 주세요"
         }
         launchInstaller()
         return null
@@ -76,11 +76,11 @@ class UpdateManager(
     fun resumePendingInstall(): String? {
         if (!pendingInstall) return null
         if (!activity.packageManager.canRequestPackageInstalls()) {
-            return "설치 권한이 아직 허용되지 않았어"
+            return "설치 권한이 아직 허용되지 않았어요"
         }
         pendingInstall = false
         launchInstaller()
-        return "안드로이드 설치 화면을 열었어"
+        return "설치 화면을 열었어요"
     }
 
     private fun fetchManifest(): UpdateManifest {
@@ -102,7 +102,7 @@ class UpdateManager(
                 lastError = error
             }
         }
-        throw lastError ?: IllegalStateException("업데이트 서버를 찾지 못했어")
+        throw lastError ?: IllegalStateException("업데이트 서버를 찾지 못했어요")
     }
 
     private fun downloadAndVerify(manifest: UpdateManifest) {

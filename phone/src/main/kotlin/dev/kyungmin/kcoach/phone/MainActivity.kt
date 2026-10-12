@@ -346,11 +346,11 @@ class MainActivity : ComponentActivity() {
                     if (succeeded) {
                         Toast.makeText(
                             this@MainActivity,
-                            "완료! 유효 ${validReps}회 · 개인 프로필을 저장하고 실 운동에 적용했어",
+                            "보정 완료 · 유효 ${validReps}회 · 개인 프로필을 저장하고 실제 운동에 적용했어요",
                             Toast.LENGTH_LONG,
                         ).show()
                     } else {
-                        Toast.makeText(this@MainActivity, "유효 반복이 ${validReps}회라 프로필을 만들지 않았어 · 다시 보정해줘", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this@MainActivity, "유효 반복이 ${validReps}회라 프로필을 만들지 않았어요 · 다시 보정해 주세요", Toast.LENGTH_LONG).show()
                     }
                     calibrationSessionId = null
                     activeCalibrationExerciseId = null
@@ -373,7 +373,7 @@ class MainActivity : ComponentActivity() {
                         calibrationSessionId = null
                         activeCalibrationExerciseId = null
                         calibrationStopRequested = false
-                        Toast.makeText(this@MainActivity, "$calibratedName 보정 원본을 저장했어", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this@MainActivity, "$calibratedName 보정 기록을 저장했어요", Toast.LENGTH_LONG).show()
                         if (currentTab == RootTab.CALIBRATION) showCalibration()
                         return@onReceive
                     }
@@ -445,7 +445,7 @@ class MainActivity : ComponentActivity() {
                     .putLong("lastUiErrorAt", System.currentTimeMillis())
                     .apply()
                 if (!isFinishing && !isDestroyed) {
-                    Toast.makeText(this@MainActivity, "워치 데이터 표시 오류가 있었지만 운동 기록은 유지했어", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@MainActivity, "워치 데이터 표시에 오류가 있었지만 운동 기록은 그대로 두었어요", Toast.LENGTH_LONG).show()
                 }
             }
         }
@@ -663,7 +663,7 @@ class MainActivity : ComponentActivity() {
             move = { from, to -> moveRoutineExercise(routine, from, to, active, announce = false) },
             moveFinished = {
                 active?.takeIf { it.routine === routine }?.let(::persistActiveWorkout)
-                Toast.makeText(this, "운동 순서가 반영됐어", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "순서를 바꿨어요", Toast.LENGTH_SHORT).show()
             },
             primary = { if (active != null) showMyMountainDecision() else showStartGuide(routine) },
             addExercise = {
@@ -713,7 +713,7 @@ class MainActivity : ComponentActivity() {
             info = { index -> showExerciseInfo(freeExercises[index].exercise, reload) },
             menu = { index -> showExerciseMenu(freeRoutine(), index, null, reload) },
             move = { from, to -> freeExercises.add(to, freeExercises.removeAt(from)) },
-            moveFinished = { Toast.makeText(this, "운동 순서가 반영됐어", Toast.LENGTH_SHORT).show() },
+            moveFinished = { Toast.makeText(this, "순서를 바꿨어요", Toast.LENGTH_SHORT).show() },
             primary = { showStartGuide(freeRoutine()) },
             addExercise = {
                 openLibrary(
@@ -884,13 +884,13 @@ class MainActivity : ComponentActivity() {
         currentTab = RootTab.RECORDS
         currentScreen = Screen.ROOT
         val sections = if (result.analyses.isEmpty()) {
-            listOf(ResultSectionUi("분석 대기", listOf("센서 원본" to "워치에서 수신 대기", "확정 반복수" to "capture 수신 후 표시")))
+            listOf(ResultSectionUi("분석 대기", listOf("센서 기록" to "워치에서 받는 중", "확정 반복수" to "센서 기록을 받으면 표시돼요")))
         } else {
             result.analyses.values.sortedWith(compareBy<SetAnalysisUi> { it.exerciseName }.thenBy { it.setIndex }).map { analysis ->
                 val confidenceText = "%.0f%%".format(Locale.US, analysis.confidence * 100.0)
                 val metricRows = mutableListOf(
-                    "tracking" to "${analysis.capabilityTier} · ${analysis.trackingStatus.ifBlank { analysis.trackingMode }} · ${analysis.trackingProfileId}",
-                    "워치 provisional" to "${analysis.watchReps}회",
+                    "측정 방식" to "${analysis.capabilityTier} · ${analysis.trackingStatus.ifBlank { analysis.trackingMode }} · ${analysis.trackingProfileId}",
+                    "워치 측정값" to "${analysis.watchReps}회",
                     "폰 재분석" to if (analysis.trackingMode == "MANUAL_REQUIRED") "자동 산출 안 함" else "${analysis.phoneReps}회",
                     "확정 반복수" to if (analysis.trackingMode == "MANUAL_REQUIRED") "수동 입력 필요" else "${analysis.confirmedReps}회",
                     "분석 신뢰도" to confidenceText,
@@ -906,7 +906,7 @@ class MainActivity : ComponentActivity() {
             title = result.title,
             subtitle = "${result.durationMinutes}분 · ${result.completedSets}세트 · 세션 ${result.sessionId.takeLast(8)}",
             sections = sections,
-            footnote = "확정 반복수는 워치 표시값이 아니라 폰의 원본 capture 재분석 결과를 우선해.",
+            footnote = "확정 반복수는 워치 표시값이 아니라 폰이 센서 기록을 다시 분석한 결과를 기준으로 해요.",
         )
         showStandalone(ComposeView(this).apply {
             setContent { WorkoutResultScreen(ui, back = { onBackPressed() }, toRecords = { showRecords() }) }
@@ -927,7 +927,7 @@ class MainActivity : ComponentActivity() {
             calibrationStopRequested = true
             calibrationButtonOverride.value = CalibrationButtonUi("보정 원본 저장 중…", false)
             sendWear(WearSync.PATH_COMMAND, WearSync.command("STOP", session, "", 0, 0))
-            Toast.makeText(this, "워치 센서 원본을 저장하는 중이야", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "워치 센서 기록을 저장하는 중이에요", Toast.LENGTH_LONG).show()
             scheduleCalibrationSaveTimeout(session)
             return
         }
@@ -943,13 +943,13 @@ class MainActivity : ComponentActivity() {
         Wearable.getNodeClient(this).connectedNodes
             .addOnSuccessListener { nodes ->
                 if (nodes.isEmpty()) {
-                    Toast.makeText(this, "연결된 Watch8을 찾지 못했어", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, "연결된 Watch8을 찾지 못했어요", Toast.LENGTH_LONG).show()
                     return@addOnSuccessListener
                 }
                 beginCalibrationSession()
             }
             .addOnFailureListener {
-                Toast.makeText(this, "워치 연결 상태를 확인하지 못했어", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "워치 연결 상태를 확인하지 못했어요", Toast.LENGTH_LONG).show()
             }
     }
 
@@ -957,7 +957,7 @@ class MainActivity : ComponentActivity() {
         val exercise = WorkoutData.catalog.firstOrNull { it.id == selectedCalibrationExerciseId } ?: return
         val tracking = ExerciseTrackingProfiles.resolve(exercise.id, exercise.name)
         if (tracking.mode == TrackingMode.MANUAL_REQUIRED) {
-            Toast.makeText(this, "이 운동은 손목 센서로 직접 관측할 수 없어 수동 기록만 지원해", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "이 운동은 손목 센서로 측정할 수 없어서 수동 기록만 지원해요", Toast.LENGTH_LONG).show()
             return
         }
         val newSession = "calibration-${exercise.id}-${System.currentTimeMillis()}"
@@ -973,7 +973,7 @@ class MainActivity : ComponentActivity() {
                 0, 5, null, 0,
             ),
         )
-        Toast.makeText(this, "시작 자세 2초 유지 → 진동 후 평소 범위·속도로 5회 수행해", Toast.LENGTH_LONG).show()
+        Toast.makeText(this, "시작 자세를 2초 유지한 뒤, 진동이 오면 평소 범위와 속도로 5회 해 주세요", Toast.LENGTH_LONG).show()
     }
 
     private fun scheduleCalibrationSaveTimeout(sessionId: String) {
@@ -984,7 +984,7 @@ class MainActivity : ComponentActivity() {
             activeCalibrationExerciseId = null
             calibrationStopRequested = false
             calibrationButtonOverride.value = CalibrationButtonUi("보정 전송 지연 · 다시 시작", true, textAmber = true)
-            Toast.makeText(this, "20초 동안 워치 원본을 받지 못했어 · 연결 후 다시 보정해줘", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "20초 동안 워치 기록을 받지 못했어요 · 연결을 확인하고 다시 보정해 주세요", Toast.LENGTH_LONG).show()
         }
         calibrationSaveTimeoutTask = timeout
         handler.postDelayed(timeout, CALIBRATION_SAVE_TIMEOUT_MS)
@@ -1046,7 +1046,7 @@ class MainActivity : ComponentActivity() {
                     "적용 위치" to "워치 실시간 + 폰 재분석",
                     "가중치" to "개인 80% + 일반 20%",
                 ),
-                "시작 자세 2초는 센서 기준축과 흔들림 기준을 잡는 단계야. 손목 센서만으로 팔꿈치·몸 전체 자세까지 확정하진 않아.",
+                "시작 자세 2초는 센서의 기준축과 흔들림 기준을 잡는 단계예요. 손목 센서만으로 팔꿈치나 몸 전체 자세까지 판단하진 않아요.",
             )
         }
         val ui = CalibrationUi(
@@ -1105,8 +1105,8 @@ class MainActivity : ComponentActivity() {
         showPopup { dismiss ->
             ConfirmDialog(
                 title = "보정된 기록 삭제",
-                message = "$exerciseName 개인 보정 프로필을 폰과 워치에서 삭제할까?\n" +
-                    "삭제 후에는 이 운동이 일반 기준 프로필로 측정돼.",
+                message = "$exerciseName 보정 기록을 폰과 워치에서 삭제할까요?\n" +
+                    "삭제하면 이 운동은 일반 기준으로 측정돼요.",
                 negative = "취소",
                 positive = "삭제",
                 dismiss = dismiss,
@@ -1120,7 +1120,7 @@ class MainActivity : ComponentActivity() {
                     .remove("calibration:$exerciseId:error")
                     .apply()
                 sendWear(WearSync.PATH_PERSONAL_PROFILE_DELETE, exerciseId)
-                Toast.makeText(this, "$exerciseName 보정 기록을 삭제했어", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "$exerciseName 보정 기록을 삭제했어요", Toast.LENGTH_LONG).show()
                 showCalibration()
             }
         }
@@ -1184,9 +1184,9 @@ class MainActivity : ComponentActivity() {
                     activeLiveStatus?.text = "워치 앱 준비 완료 · 운동 시작"
                 } else {
                     pendingWatchStartPayload = startPayload
-                    activeLiveStatus?.text = "워치 연동 중… 워치 앱을 열어줘"
+                    activeLiveStatus?.text = "워치 연결 중 · 워치 앱을 열어 주세요"
                     wearLiveStatus?.apply {
-                        text = "⌚ 워치 연동 중… 워치 앱을 열어줘"
+                        text = "⌚ 워치 연결 중 · 워치 앱을 열어 주세요"
                         setTextColor(amber)
                     }
                 }
@@ -1197,9 +1197,9 @@ class MainActivity : ComponentActivity() {
             BigChoiceSheet(
                 eyebrow = "▶", eyebrowColor = KColors.Accent,
                 title = "운동 시작",
-                body = "운동을 시작하시겠습니까?\n\n워치가 연결되면 현재 세트·횟수·심박수가 동기화됩니다.",
+                body = "운동을 시작할까요?\n\n워치가 연결돼 있으면 세트와 심박수가 함께 기록돼요.",
                 bodyColor = KColors.White,
-                cancel = "취소", confirm = "확인",
+                cancel = "취소", confirm = "시작",
                 dismiss = dismiss, onCancel = {}, onConfirm = ::start,
                 filledButtons = false,
             )
@@ -1423,7 +1423,7 @@ class MainActivity : ComponentActivity() {
             return HistoryUi(lastLine, (last.volumeKg * volumeUnit(workout)).toInt(), null, null, false)
         }
         val (text, applicable) = when (next) {
-            is NextTarget.RaiseWeight -> "${formatActiveWeight(next.toKg, workout.usePounds)}${unitLabel}로 올려봐" to true
+            is NextTarget.RaiseWeight -> "${formatActiveWeight(next.toKg, workout.usePounds)}${unitLabel}로 올리기" to true
             is NextTarget.AddRep -> "전체 반복 1회 더" to true
             is NextTarget.Hold -> "중량 유지" to false
         }
@@ -1752,7 +1752,7 @@ class MainActivity : ComponentActivity() {
         val firstLine = "⌚ $exerciseName · 세트 ${setIndex + 1}" +
             if (personalizedTracking) " · 개인보정 적용" else ""
         val secondLine = when (phase) {
-            "POSITIONING" -> "팔을 준비 자세로 옮겨 · 움직이는 동안 카운트 안 함"
+            "POSITIONING" -> "팔을 준비 자세로 옮겨 주세요 · 움직이는 동안은 세지 않아요"
             "PREPARING" -> "자세 고정 · 흔들림 없이 2초 후 시작"
             "RESTING" -> "휴식 중 · ${reps}/${targetReps}회$weightText · ❤️ ${heartRate}bpm"
             "SET_COMPLETE" -> "세트 완료 · ${reps}회$weightText · ❤️ ${heartRate}bpm"
@@ -2073,20 +2073,20 @@ class MainActivity : ComponentActivity() {
                 "${routineExercise.exercise.name} $setLabel · ${set.targetReps}회",
                 listOf(
                     SheetItem(KIcon.Sliders, "세트 타입\n${set.setType.displayName}") {
-                        showChoiceSheet("세트 타입", listOf("일반" to "일반 세트", "웜업" to "근육을 준비하기 위한 워밍업", "슈퍼" to "두 가지 운동을 휴식 없이", "드랍" to "휴식시간 없이 무게를 낮춰서", "실패" to "실패한 세트", "보조" to "보조 받아 세트를 완료")) { value ->
+                        showChoiceSheet("세트 타입", listOf("일반" to "일반 세트", "웜업" to "근육을 준비하기 위한 워밍업", "슈퍼" to "두 운동을 쉬지 않고 연속으로", "드랍" to "휴식 없이 무게를 낮춰 이어서", "실패" to "실패까지 간 세트", "보조" to "도움을 받아 끝낸 세트")) { value ->
                             set.setType = SetType.fromStorage(value)
                             showActiveWorkout()
                         }
                     },
                     SheetItem(KIcon.Sliders, "그립 타입\n${set.gripType}") {
-                        showChoiceSheet("그립 타입", listOf("노멀" to "표준 그립", "오버핸드" to "손바닥이 몸 반대쪽을 향함", "언더핸드" to "손바닥이 몸 쪽으로 향함", "뉴트럴" to "양손이 서로 마주보게", "와이드" to "어깨 너비보다 넓은 손 배치", "클로즈" to "손을 어깨 너비보다 가깝게", "얼터네이트" to "한 손은 오버핸드, 다른 한 손은 언더핸드")) { value ->
+                        showChoiceSheet("그립 타입", listOf("노멀" to "표준 그립", "오버핸드" to "손바닥이 몸 반대쪽을 향하는 그립", "언더핸드" to "손바닥이 몸 쪽을 향하는 그립", "뉴트럴" to "양손이 서로 마주 보는 그립", "와이드" to "어깨 너비보다 넓은 손 배치", "클로즈" to "어깨 너비보다 좁은 손 배치", "얼터네이트" to "한 손은 오버핸드, 다른 한 손은 언더핸드")) { value ->
                             set.gripType = value
                             showActiveWorkout()
                         }
                     },
-                    SheetItem(KIcon.Stats, "운동자각도\n${set.rpe ?: "선택해"}") {
-                        showChoiceSheet("RPE", listOf("선택해" to "", "10" to "이게 한계다", "9.5" to "1개 정도 더 할 수 있으려나?", "9" to "확실히 1개 정도 더 할 수 있다", "8.5" to "아마 2개 정도 더 할 수 있다", "8" to "확실히 2개 정도 더 할 수 있다", "7" to "꽤 할만 했다", "6" to "웜업 정도?")) { value ->
-                            set.rpe = value.takeUnless { it == "선택해" }
+                    SheetItem(KIcon.Stats, "운동자각도\n${set.rpe ?: "선택 안 함"}") {
+                        showChoiceSheet("RPE", listOf("선택 안 함" to "", "10" to "더는 못 해요", "9.5" to "1개 정도 더 할 수 있을 것 같아요", "9" to "확실히 1개 더 할 수 있어요", "8.5" to "아마 2개 더 할 수 있어요", "8" to "확실히 2개 더 할 수 있어요", "7" to "꽤 할 만했어요", "6" to "웜업 정도예요")) { value ->
+                            set.rpe = value.takeUnless { it == "선택 안 함" }
                             showActiveWorkout()
                         }
                     },
@@ -2228,10 +2228,10 @@ class MainActivity : ComponentActivity() {
         showSheet { dismiss ->
             BigChoiceSheet(
                 eyebrow = "웨이트 완료", eyebrowColor = KColors.Accent,
-                title = "마이마운틴 할까?",
-                body = "오늘 컨디션에 따라 선택하면 돼.\n안 해도 루틴은 정상 완료야.",
+                title = "마이마운틴도 할까요?",
+                body = "오늘 컨디션에 따라 정해요.\n건너뛰어도 루틴은 완료로 기록돼요.",
                 bodyColor = KColors.Muted,
-                cancel = "아니오", confirm = "예",
+                cancel = "건너뛰기", confirm = "시작",
                 dismiss = dismiss,
                 onCancel = { showWorkoutResult(lastWorkoutResult) },
                 onConfirm = { showMyMountain() },
@@ -2246,7 +2246,7 @@ class MainActivity : ComponentActivity() {
             setContent {
                 MyMountainScreen(
                     back = { onBackPressed() },
-                    start = { Toast.makeText(this@MainActivity, "워치 연결 후 심박수와 함께 기록돼", Toast.LENGTH_LONG).show() },
+                    start = { Toast.makeText(this@MainActivity, "워치가 연결되면 심박수와 함께 기록돼요", Toast.LENGTH_LONG).show() },
                     finish = { showRecords() },
                 )
             }
@@ -2382,7 +2382,7 @@ class MainActivity : ComponentActivity() {
                     SheetItem(KIcon.Play, "운동 애니메이션") { dismiss(); showExerciseInfo(exercise, onReturn) },
                     SheetItem(KIcon.Info, "운동 정보") { dismiss(); showExerciseInfo(exercise, onReturn) },
                     SheetItem(KIcon.Link, "슈퍼세트 설정") {},
-                    SheetItem(KIcon.Trash, "운동 제거") { dismiss(); confirmRemoveExercise(routine, index, active, onReturn) },
+                    SheetItem(KIcon.Trash, "운동 삭제") { dismiss(); confirmRemoveExercise(routine, index, active, onReturn) },
                     SheetItem(KIcon.Swap, "운동 대체") { dismiss(); showExerciseAlternatives(routine, index, onReturn) },
                 ),
             )
@@ -2391,9 +2391,9 @@ class MainActivity : ComponentActivity() {
 
     private fun exerciseDescription(exercise: ExerciseDefinition): String =
         if (exercise.id == "pull_up") {
-            "● 팁\n\n풀업은 등, 어깨, 팔 근육을 동시에 강화하는 운동입니다. 그립의 넓이와 손바닥 방향에 따라 자극되는 근육의 비중이 달라집니다. 처음부터 반복 수를 늘리기보다 매 반복의 시작과 끝 자세를 일정하게 유지하세요.\n\n● 설명\n\n- 준비\n\n1. 바를 어깨너비보다 약간 넓게 오버핸드 그립으로 잡으세요.\n2. 팔을 완전히 뻗은 상태에서 어깨를 귀에서 멀어지게 내리고, 복부와 둔근에 가볍게 힘을 주세요.\n3. 다리를 앞뒤로 흔들지 말고 발목을 겹쳐 몸통을 하나의 단단한 덩어리처럼 유지하세요.\n\n- 움직임\n\n1. 가슴을 바 쪽으로 끌어올리면서 팔꿈치를 아래·뒤 방향으로 당기세요.\n2. 턱만 내미는 대신 가슴이 올라가도록 움직이고, 어깨가 으쓱하지 않게 유지하세요.\n3. 위에서 잠깐 멈춘 뒤 팔꿈치를 천천히 펴며 시작 자세로 돌아가세요. 내려가는 구간까지 통제해야 1회가 완성됩니다.\n\n- 호흡법\n\n몸을 끌어올릴 때 숨을 내쉬고, 내려오면서 숨을 들이마시세요. 반복 중 숨을 오래 참지 말고 일정한 호흡을 유지하세요.\n\n● 주의사항\n\n1. 어깨·팔꿈치·손목에 통증이 느껴지면 즉시 중단하세요.\n2. 반동으로 몸을 차거나 허리를 과하게 젖히지 마세요.\n3. 가동범위가 무너지면 반복 수를 줄이거나 어시스티드 머신·밴드로 난도를 낮추세요."
+            "● 팁\n\n풀업은 등, 어깨, 팔 근육을 동시에 강화하는 운동이에요. 그립의 넓이와 손바닥 방향에 따라 자극되는 근육의 비중이 달라져요. 처음부터 반복 수를 늘리기보다 매 반복의 시작과 끝 자세를 일정하게 유지하세요.\n\n● 설명\n\n- 준비\n\n1. 바를 어깨너비보다 약간 넓게 오버핸드 그립으로 잡으세요.\n2. 팔을 완전히 뻗은 상태에서 어깨를 귀에서 멀어지게 내리고, 복부와 둔근에 가볍게 힘을 주세요.\n3. 다리를 앞뒤로 흔들지 말고 발목을 겹쳐 몸통을 하나의 단단한 덩어리처럼 유지하세요.\n\n- 움직임\n\n1. 가슴을 바 쪽으로 끌어올리면서 팔꿈치를 아래·뒤 방향으로 당기세요.\n2. 턱만 내미는 대신 가슴이 올라가도록 움직이고, 어깨가 으쓱하지 않게 유지하세요.\n3. 위에서 잠깐 멈춘 뒤 팔꿈치를 천천히 펴며 시작 자세로 돌아가세요. 내려가는 구간까지 통제해야 1회가 완성돼요.\n\n- 호흡법\n\n몸을 끌어올릴 때 숨을 내쉬고, 내려오면서 숨을 들이마시세요. 반복 중 숨을 오래 참지 말고 일정한 호흡을 유지하세요.\n\n● 주의사항\n\n1. 어깨·팔꿈치·손목에 통증이 느껴지면 즉시 중단하세요.\n2. 반동으로 몸을 차거나 허리를 과하게 젖히지 마세요.\n3. 가동범위가 무너지면 반복 수를 줄이거나 어시스티드 머신·밴드로 난도를 낮추세요."
         } else {
-            "● 팁\n\n${exercise.name}은 ${exercise.muscles} 근육을 사용하는 운동입니다. 무게를 올리는 것보다 몸통을 고정하고 매 반복의 시작·끝 자세를 일정하게 유지하는 것이 우선입니다. 목표 근육에 힘이 들어오는지 느끼면서 호흡과 속도를 일정하게 맞추세요.\n\n● 설명\n\n- 준비\n\n1. 기구와 그립을 편하게 잡고 발·골반·몸통을 안정시키세요.\n2. 어깨를 으쓱하지 말고 관절이 자연스럽게 움직이는 위치를 찾으세요.\n3. 가벼운 중량으로 1세트를 진행해 통증과 가동범위를 확인하세요.\n\n- 움직임\n\n1. 목표 근육으로 힘을 보내며 1~2초에 걸쳐 들어 올리거나 당기세요.\n2. 수축 지점에서 반동 없이 잠깐 멈추고, 무게를 놓치지 않으며 천천히 돌아오세요.\n3. 몸통이 흔들리거나 관절이 먼저 움직이면 중량·반복 수를 낮추고 궤적을 다시 맞추세요.\n4. 마지막 반복까지 같은 자세를 유지할 수 있을 때만 다음 세트의 중량을 올리세요.\n\n- 호흡법\n\n힘을 쓰는 구간에 숨을 내쉬고, 시작 위치로 돌아오며 들이마시세요. 무거운 중량에서도 숨을 오래 참지 말고 복부 긴장과 호흡을 함께 유지하세요.\n\n● 주의사항\n\n1. 날카로운 통증, 저림 또는 관절 불편감이 느껴지면 즉시 중단하세요.\n2. 빠른 반동, 과도한 중량, 허리 꺾기로 반복 수를 억지로 채우지 마세요.\n3. 자세가 무너지기 시작하면 세트를 끝내고 다음 세트는 중량이나 범위를 조절하세요."
+            "● 팁\n\n${exercise.name}은 ${exercise.muscles} 근육을 사용하는 운동이에요. 무게를 올리는 것보다 몸통을 고정하고 매 반복의 시작·끝 자세를 일정하게 유지하는 것이 우선이에요. 목표 근육에 힘이 들어오는지 느끼면서 호흡과 속도를 일정하게 맞추세요.\n\n● 설명\n\n- 준비\n\n1. 기구와 그립을 편하게 잡고 발·골반·몸통을 안정시키세요.\n2. 어깨를 으쓱하지 말고 관절이 자연스럽게 움직이는 위치를 찾으세요.\n3. 가벼운 무게로 1세트를 진행해 통증과 가동범위를 확인하세요.\n\n- 움직임\n\n1. 목표 근육으로 힘을 보내며 1~2초에 걸쳐 들어 올리거나 당기세요.\n2. 수축 지점에서 반동 없이 잠깐 멈추고, 무게를 놓치지 않으며 천천히 돌아오세요.\n3. 몸통이 흔들리거나 관절이 먼저 움직이면 무게와 반복 수를 낮추고 궤적을 다시 맞추세요.\n4. 마지막 반복까지 같은 자세를 유지할 수 있을 때만 다음 세트의 무게를 올리세요.\n\n- 호흡법\n\n힘을 쓰는 구간에 숨을 내쉬고, 시작 위치로 돌아오며 들이마시세요. 무거울 때도 숨을 오래 참지 말고 복부 긴장과 호흡을 함께 유지하세요.\n\n● 주의사항\n\n1. 날카로운 통증, 저림 또는 관절 불편감이 느껴지면 즉시 중단하세요.\n2. 빠른 반동, 과한 무게, 허리 꺾기로 반복 수를 억지로 채우지 마세요.\n3. 자세가 무너지기 시작하면 세트를 끝내고 다음 세트는 무게나 범위를 조절하세요."
         }
 
     private fun showExerciseInfo(exercise: ExerciseDefinition, onReturn: () -> Unit) {
@@ -2413,7 +2413,7 @@ class MainActivity : ComponentActivity() {
                 "● 나의 기록" to "이 운동이 포함된 루틴 ${matching.size}개\n계획된 총 세트 ${plannedSets}세트\n\n최근 루틴\n${matching.firstOrNull()?.name ?: "아직 기록 없음"}",
                 "● 최근 목표" to (matching.firstOrNull()?.exercises?.firstOrNull { it.exercise.id == exercise.id }?.sets?.firstOrNull()?.let { set ->
                     "${set.weightKg?.let { cleanWeight(it) + "kg" } ?: "체중"} · ${set.targetReps}회"
-                } ?: "기록이 쌓이면 표시됩니다."),
+                } ?: "기록이 쌓이면 표시돼요."),
             ),
             stats = listOf(
                 "${used.size}회" to "루틴 포함",
@@ -2421,7 +2421,7 @@ class MainActivity : ComponentActivity() {
                 "${averageRest}초" to "평균 휴식",
                 exercise.equipment to "기구",
             ),
-            analysisNote = "워치 센서 기록이 연결되면 템포·진폭·반복 일관성을 이 운동 기준으로 분석합니다.",
+            analysisNote = "워치 센서 기록이 연결되면 템포, 진폭, 반복 일관성을 이 운동 기준으로 분석해요.",
         )
         showStandalone(ComposeView(this).apply {
             setContent {
@@ -2445,13 +2445,13 @@ class MainActivity : ComponentActivity() {
                 it.exerciseIndex = adjustedIndexAfterMove(it.exerciseIndex, from, to)
             }
         }
-        if (announce) Toast.makeText(this, "운동 순서가 반영됐어", Toast.LENGTH_SHORT).show()
+        if (announce) Toast.makeText(this, "순서를 바꿨어요", Toast.LENGTH_SHORT).show()
     }
 
     private fun confirmRemoveExercise(routine: WorkoutRoutine, index: Int, active: ActiveWorkout?, onReturn: () -> Unit) {
         val exercise = routine.exercises.getOrNull(index)?.exercise ?: return
         showPopup { dismiss ->
-            ConfirmDialog("${exercise.name} 제거", "이 루틴에서 운동을 제거할까?", "취소", "제거", dismiss) {
+            ConfirmDialog("${exercise.name} 삭제", "이 루틴에서 운동을 삭제할까요?", "취소", "삭제", dismiss) {
                 routine.exercises.removeAt(index)
                 active?.let {
                     if (it.routine === routine) {
@@ -2460,7 +2460,7 @@ class MainActivity : ComponentActivity() {
                         it.setIndex = 0
                     }
                 }
-                Toast.makeText(this, "운동이 제거됐어", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "운동을 삭제했어요", Toast.LENGTH_SHORT).show()
                 onReturn()
             }
         }
@@ -2479,7 +2479,7 @@ class MainActivity : ComponentActivity() {
         showPopup { dismiss ->
             PickDialog("운동 대체\n${current.name}", labels, dismiss) { which ->
                 routine.exercises[index] = routine.exercises[index].copy(exercise = alternatives[which])
-                Toast.makeText(this, "${alternatives[which].name}(으)로 바꿨어", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "${alternatives[which].name}(으)로 바꿨어요", Toast.LENGTH_SHORT).show()
                 onReturn()
             }
         }
@@ -2504,7 +2504,7 @@ class MainActivity : ComponentActivity() {
                 val routine = WorkoutRoutine(
                     id = "custom_${System.currentTimeMillis()}",
                     name = typed.ifBlank { "새 루틴" },
-                    muscles = "운동을 추가해",
+                    muscles = "운동을 추가해 주세요",
                     lastPerformed = "기록 없음",
                     exercises = mutableListOf(),
                 )
@@ -2554,7 +2554,7 @@ class MainActivity : ComponentActivity() {
 
     private fun confirmStopWorkout() {
         showPopup { dismiss ->
-            ConfirmDialog("운동 중단", "운동을 중단하면 기록이 저장되지 않습니다. 중단하시겠습니까?", "계속 운동", "종료", dismiss) {
+            ConfirmDialog("운동을 종료할까요?", "지금까지의 기록은 저장되지 않아요.", "계속 운동", "종료", dismiss) {
                 val stoppedWorkout = activeWorkout
                 if (stoppedWorkout != null) {
                     if (!persistActiveWorkout(stoppedWorkout)) return@ConfirmDialog
@@ -2794,7 +2794,7 @@ class MainActivity : ComponentActivity() {
         )
         if (!saved) {
             activeLiveStatus?.apply {
-                text = "세션 저장 실패 · 워치 명령을 보내지 않았어"
+                text = "세션 저장에 실패했어요 · 워치 명령을 보내지 않았어요"
                 setTextColor(amber)
             }
         }

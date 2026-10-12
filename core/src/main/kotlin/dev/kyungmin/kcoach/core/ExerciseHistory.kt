@@ -88,7 +88,7 @@ object NextTargetAdvisor {
         val increment = if ((topWeight ?: 0.0) >= 20.0) 2.5 else 1.0
         return when (val decision = ProgressionEngine().decide(plan, completed, increment)) {
             is ProgressionDecision.IncreaseWeight ->
-                if (topWeight == null) NextTarget.AddRep("맨몸 운동이라 반복을 1회 늘려봐")
+                if (topWeight == null) NextTarget.AddRep("맨몸 운동이라 반복을 1회 늘려 보세요")
                 else NextTarget.RaiseWeight(topWeight + decision.incrementKg, decision.reason)
             is ProgressionDecision.AddReps -> NextTarget.AddRep(decision.reason)
             is ProgressionDecision.Hold -> NextTarget.Hold(decision.reason)

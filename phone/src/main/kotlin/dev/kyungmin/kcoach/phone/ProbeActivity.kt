@@ -227,7 +227,7 @@ class ProbeActivity : Activity() {
         statusText.setTextColor(if (connected) Color.rgb(0, 230, 118) else Color.rgb(255, 177, 0))
         statsText.text = stats
         segmentText.text = if (segmentLines.isEmpty()) {
-            "올리고 내릴 때마다 구간이 하나씩 잡혀"
+            "올리고 내릴 때마다 구간이 하나씩 잡혀요"
         } else {
             // One rep = up stroke + down stroke (MM-Fit: about two segments per rep).
             "구간 ${segmentCount}개 · 반복 약 ${(segmentCount + 1) / 2}회 (궤적 지우기로 0부터)\n" + segmentLines.joinToString("\n")
@@ -262,7 +262,7 @@ class ProbeActivity : Activity() {
     private fun shareRecording() {
         val file = synchronized(lock) { if (recorder == null) recordFile else null }
         if (file == null || !file.isFile) {
-            statusText.text = if (recorder != null) "기록을 먼저 중지해" else "공유할 기록이 없어"
+            statusText.text = if (recorder != null) "기록을 먼저 중지해 주세요" else "공유할 기록이 없어요"
             return
         }
         val uri = FileProvider.getUriForFile(this, "$packageName.updates", file)
@@ -307,7 +307,7 @@ class ProbeActivity : Activity() {
             topMargin = (16 * dp).toInt()
         })
         column.addView(TextView(this).apply {
-            text = "끌어서 돌려봐 · 주황색이 가장 최근 구간"
+            text = "끌어서 돌려 보세요 · 주황색이 가장 최근 구간"
             textSize = 12f
             setTextColor(Color.rgb(140, 146, 150))
             gravity = Gravity.CENTER

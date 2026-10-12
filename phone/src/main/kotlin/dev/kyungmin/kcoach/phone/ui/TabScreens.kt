@@ -254,7 +254,7 @@ class MenuActions(
 
 @Composable
 fun MenuScreen(version: String, actions: MenuActions) {
-    var state by remember { mutableStateOf(UpdateUi("업데이트를 확인할 수 있어", false)) }
+    var state by remember { mutableStateOf(UpdateUi("업데이트를 확인할 수 있어요", false)) }
     var busy by remember { mutableStateOf(false) }
     TabPage("메뉴", "") {
         Spacer(Modifier.height(28.dp))

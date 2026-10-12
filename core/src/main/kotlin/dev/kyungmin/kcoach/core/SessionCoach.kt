@@ -142,10 +142,10 @@ class RestPolicy(
         if (!needsMoreRest(set, heartRate)) return null
         val reason = when {
             heartRate?.currentBpm?.let { it >= highHeartRateThreshold } == true ->
-                "심박수가 아직 충분히 회복되지 않았어"
+                "심박수가 아직 충분히 회복되지 않았어요"
             set.rir?.let { it <= nearFailureRir } == true ->
-                "직전 세트가 실패에 가까웠어"
-            else -> "직전 세트가 실패에 가까웠어"
+                "직전 세트가 실패에 가까웠어요"
+            else -> "직전 세트가 실패에 가까웠어요"
         }
         return CoachCue.RecommendExtraRest(30, reason)
     }

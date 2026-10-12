@@ -86,7 +86,7 @@ class ProbeActivity : Activity() {
         startButton.text = if (s.running) "정지" else "시작"
         screenButton.text = if (keepScreenOn) "화면 켜둠: 켬" else "화면 켜둠: 끔"
         statusText.text = if (!s.running) {
-            "폰에서 실측 화면을 먼저 열고 시작을 눌러"
+            "폰에서 실측 화면을 먼저 열고 시작을 눌러 주세요"
         } else buildString {
             append(if (s.connected) "● 폰 연결됨\n" else "○ ${s.message}\n")
             append("가속도 %.0fHz · 자이로 %.0fHz\n".format(s.accelHz, s.gyroHz))
