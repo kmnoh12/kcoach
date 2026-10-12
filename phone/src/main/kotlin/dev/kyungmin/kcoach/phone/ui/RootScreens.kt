@@ -133,7 +133,7 @@ private fun TabBarBody(selected: Int, onSelect: (Int) -> Unit) {
             .padding(horizontal = 14.dp, vertical = 12.dp)
             .shadow(14.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
             .clip(shape)
-            .background(KColors.Surface.copy(alpha = 0.96f))
+            .background(KColors.Surface)
             .border(0.5.dp, KColors.Hairline, shape)
             .padding(4.dp),
     ) {
