@@ -73,6 +73,18 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.Velocity
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.testTag
 import kotlin.math.roundToInt
 
 /** One bottom sheet or centred dialog shown above whatever screen is current. */
@@ -261,26 +273,7 @@ fun SetSheet(title: String, subtitle: String, groups: List<SegGroup>, actions: L
             Column(Modifier.padding(horizontal = 22.dp, vertical = 12.dp)) {
                 Text(group.label, color = KColors.Muted, fontSize = 12.sp)
                 Spacer(Modifier.height(8.dp))
-                Row(Modifier.fillMaxWidth().height(42.dp).clip(KShape.Control).background(KColors.SurfaceRaised)) {
-                    group.options.forEach { option ->
-                        val wash by animateColorAsState(if (option.selected) KColors.AccentWash else Color.Transparent, Motion.ui(), label = "segWash")
-                        val edge by animateColorAsState(if (option.selected) KColors.Accent else Color.Transparent, Motion.ui(), label = "segEdge")
-                        val text by animateColorAsState(if (option.selected) KColors.Accent else KColors.Soft, Motion.ui(), label = "segText")
-                        Box(
-                            Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                                .padding(2.dp)
-                                .clip(KShape.Control)
-                                .background(wash)
-                                .border(1.dp, edge, KShape.Control)
-                                .pressable(option.onClick),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(option.label, color = text, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
-                        }
-                    }
-                }
+                SegmentedBar(group.options, Modifier.testTag("seg-${group.label}"))
                 if (group.note != null) {
                     Spacer(Modifier.height(6.dp))
                     Crossfade(group.note, animationSpec = Motion.ui(), label = "segNote") { note ->
@@ -301,6 +294,80 @@ fun SetSheet(title: String, subtitle: String, groups: List<SegGroup>, actions: L
                 }
             }
         }
+    }
+}
+
+/**
+ * One thumb under all segments. Press and slide: the thumb follows the finger and settles on the nearest segment
+ * when released; a plain tap moves it straight to that segment. The choice fires once, on release.
+ */
+@Composable
+private fun SegmentedBar(options: List<SegOption>, modifier: Modifier = Modifier) {
+    val count = options.size
+    val selected = options.indexOfFirst { it.selected }.coerceAtLeast(0)
+    val scope = rememberCoroutineScope()
+    val haptic = LocalHapticFeedback.current
+    BoxWithConstraints(modifier.fillMaxWidth().height(42.dp).clip(KShape.Control).background(KColors.SurfaceRaised)) {
+        val width = constraints.maxWidth.toFloat()
+        val segment = width / count
+        val thumbX = remember { Animatable(selected * segment) }
+        var dragging by remember { mutableStateOf(false) }
+        LaunchedEffect(selected, segment, dragging) {
+            if (!dragging) thumbX.animateTo(selected * segment, spring(dampingRatio = 1f, stiffness = Spring.StiffnessMedium))
+        }
+        val highlighted = ((thumbX.value + segment / 2) / segment).toInt().coerceIn(0, count - 1)
+        val lift by animateFloatAsState(if (dragging) 1.04f else 1f, Motion.ui(), label = "thumbLift")
+
+        Box(
+            Modifier
+                .offset { IntOffset(thumbX.value.roundToInt(), 0) }
+                .width(with(LocalDensity.current) { segment.toDp() })
+                .fillMaxHeight()
+                .padding(2.dp)
+                .graphicsLayer { scaleX = lift; scaleY = lift }
+                .clip(KShape.Control)
+                .background(KColors.AccentWash)
+                .border(1.dp, KColors.Accent, KShape.Control),
+        )
+        Row(Modifier.fillMaxSize()) {
+            options.forEachIndexed { index, option ->
+                val text by animateColorAsState(if (index == highlighted) KColors.Accent else KColors.Soft, Motion.ui(), label = "segText")
+                Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                    Text(option.label, color = text, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                }
+            }
+        }
+        // Gesture layer on top; the labels above are only drawn.
+        Box(
+            Modifier
+                .fillMaxSize()
+                .pointerInput(count, segment) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown()
+                        dragging = true
+                        var lastIndex = (down.position.x / segment).toInt().coerceIn(0, count - 1)
+                        var cancelled = false
+                        fun follow(x: Float) = scope.launch { thumbX.animateTo((x - segment / 2).coerceIn(0f, width - segment), tween(90)) }
+                        follow(down.position.x)
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.first()
+                            // A vertical drag belongs to the sheet; give up and let the thumb return.
+                            if (change.isConsumed) { cancelled = true; break }
+                            val x = change.position.x
+                            val index = (x / segment).toInt().coerceIn(0, count - 1)
+                            if (index != lastIndex) {
+                                lastIndex = index
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            }
+                            scope.launch { thumbX.snapTo((x - segment / 2).coerceIn(0f, width - segment)) }
+                            if (!change.pressed) break
+                        }
+                        dragging = false
+                        if (!cancelled && lastIndex != selected) options[lastIndex].onClick()
+                    }
+                },
+        )
     }
 }
 
