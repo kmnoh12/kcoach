@@ -266,13 +266,6 @@ class MainActivity : Activity() {
             topMargin = 18
             bottomMargin = 8
         })
-        details.addView(label("실측 모드", 11f, Color.WHITE, true).apply {
-            gravity = Gravity.CENTER
-            setPadding(18, 10, 18, 10)
-            background = rounded(Color.rgb(20, 70, 80), 18)
-            isClickable = true
-            setOnClickListener { startActivity(Intent(this@MainActivity, ProbeActivity::class.java)) }
-        }, LinearLayout.LayoutParams(-2, -2).apply { bottomMargin = 8 })
         root.addView(ScrollView(this).apply {
             isFillViewport = false
             addView(details)
