@@ -229,11 +229,34 @@ private fun RecordCard(record: WorkoutRecord) {
     }
 }
 
-class StatsUi(val monthLabel: String, val metrics: List<Pair<String, String>>, val byRoutine: List<Pair<String, String>>)
+class StatsUi(
+    val monthLabel: String,
+    val metrics: List<Pair<String, String>>,
+    val byRoutine: List<Pair<String, String>>,
+    /** Sets per body part over the last seven days. */
+    val weekSets: Map<String, Int> = emptyMap(),
+)
 
 @Composable
 fun StatsScreen(ui: StatsUi) {
     TabPage("통계", ui.monthLabel) {
+        Spacer(Modifier.height(24.dp))
+        Text("최근 7일", color = KColors.Soft, fontSize = 15.sp)
+        Spacer(Modifier.height(12.dp))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            BodyMap(dev.kyungmin.kcoach.core.BodyLoad.intensity(ui.weekSets), Modifier.weight(1.5f))
+            Spacer(Modifier.width(16.dp))
+            Column(Modifier.weight(1f)) {
+                listOf("가슴", "등", "어깨", "삼두", "이두", "하체").forEach { part ->
+                    val sets = ui.weekSets[part] ?: 0
+                    Row(Modifier.fillMaxWidth().padding(vertical = 7.dp)) {
+                        Text(part, color = if (sets > 0) KColors.White else KColors.Muted, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                        Text(if (sets > 0) "${sets}세트" else "-", color = if (sets > 0) KColors.Accent else KColors.Faint, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    }
+                    HairlineRule()
+                }
+            }
+        }
         Spacer(Modifier.height(30.dp))
         if (ui.metrics.isEmpty()) {
             Text("이번 달 기록이 없어요", color = KColors.Soft, fontSize = 15.sp)

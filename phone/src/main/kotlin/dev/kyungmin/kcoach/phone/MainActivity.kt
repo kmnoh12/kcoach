@@ -40,6 +40,7 @@ import androidx.compose.ui.platform.ComposeView
 import dev.kyungmin.kcoach.phone.ui.ActiveWorkoutScreen
 import dev.kyungmin.kcoach.phone.ui.ExerciseUi
 import dev.kyungmin.kcoach.core.TrainingLoad
+import dev.kyungmin.kcoach.core.BodyLoad
 import dev.kyungmin.kcoach.core.PersonalRecords
 import dev.kyungmin.kcoach.core.RecordKind
 import dev.kyungmin.kcoach.core.WorkoutLog
@@ -1423,7 +1424,9 @@ class MainActivity : ComponentActivity() {
         val month = YearMonth.from(today)
         val logs = workoutLogStore.load()
         val inMonth = logs.filter { LocalDate.ofEpochDay(it.epochDay).let { d -> YearMonth.from(d) == month } }
-        if (inMonth.isEmpty()) return StatsUi("${month.monthValue}월", emptyList(), emptyList())
+        val bodyOf = WorkoutData.catalog.associate { it.id to it.bodyCategory }
+        val weekSets = BodyLoad.setsByPart(history.all, bodyOf::get, today.toEpochDay())
+        if (inMonth.isEmpty()) return StatsUi("${month.monthValue}월", emptyList(), emptyList(), weekSets)
         val totals = WorkoutStats.between(logs, month.atDay(1).toEpochDay(), month.atEndOfMonth().toEpochDay())
         return StatsUi(
             "${month.monthValue}월",
@@ -1434,6 +1437,7 @@ class MainActivity : ComponentActivity() {
                 "%,dkg".format(totals.volumeKg) to "총 볼륨",
             ),
             WorkoutStats.byTitle(inMonth).map { (title, sets) -> title to "${sets}세트" },
+            weekSets,
         )
     }
 
