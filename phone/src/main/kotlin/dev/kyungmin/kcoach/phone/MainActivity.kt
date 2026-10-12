@@ -2474,7 +2474,6 @@ class MainActivity : ComponentActivity() {
                 listOf(
                     SheetItem(KIcon.Play, "운동 애니메이션") { dismiss(); showExerciseInfo(exercise, onReturn) },
                     SheetItem(KIcon.Info, "운동 정보", featured = true) { dismiss(); showExerciseInfo(exercise, onReturn) },
-                    SheetItem(KIcon.Link, "슈퍼세트 설정") {},
                     SheetItem(KIcon.Trash, "운동 삭제", destructive = true) { dismiss(); confirmRemoveExercise(routine, index, active, onReturn) },
                     SheetItem(KIcon.Swap, "운동 대체", featured = true) { dismiss(); showExerciseAlternatives(routine, index, onReturn) },
                 ),
