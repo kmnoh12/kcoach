@@ -68,7 +68,8 @@ import kotlinx.coroutines.launch
 fun ActiveWorkoutScreen(
     model: WorkoutUiModel,
     actions: WorkoutActions,
-    liveHeader: View,
+    liveTitle: LiveLine,
+    liveTelemetry: LiveLine,
     animationView: (exerciseIndex: Int) -> View,
 ) {
     val scope = rememberCoroutineScope()
@@ -135,10 +136,7 @@ fun ActiveWorkoutScreen(
     Box(Modifier.fillMaxSize().background(KColors.Bg)) {
         Column(Modifier.fillMaxSize()) {
             TopBar(model, now, actions)
-            AndroidView(
-                factory = { liveHeader.also { (it.parent as? ViewGroup)?.removeView(it) } },
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(60.dp),
-            )
+            LivePanel(liveTitle, liveTelemetry, Modifier.fillMaxWidth().padding(horizontal = 16.dp))
             Spacer(Modifier.height(8.dp))
             HorizontalPager(
                 state = pager,

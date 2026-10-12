@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import dev.kyungmin.kcoach.phone.ui.CalibrationActions
 import dev.kyungmin.kcoach.phone.ui.CalibrationButtonUi
 import dev.kyungmin.kcoach.phone.ui.CalibrationProfileUi
+import dev.kyungmin.kcoach.phone.ui.LiveLine
 import dev.kyungmin.kcoach.phone.ui.CalibrationRowUi
 import dev.kyungmin.kcoach.phone.ui.CalibrationScreen
 import dev.kyungmin.kcoach.phone.ui.CalibrationUi
@@ -217,8 +218,8 @@ class MainActivity : ComponentActivity() {
     private val freeExercises = mutableListOf<RoutineExercise>()
     private val handler = Handler(Looper.getMainLooper())
 
-    private var wearLiveStatus: TextView? = null
-    private var activeLiveStatus: TextView? = null
+    private var wearLiveStatus: LiveLine? = null
+    private var activeLiveStatus: LiveLine? = null
     private var restHeartStatus: TextView? = null
     private var activeRestStartAtMs = 0L
     private var activeRestEndAtMs = 0L
@@ -242,7 +243,7 @@ class MainActivity : ComponentActivity() {
                 PhoneWearListenerService.ACTION_PAIR -> {
                     wearLiveStatus?.apply {
                         if (tag != WATCH_PANEL_TELEMETRY) {
-                            text = "⌚ Watch8 연결됨"
+                            text = "Watch8 연결됨"
                             setTextColor(green)
                         }
                     }
@@ -251,7 +252,7 @@ class MainActivity : ComponentActivity() {
                     watchUiReady = true
                     wearLiveStatus?.apply {
                         if (tag != WATCH_PANEL_TELEMETRY) {
-                            text = "⌚ Watch8 연결됨 · 운동 시작 가능"
+                            text = "Watch8 연결됨 · 운동 시작 가능"
                             setTextColor(green)
                         }
                     }
@@ -292,9 +293,9 @@ class MainActivity : ComponentActivity() {
                         val heart = fields[5]
                         val active = fields[6].toBooleanStrictOrNull() == true
                         wearLiveStatus?.text = if (active) {
-                            "⌚ Watch8 연결됨 · ${reps}회 · ❤️ ${heart}bpm"
+                            "Watch8 연결됨 · ${reps}회 · 심박 ${heart}bpm"
                         } else {
-                            "⌚ Watch8 연결됨 · ❤️ ${heart}bpm"
+                            "Watch8 연결됨 · 심박 ${heart}bpm"
                         }
                         wearLiveStatus?.setTextColor(green)
                     }
@@ -303,7 +304,7 @@ class MainActivity : ComponentActivity() {
                     val fields = WearSync.parse(payload)
                     val phase = fields.getOrNull(6).orEmpty()
                     wearLiveStatus?.takeIf { it.tag != WATCH_PANEL_TELEMETRY }?.apply {
-                        text = if (phase == "COMPLETE") "⌚ Watch8 운동 데이터 수신 완료" else "⌚ Watch8 운동 종료"
+                        text = if (phase == "COMPLETE") "Watch8 운동 데이터 수신 완료" else "Watch8 운동 종료"
                         setTextColor(green)
                     }
                 }
@@ -411,7 +412,7 @@ class MainActivity : ComponentActivity() {
                     lastWorkoutResult?.takeIf { it.sessionId == sessionId }?.analyses?.set("$exerciseId:$setIndex", analysis)
                     lastWorkoutResult?.takeIf { it.sessionId == sessionId }?.let(::persistLastWorkoutResult)
                     wearLiveStatus?.takeIf { it.tag != WATCH_PANEL_TELEMETRY }?.apply {
-                        text = "⌚ 세트 분석 완료 · 워치 ${watch.coerceAtLeast(0)}회 · 폰 ${phone}회 · 확정 ${confirmed}회"
+                        text = "세트 분석 완료 · 워치 ${watch.coerceAtLeast(0)}회 · 폰 ${phone}회 · 확정 ${confirmed}회"
                         setTextColor(green)
                     }
                     if (currentScreen == Screen.ROOT && lastWorkoutResult?.sessionId == sessionId) showWorkoutResult(lastWorkoutResult!!)
@@ -430,9 +431,9 @@ class MainActivity : ComponentActivity() {
                     }
                     wearLiveStatus?.takeIf { it.tag != WATCH_PANEL_TELEMETRY }?.apply {
                         text = if (stage == "analysis") {
-                            "⌚ 센서 원본 저장 완료 · 분석만 실패"
+                            "센서 원본 저장 완료 · 분석만 실패"
                         } else {
-                            "⌚ 센서 원본 검증 실패 · 재전송 대기"
+                            "센서 원본 검증 실패 · 재전송 대기"
                         }
                         setTextColor(amber)
                     }
@@ -1186,7 +1187,7 @@ class MainActivity : ComponentActivity() {
                     pendingWatchStartPayload = startPayload
                     activeLiveStatus?.text = "워치 연결 중 · 워치 앱을 열어 주세요"
                     wearLiveStatus?.apply {
-                        text = "⌚ 워치 연결 중 · 워치 앱을 열어 주세요"
+                        text = "워치 연결 중 · 워치 앱을 열어 주세요"
                         setTextColor(amber)
                     }
                 }
@@ -1269,7 +1270,7 @@ class MainActivity : ComponentActivity() {
             stopTicker()
             currentScreen = Screen.ACTIVE
             workoutComposeWorkout = workout
-            val liveHeader = buildLivePanel(workout)
+            val (liveTitle, liveTelemetry) = buildLivePanel(workout)
             val composeView = ComposeView(this).apply {
                 setContent {
                     workoutVersion.intValue
@@ -1277,7 +1278,8 @@ class MainActivity : ComponentActivity() {
                     ActiveWorkoutScreen(
                         model = buildWorkoutModel(current),
                         actions = workoutActions,
-                        liveHeader = liveHeader,
+                        liveTitle = liveTitle,
+                        liveTelemetry = liveTelemetry,
                         animationView = { index ->
                             exerciseAnimationView(current.routine.exercises[index].exercise, 190)
                         },
@@ -1349,44 +1351,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun buildLivePanel(workout: ActiveWorkout): View {
-        val hasCachedWearState = lastWearLiveSessionId == workout.sessionId &&
+    private fun buildLivePanel(workout: ActiveWorkout): Pair<LiveLine, LiveLine> {
+        val cached = lastWearLiveSessionId == workout.sessionId &&
             lastWearLiveTitle.isNotBlank() && lastWearLiveTelemetry.isNotBlank()
-        val liveTitle = label(
-            if (hasCachedWearState) lastWearLiveTitle else "⌚ Watch8 연결 확인 중",
-            12f,
-            green,
-            bold = true,
-        ).apply {
-            setSingleLine()
-            ellipsize = android.text.TextUtils.TruncateAt.END
-            gravity = Gravity.CENTER_VERTICAL
-            tag = if (hasCachedWearState) WATCH_PANEL_TELEMETRY else WATCH_PANEL_CONNECTION
-        }
-        val liveTelemetry = label(
-            if (hasCachedWearState) lastWearLiveTelemetry else "워치 운동 상태 수신 대기 중",
-            12f,
-            green,
-            bold = true,
-        ).apply {
-            setSingleLine()
-            ellipsize = android.text.TextUtils.TruncateAt.END
-            gravity = Gravity.CENTER_VERTICAL
-            tag = if (hasCachedWearState) WATCH_PANEL_TELEMETRY else WATCH_PANEL_CONNECTION
-        }
-        activeLiveStatus = liveTelemetry
-        wearLiveStatus = liveTitle
-        return vertical().apply {
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(14), dp(7), dp(14), dp(7))
-            background = GradientDrawable().apply {
-                setColor(Color.rgb(20, 24, 28))
-                setStroke(1, Color.rgb(44, 52, 60))
-                cornerRadius = 12f
-            }
-            addView(liveTitle, matchParams(23))
-            addView(liveTelemetry, matchParams(23))
-        }
+        val tag = if (cached) WATCH_PANEL_TELEMETRY else WATCH_PANEL_CONNECTION
+        val title = LiveLine(if (cached) lastWearLiveTitle else "Watch8 연결 확인 중", tag)
+        val telemetry = LiveLine(if (cached) lastWearLiveTelemetry else "워치 운동 상태 수신 대기 중", tag)
+        if (!cached) telemetry.setTextColor(muted)
+        activeLiveStatus = telemetry
+        wearLiveStatus = title
+        return title to telemetry
     }
 
     private fun effectiveRestSeconds(routineExercise: RoutineExercise, setIndex: Int): Int =
@@ -1749,14 +1723,14 @@ class MainActivity : ComponentActivity() {
         if (workout.phase != previousPhase) persistActiveWorkout(workout)
 
         val weightText = weight?.let { " · ${cleanWeight(it)}kg" } ?: ""
-        val firstLine = "⌚ $exerciseName · 세트 ${setIndex + 1}" +
+        val firstLine = "$exerciseName · 세트 ${setIndex + 1}" +
             if (personalizedTracking) " · 개인보정 적용" else ""
         val secondLine = when (phase) {
             "POSITIONING" -> "팔을 준비 자세로 옮겨 주세요 · 움직이는 동안은 세지 않아요"
             "PREPARING" -> "자세 고정 · 흔들림 없이 2초 후 시작"
-            "RESTING" -> "휴식 중 · ${reps}/${targetReps}회$weightText · ❤️ ${heartRate}bpm"
-            "SET_COMPLETE" -> "세트 완료 · ${reps}회$weightText · ❤️ ${heartRate}bpm"
-            else -> "${reps}/${targetReps}회$weightText · ❤️ ${heartRate}bpm"
+            "RESTING" -> "휴식 중 · ${reps}/${targetReps}회$weightText · 심박 ${heartRate}bpm"
+            "SET_COMPLETE" -> "세트 완료 · ${reps}회$weightText · 심박 ${heartRate}bpm"
+            else -> "${reps}/${targetReps}회$weightText · 심박 ${heartRate}bpm"
         }
         lastWearLiveSessionId = sessionId
         lastWearLiveTitle = firstLine
@@ -1766,7 +1740,7 @@ class MainActivity : ComponentActivity() {
             tag = WATCH_PANEL_TELEMETRY
             setTextColor(green)
         }
-        restHeartStatus?.text = "워치 심박수  ❤️ ${heartRate} bpm"
+        restHeartStatus?.text = "워치 심박수  ${heartRate} bpm"
         wearLiveStatus?.apply {
             text = firstLine
             tag = WATCH_PANEL_TELEMETRY
@@ -1892,16 +1866,16 @@ class MainActivity : ComponentActivity() {
             .addOnSuccessListener { nodes ->
                 wearLiveStatus?.takeIf { it.tag == WATCH_PANEL_CONNECTION }?.apply {
                     text = if (nodes.isNotEmpty()) {
-                        "⌚ Watch8 연결됨 · 운동 시작 가능"
+                        "Watch8 연결됨 · 운동 시작 가능"
                     } else {
-                        "⌚ Watch8 연결 안 됨"
+                        "Watch8 연결 안 됨"
                     }
                     setTextColor(if (nodes.isNotEmpty()) green else muted)
                 }
             }
             .addOnFailureListener {
                 wearLiveStatus?.takeIf { it.tag == WATCH_PANEL_CONNECTION }?.apply {
-                    text = "⌚ Watch8 연결 안 됨"
+                    text = "Watch8 연결 안 됨"
                     setTextColor(muted)
                 }
             }

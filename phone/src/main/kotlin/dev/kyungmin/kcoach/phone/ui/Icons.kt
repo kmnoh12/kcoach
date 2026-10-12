@@ -22,7 +22,7 @@ import kotlin.math.sin
 enum class KIcon {
     Home, Records, Stats, Calibrate, Menu, Back, Forward, Down, Plus, Minus, Check, Close,
     Play, Pause, Stop, Info, Dots, DotsVertical, Clock, Search, Sliders, Heart, Flag, Swap,
-    Reload, Trash, Link, Skip,
+    Reload, Trash, Link, Skip, Watch,
 }
 
 @Composable
@@ -163,6 +163,12 @@ private fun DrawScope.drawKIcon(icon: KIcon, tint: Color, filled: Boolean) {
         KIcon.Skip -> {
             poly(6f to 5.5f, 15f to 12f, 6f to 18.5f, close = true)
             line(18.5f, 6f, 18.5f, 18f)
+        }
+        KIcon.Watch -> {
+            rect(7f, 6.5f, 10f, 11f, 3f)
+            line(9.5f, 3.5f, 14.5f, 3.5f)
+            line(9.5f, 20.5f, 14.5f, 20.5f)
+            poly(12f to 9.5f, 12f to 12f, 13.8f to 13.2f)
         }
         KIcon.Link -> {
             rect(3.5f, 9.5f, 10f, 5f, 2.5f)
