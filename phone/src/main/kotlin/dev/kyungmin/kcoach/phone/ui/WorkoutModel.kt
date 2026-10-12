@@ -56,6 +56,8 @@ data class SetUi(
     val customRest: Boolean,
     /** Wrist-sensor remark once the watch analysis for this set has arrived. */
     val insight: String? = null,
+    /** The same set last time, e.g. "5×25"; shown small under the set number. */
+    val previous: String? = null,
 )
 
 enum class SetField { WEIGHT, REPS }

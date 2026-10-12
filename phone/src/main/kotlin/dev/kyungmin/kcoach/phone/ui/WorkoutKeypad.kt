@@ -55,7 +55,7 @@ fun WorkoutKeypad(
         }
         KeyRow {
             Key("1") { onDigit('1') }; Key("2") { onDigit('2') }; Key("3") { onDigit('3') }
-            Key("‹", tone = KeyTone.Nav) { onPrevious() }; Key("›", tone = KeyTone.Nav) { onNext() }
+            Key("", icon = KIcon.Back, tone = KeyTone.Nav) { onPrevious() }; Key("", icon = KIcon.Forward, tone = KeyTone.Nav) { onNext() }
         }
         KeyRow {
             Key("4") { onDigit('4') }; Key("5") { onDigit('5') }; Key("6") { onDigit('6') }
@@ -71,7 +71,7 @@ fun WorkoutKeypad(
             Key(if (field == SetField.WEIGHT) "." else "") { if (field == SetField.WEIGHT) onDigit('.') }
             Key("0") { onDigit('0') }
             Key("⌫", repeat = true) { onBackspace() }
-            Key("✓", tone = KeyTone.Done, weight = 2f) { onDone() }
+            Key("", icon = KIcon.Check, tone = KeyTone.Done, weight = 2f) { onDone() }
         }
     }
 }
@@ -90,6 +90,7 @@ private fun KeyRow(content: @Composable RowScope.() -> Unit) {
 @Composable
 private fun RowScope.Key(
     label: String,
+    icon: KIcon? = null,
     tone: KeyTone = KeyTone.Number,
     weight: Float = 1f,
     repeat: Boolean = false,
@@ -125,12 +126,17 @@ private fun RowScope.Key(
             },
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            label,
-            color = if (tone == KeyTone.Done) KColors.OnAccent else KColors.White,
-            fontSize = if (label.length > 1 && tone != KeyTone.Done) 18.sp else 22.sp,
-            fontWeight = FontWeight.SemiBold,
-        )
+        val ink = if (tone == KeyTone.Done) KColors.OnAccent else KColors.White
+        if (icon != null) {
+            KIcon(icon, ink, size = if (tone == KeyTone.Done) 28.dp else 22.dp)
+        } else {
+            Text(
+                label,
+                color = ink,
+                fontSize = if (label.length > 1) 18.sp else 22.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
     }
 }
 

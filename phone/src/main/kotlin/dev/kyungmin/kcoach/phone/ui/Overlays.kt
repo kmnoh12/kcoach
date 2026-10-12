@@ -1,5 +1,7 @@
 package dev.kyungmin.kcoach.phone.ui
 
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.border
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -182,17 +184,17 @@ fun SheetTitle(text: String) {
 }
 
 @Composable
-fun SheetOptionRow(icon: String, title: String, onClick: () -> Unit) {
+fun SheetOptionRow(icon: KIcon, title: String, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().heightIn(min = 48.dp).pressable(onClick).padding(horizontal = 22.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(icon, color = KColors.White, fontSize = 18.sp, textAlign = TextAlign.Center, modifier = Modifier.width(46.dp))
+        Box(Modifier.width(46.dp), contentAlignment = Alignment.CenterStart) { KIcon(icon, KColors.Soft, size = 22.dp) }
         Text(title, color = KColors.White, fontSize = 14.sp, modifier = Modifier.weight(1f).padding(vertical = 6.dp))
     }
 }
 
-class SheetItem(val icon: String, val title: String, val onClick: () -> Unit)
+class SheetItem(val icon: KIcon, val title: String, val onClick: () -> Unit)
 
 @Composable
 fun SheetOptions(title: String, items: List<SheetItem>) {
@@ -211,7 +213,9 @@ fun ChoiceSheet(title: String, items: List<Pair<String, String>>, onSelect: (Str
                 Modifier.fillMaxWidth().heightIn(min = 62.dp).pressable { onSelect(value) }.padding(horizontal = 18.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("○", color = KColors.White, fontSize = 25.sp, textAlign = TextAlign.Center, modifier = Modifier.width(58.dp))
+                Box(Modifier.width(58.dp), contentAlignment = Alignment.CenterStart) {
+                    Box(Modifier.size(20.dp).border(1.5.dp, KColors.Faint, CircleShape))
+                }
                 Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
                     Text(value, color = KColors.White, fontSize = 17.sp)
                     if (description.isNotBlank()) Text(description, color = KColors.Muted, fontSize = 13.sp)
@@ -321,7 +325,8 @@ fun BigChoiceSheet(
     filledButtons: Boolean,
 ) {
     Column(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        if (eyebrow != null) Text(eyebrow, color = eyebrowColor, fontSize = if (filledButtons) 15.sp else 38.sp, fontWeight = FontWeight.Bold)
+        if (eyebrow == "▶") KIcon(KIcon.Play, eyebrowColor, size = 38.dp)
+        else if (eyebrow != null) Text(eyebrow, color = eyebrowColor, fontSize = 15.sp, fontWeight = FontWeight.Medium)
         Spacer(Modifier.height(8.dp))
         Text(title, color = KColors.White, fontSize = 28.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
         Spacer(Modifier.height(14.dp))

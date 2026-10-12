@@ -81,6 +81,7 @@ fun RoutineDetailScreen(
     title: String,
     rows: List<RoutineRowUi>,
     primaryLabel: String?,
+    primaryIcon: KIcon,
     showHandle: Boolean,
     actions: RoutineDetailActions,
     placeholderHeight: Dp = 285.dp,
@@ -102,11 +103,11 @@ fun RoutineDetailScreen(
                 Column {
                     Row(Modifier.fillMaxWidth().height(58.dp), verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.size(54.dp, 58.dp).pressable(actions.back), contentAlignment = Alignment.Center) {
-                            Text("‹", color = KColors.White, fontSize = 48.sp)
+                            KIcon(KIcon.Back, KColors.White, size = 28.dp)
                         }
                         Text(title, color = KColors.White, fontSize = 25.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                         Box(Modifier.size(54.dp, 58.dp), contentAlignment = Alignment.Center) {
-                            Text("•••", color = KColors.Muted, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                            KIcon(KIcon.Dots, KColors.Muted, size = 24.dp)
                         }
                     }
                     Spacer(Modifier.height(18.dp))
@@ -186,11 +187,12 @@ fun RoutineDetailScreen(
                 .padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 18.dp),
         ) {
             if (primaryLabel != null) {
-                RoutineButton(primaryLabel, KColors.Accent, KColors.OnAccent, Modifier.weight(1f), actions.primary)
+                RoutineButton(primaryLabel, primaryIcon, KColors.Accent, KColors.OnAccent, Modifier.weight(1f), actions.primary)
                 Spacer(Modifier.width(12.dp))
             }
             RoutineButton(
-                "＋ 운동 추가",
+                "운동 추가",
+                KIcon.Plus,
                 if (addFilled) KColors.Accent else Color.Transparent,
                 if (addFilled) KColors.OnAccent else KColors.White,
                 Modifier.weight(1f),
@@ -237,10 +239,10 @@ private fun ExerciseRow(
             )
         }
         Box(Modifier.size(38.dp, 48.dp).clickable(onClick = onInfo), contentAlignment = Alignment.Center) {
-            Text("ⓘ", color = KColors.Muted, fontSize = 17.sp)
+            KIcon(KIcon.Info, KColors.Muted, size = 20.dp)
         }
         Box(Modifier.size(40.dp, 48.dp).clickable(onClick = onMenu), contentAlignment = Alignment.Center) {
-            Text(if (showHandle) "☷" else "•••", color = if (showHandle) KColors.Accent else KColors.Muted, fontSize = 15.sp)
+            KIcon(KIcon.Dots, if (showHandle) KColors.Accent else KColors.Muted, size = 22.dp)
         }
     }
 }
@@ -248,6 +250,7 @@ private fun ExerciseRow(
 @Composable
 private fun RoutineButton(
     text: String,
+    icon: KIcon,
     background: Color,
     content: Color,
     modifier: Modifier,
@@ -262,6 +265,10 @@ private fun RoutineButton(
             .pressable(onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text, color = content, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            KIcon(icon, content, size = 20.dp)
+            Spacer(Modifier.width(8.dp))
+            Text(text, color = content, fontSize = 17.sp, fontWeight = FontWeight.Medium)
+        }
     }
 }

@@ -88,13 +88,13 @@ fun RestBar(
                     Text(" 초", color = KColors.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 }
             }
-            RoundButton("−", KColors.Red) { onAdjust(-10) }
+            RoundButton(KIcon.Minus, KColors.Red) { onAdjust(-10) }
             Spacer(Modifier.width(10.dp))
-            RoundButton("+", KColors.Red) { onAdjust(10) }
+            RoundButton(KIcon.Plus, KColors.Red) { onAdjust(10) }
             Spacer(Modifier.width(10.dp))
-            RoundButton(if (paused) "▶" else "Ⅱ", Color.Transparent) { onTogglePause() }
+            RoundButton(if (paused) KIcon.Play else KIcon.Pause, Color.Transparent) { onTogglePause() }
             Spacer(Modifier.width(6.dp))
-            RoundButton("■", Color.Transparent) { onStop() }
+            RoundButton(KIcon.Stop, Color.Transparent) { onStop() }
         }
     }
 }
@@ -134,10 +134,10 @@ fun ExpandedRestPanel(
         }
         Spacer(Modifier.height(26.dp))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-            RoundButton("−", KColors.Red, 52) { onAdjust(-10) }
-            RoundButton("+", KColors.Red, 52) { onAdjust(10) }
-            RoundButton(if (paused) "▶" else "Ⅱ", KColors.SurfaceRaised, 52) { onTogglePause() }
-            if (rest.resting) RoundButton("⏭", KColors.SurfaceRaised, 52) { onSkip() }
+            RoundButton(KIcon.Minus, KColors.Red, 52) { onAdjust(-10) }
+            RoundButton(KIcon.Plus, KColors.Red, 52) { onAdjust(10) }
+            RoundButton(if (paused) KIcon.Play else KIcon.Pause, KColors.SurfaceRaised, 52) { onTogglePause() }
+            if (rest.resting) RoundButton(KIcon.Skip, KColors.SurfaceRaised, 52) { onSkip() }
         }
         Spacer(Modifier.height(24.dp))
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -182,11 +182,11 @@ fun NextSetBanner(text: String, leftMs: Long, onSkip: () -> Unit) {
 }
 
 @Composable
-fun RoundButton(label: String, fill: Color, sizeDp: Int = 38, onClick: () -> Unit) {
+fun RoundButton(icon: KIcon, fill: Color, sizeDp: Int = 38, onClick: () -> Unit) {
     Box(
         Modifier.size(sizeDp.dp).clip(CircleShape).background(fill).clickable { onClick() },
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, color = KColors.White, fontSize = (sizeDp * 0.45).sp, fontWeight = FontWeight.Bold)
+        KIcon(icon, KColors.White, size = (sizeDp * 0.52).dp)
     }
 }

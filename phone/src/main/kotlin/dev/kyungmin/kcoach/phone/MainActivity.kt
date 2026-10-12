@@ -24,6 +24,7 @@ import dev.kyungmin.kcoach.phone.ui.ExerciseInfoUi
 import dev.kyungmin.kcoach.phone.ui.ExerciseRecordScreen
 import dev.kyungmin.kcoach.phone.ui.ExerciseRecordUi
 import dev.kyungmin.kcoach.phone.ui.KColors
+import dev.kyungmin.kcoach.phone.ui.KIcon
 import dev.kyungmin.kcoach.phone.ui.RecordSetUi
 import dev.kyungmin.kcoach.phone.ui.LibraryActions
 import dev.kyungmin.kcoach.phone.ui.LibraryEntry
@@ -682,7 +683,8 @@ class MainActivity : ComponentActivity() {
                 RoutineDetailScreen(
                     title = routine.name,
                     rows = rows,
-                    primaryLabel = if (active != null) "⚑  운동 완료" else "▶  시작",
+                    primaryLabel = if (active != null) "운동 완료" else "시작",
+                    primaryIcon = if (active != null) KIcon.Flag else KIcon.Play,
                     showHandle = reorderMode,
                     actions = actions,
                 )
@@ -729,7 +731,8 @@ class MainActivity : ComponentActivity() {
                 RoutineDetailScreen(
                     title = "7월 27일, 밤 운동",
                     rows = rows,
-                    primaryLabel = if (freeExercises.isNotEmpty()) "▶  시작" else null,
+                    primaryLabel = if (freeExercises.isNotEmpty()) "시작" else null,
+                    primaryIcon = KIcon.Play,
                     showHandle = false,
                     actions = actions,
                     placeholderHeight = if (freeExercises.isEmpty()) 410.dp else 250.dp,
@@ -1497,6 +1500,10 @@ class MainActivity : ComponentActivity() {
                             customRest = set.restSeconds != null,
                             insight = workout.analyses["${routineExercise.exercise.id}:$setIndex"]
                                 ?.let { SetInsight.describe(it.tempoConsistency, it.lateDrift) },
+                            previous = history.last(routineExercise.exercise.id)?.sets?.getOrNull(setIndex)?.let { last ->
+                                val weight = last.weightKg
+                                if (weight == null) "${last.reps}회" else "${formatActiveWeight(weight, workout.usePounds)}×${last.reps}"
+                            },
                         )
                     },
                 )
@@ -2031,23 +2038,23 @@ class MainActivity : ComponentActivity() {
             SheetOptions(
                 routineExercise.exercise.name,
                 listOf(
-                    SheetItem(if (workout.usePounds) "kg" else "lb", if (workout.usePounds) "킬로그램으로 단위 변경" else "파운드로 단위 변경") {
+                    SheetItem(KIcon.Sliders, if (workout.usePounds) "킬로그램으로 단위 변경" else "파운드로 단위 변경") {
                         workout.usePounds = !workout.usePounds
                         dismiss()
                         showActiveWorkout()
                     },
-                    SheetItem("⏱", "휴식 시간") {
+                    SheetItem(KIcon.Clock, "휴식 시간") {
                         showChoiceSheet("휴식 시간", listOf("30초" to "짧은 휴식", "60초" to "일반 휴식", "90초" to "근비대 기본", "120초" to "고중량 휴식", "160초" to "긴 휴식")) { value ->
                             routineExercise.restSeconds = value.removeSuffix("초").toInt()
                             showActiveWorkout()
                         }
                     },
-                    SheetItem("⇄", "운동 대체") {
+                    SheetItem(KIcon.Swap, "운동 대체") {
                         dismiss()
                         showExerciseAlternatives(workout.routine, workout.exerciseIndex) { showActiveWorkout() }
                     },
                 ) + if (history.last(routineExercise.exercise.id) != null && routineExercise.sets.none { it.completed }) listOf(
-                    SheetItem("↺", "지난 세트 불러오기") {
+                    SheetItem(KIcon.Reload, "지난 세트 불러오기") {
                         dismiss()
                         loadLastSets(routineExercise)
                         activeWorkout?.let(::persistActiveWorkout)
@@ -2065,31 +2072,31 @@ class MainActivity : ComponentActivity() {
             SheetOptions(
                 "${routineExercise.exercise.name} $setLabel · ${set.targetReps}회",
                 listOf(
-                    SheetItem("◉", "세트 타입\n${set.setType.displayName}") {
+                    SheetItem(KIcon.Sliders, "세트 타입\n${set.setType.displayName}") {
                         showChoiceSheet("세트 타입", listOf("일반" to "일반 세트", "웜업" to "근육을 준비하기 위한 워밍업", "슈퍼" to "두 가지 운동을 휴식 없이", "드랍" to "휴식시간 없이 무게를 낮춰서", "실패" to "실패한 세트", "보조" to "보조 받아 세트를 완료")) { value ->
                             set.setType = SetType.fromStorage(value)
                             showActiveWorkout()
                         }
                     },
-                    SheetItem("✊", "그립 타입\n${set.gripType}") {
+                    SheetItem(KIcon.Sliders, "그립 타입\n${set.gripType}") {
                         showChoiceSheet("그립 타입", listOf("노멀" to "표준 그립", "오버핸드" to "손바닥이 몸 반대쪽을 향함", "언더핸드" to "손바닥이 몸 쪽으로 향함", "뉴트럴" to "양손이 서로 마주보게", "와이드" to "어깨 너비보다 넓은 손 배치", "클로즈" to "손을 어깨 너비보다 가깝게", "얼터네이트" to "한 손은 오버핸드, 다른 한 손은 언더핸드")) { value ->
                             set.gripType = value
                             showActiveWorkout()
                         }
                     },
-                    SheetItem("Ⓡ", "운동자각도\n${set.rpe ?: "선택해"}") {
+                    SheetItem(KIcon.Stats, "운동자각도\n${set.rpe ?: "선택해"}") {
                         showChoiceSheet("RPE", listOf("선택해" to "", "10" to "이게 한계다", "9.5" to "1개 정도 더 할 수 있으려나?", "9" to "확실히 1개 정도 더 할 수 있다", "8.5" to "아마 2개 정도 더 할 수 있다", "8" to "확실히 2개 정도 더 할 수 있다", "7" to "꽤 할만 했다", "6" to "웜업 정도?")) { value ->
                             set.rpe = value.takeUnless { it == "선택해" }
                             showActiveWorkout()
                         }
                     },
-                    SheetItem("−", "세트 삭제") {
+                    SheetItem(KIcon.Minus, "세트 삭제") {
                         dismiss()
                         if (routineExercise.sets.size > 1) routineExercise.sets.removeAt(setIndex)
                         workout.selectedEditSetIndex = workout.selectedEditSetIndex.coerceAtMost(routineExercise.sets.lastIndex)
                         showActiveWorkout()
                     },
-                    SheetItem("＋", "이전 세트 추가") {
+                    SheetItem(KIcon.Plus, "이전 세트 추가") {
                         dismiss()
                         routineExercise.sets.add(setIndex, PlannedSet(set.weightKg, set.targetReps))
                         showActiveWorkout()
@@ -2372,11 +2379,11 @@ class MainActivity : ComponentActivity() {
             SheetOptions(
                 exercise.name,
                 listOf(
-                    SheetItem("🏃", "운동 애니메이션") { dismiss(); showExerciseInfo(exercise, onReturn) },
-                    SheetItem("ⓘ", "운동 정보") { dismiss(); showExerciseInfo(exercise, onReturn) },
-                    SheetItem("⛓", "슈퍼세트 설정") {},
-                    SheetItem("▣", "운동 제거") { dismiss(); confirmRemoveExercise(routine, index, active, onReturn) },
-                    SheetItem("⇄", "운동 대체") { dismiss(); showExerciseAlternatives(routine, index, onReturn) },
+                    SheetItem(KIcon.Play, "운동 애니메이션") { dismiss(); showExerciseInfo(exercise, onReturn) },
+                    SheetItem(KIcon.Info, "운동 정보") { dismiss(); showExerciseInfo(exercise, onReturn) },
+                    SheetItem(KIcon.Link, "슈퍼세트 설정") {},
+                    SheetItem(KIcon.Trash, "운동 제거") { dismiss(); confirmRemoveExercise(routine, index, active, onReturn) },
+                    SheetItem(KIcon.Swap, "운동 대체") { dismiss(); showExerciseAlternatives(routine, index, onReturn) },
                 ),
             )
         }
@@ -2483,9 +2490,9 @@ class MainActivity : ComponentActivity() {
             SheetOptions(
                 "추가",
                 listOf(
-                    SheetItem("＋", "나만의 루틴 추가") { dismiss(); showNewRoutineDialog() },
-                    SheetItem("⇥", "기록에서 불러오기") { dismiss(); showRecords() },
-                    SheetItem("▣", "운동 계획 추가") { dismiss(); showNewRoutineDialog() },
+                    SheetItem(KIcon.Plus, "나만의 루틴 추가") { dismiss(); showNewRoutineDialog() },
+                    SheetItem(KIcon.Reload, "기록에서 불러오기") { dismiss(); showRecords() },
+                    SheetItem(KIcon.Records, "운동 계획 추가") { dismiss(); showNewRoutineDialog() },
                 ),
             )
         }
@@ -2532,8 +2539,8 @@ class MainActivity : ComponentActivity() {
             SheetOptions(
                 routine.name,
                 listOf(
-                    SheetItem("▤", "상세 보기") { dismiss(); showRoutine(routine) },
-                    SheetItem("＋", "운동 추가") {
+                    SheetItem(KIcon.Menu, "상세 보기") { dismiss(); showRoutine(routine) },
+                    SheetItem(KIcon.Plus, "운동 추가") {
                         dismiss()
                         openLibrary(
                             onSelect = { routine.exercises += RoutineExercise(it, mutableListOf(PlannedSet(null, 10))) },

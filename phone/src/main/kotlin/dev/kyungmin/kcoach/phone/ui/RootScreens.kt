@@ -50,7 +50,7 @@ import dev.kyungmin.kcoach.phone.WorkoutRoutine
 import kotlinx.coroutines.delay
 
 /** Tab order matches MainActivity.RootTab. */
-private val NavItems = listOf("⌂" to "홈", "▣" to "기록", "▥" to "통계", "◉" to "보정", "☰" to "메뉴")
+private val NavItems = listOf(KIcon.Home to "홈", KIcon.Records to "기록", KIcon.Stats to "통계", KIcon.Calibrate to "보정", KIcon.Menu to "메뉴")
 
 /** False on the first frame, true right after: lets values animate in when a screen opens. */
 @Composable
@@ -88,7 +88,8 @@ fun RootBottomNav(selected: Int, onSelect: (Int) -> Unit) {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
-                Text(icon, color = tint, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                KIcon(icon, tint, size = 24.dp)
+                Spacer(Modifier.height(2.dp))
                 Text(title, color = tint, fontSize = 12.sp, fontWeight = if (index == selected) FontWeight.Bold else FontWeight.Normal)
             }
         }
@@ -140,9 +141,10 @@ fun HomeScreen(ui: HomeUi, running: RunningUi?, actions: HomeActions) {
                 RestHero(it) { actions.openRoutine(it.routine) }
             }
             Spacer(Modifier.height(14.dp))
-            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("내 루틴", color = KColors.Muted, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                Text("최근 ▾", color = KColors.Muted, fontSize = 13.sp)
+                Text("최근", color = KColors.Muted, fontSize = 13.sp)
+                KIcon(KIcon.Down, KColors.Muted, size = 14.dp)
             }
             Box(Modifier.fillMaxWidth().height(0.5.dp).background(KColors.Hairline))
             ui.rows.forEach { row ->
@@ -229,7 +231,7 @@ private fun RestHero(row: RoutineRowUi2, onClick: () -> Unit) {
             Text(row.routine.name, color = KColors.White, fontSize = 19.sp, fontWeight = FontWeight.Medium)
             Text("${row.routine.muscles} · ${row.routine.exercises.size}종목", color = KColors.Soft, fontSize = 12.sp)
         }
-        Text("›", color = KColors.Muted, fontSize = 22.sp, modifier = Modifier.padding(end = 6.dp, bottom = 4.dp))
+        KIcon(KIcon.Forward, KColors.Muted, Modifier.padding(end = 6.dp, bottom = 4.dp), 20.dp)
     }
 }
 
@@ -254,7 +256,7 @@ private fun RoutineRow(row: RoutineRowUi2, onClick: () -> Unit, onMenu: () -> Un
                 Text(row.routine.lastPerformed, color = KColors.Muted, fontSize = 12.sp)
             }
             Box(Modifier.size(48.dp).clickable(onClick = onMenu), contentAlignment = Alignment.Center) {
-                Text("⋮", color = KColors.Faint, fontSize = 18.sp, textAlign = TextAlign.Center)
+                KIcon(KIcon.DotsVertical, KColors.Faint, size = 20.dp)
             }
         }
         Box(Modifier.fillMaxWidth().height(0.5.dp).background(KColors.Hairline))
@@ -300,10 +302,10 @@ private fun RunningBar(running: RunningUi, actions: HomeActions) {
                 Text("%02d:%02d".format(elapsed / 60, elapsed % 60), color = KColors.Accent, fontSize = 22.sp, fontWeight = FontWeight.Medium)
             }
             Box(Modifier.size(64.dp).pressable(actions.togglePause), contentAlignment = Alignment.Center) {
-                Text(if (running.paused) "▶" else "Ⅱ", color = KColors.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                KIcon(if (running.paused) KIcon.Play else KIcon.Pause, KColors.White, size = 26.dp)
             }
             Box(Modifier.size(64.dp).pressable(actions.stop), contentAlignment = Alignment.Center) {
-                Text("■", color = KColors.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                KIcon(KIcon.Stop, KColors.White, size = 24.dp)
             }
         }
     }

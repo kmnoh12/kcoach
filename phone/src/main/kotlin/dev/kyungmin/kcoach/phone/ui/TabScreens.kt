@@ -42,7 +42,7 @@ import java.time.LocalDate
 import java.time.YearMonth
 
 @Composable
-private fun TabPage(title: String, right: String, content: @Composable () -> Unit) {
+private fun TabPage(title: String, right: String, rightIcon: KIcon? = null, content: @Composable () -> Unit) {
     Column(
         Modifier
             .fillMaxSize()
@@ -52,7 +52,8 @@ private fun TabPage(title: String, right: String, content: @Composable () -> Uni
     ) {
         Row(Modifier.fillMaxWidth().heightIn(min = 52.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(title, color = KColors.White, fontSize = 26.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            if (right.isNotEmpty()) Text(right, color = KColors.Muted, fontSize = 23.sp, fontWeight = FontWeight.Bold)
+            if (right.isNotEmpty()) Text(right, color = KColors.Muted, fontSize = 14.sp)
+            if (rightIcon != null) KIcon(rightIcon, KColors.Muted, Modifier.padding(start = 4.dp), 22.dp)
         }
         content()
     }
@@ -103,7 +104,7 @@ fun RecordsScreen(
     actions: RecordsActions,
 ) {
     var month by remember { mutableStateOf(initialMonth) }
-    TabPage("운동 기록", "＋") {
+    TabPage("운동 기록", "", KIcon.Plus) {
         Spacer(Modifier.height(30.dp))
         if (lastResultTitle != null) {
             Box(
@@ -121,7 +122,7 @@ fun RecordsScreen(
         }
         Column(Modifier.fillMaxWidth().clip(KShape.Control).background(KColors.Surface).padding(16.dp, 18.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                MonthArrow("‹") {
+                MonthArrow(KIcon.Back) {
                     month = month.minusMonths(1)
                     actions.monthChanged(month)
                 }
@@ -140,7 +141,7 @@ fun RecordsScreen(
                         textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
                     )
                 }
-                MonthArrow("›") {
+                MonthArrow(KIcon.Forward) {
                     month = month.plusMonths(1)
                     actions.monthChanged(month)
                 }
@@ -166,9 +167,9 @@ fun RecordsScreen(
 }
 
 @Composable
-private fun MonthArrow(text: String, onClick: () -> Unit) {
+private fun MonthArrow(icon: KIcon, onClick: () -> Unit) {
     Box(Modifier.size(42.dp).pressable(onClick), contentAlignment = Alignment.Center) {
-        Text(text, color = KColors.Muted, fontSize = 30.sp)
+        KIcon(icon, KColors.Muted, size = 22.dp)
     }
 }
 
@@ -225,7 +226,7 @@ private fun RecordCard(record: WorkoutRecord) {
 
 @Composable
 fun StatsScreen() {
-    TabPage("통계", "7월  ▾") {
+    TabPage("통계", "7월", KIcon.Down) {
         Spacer(Modifier.height(30.dp))
         Text("최근 4분할", color = KColors.White, fontSize = 27.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(16.dp))

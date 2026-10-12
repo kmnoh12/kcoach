@@ -41,11 +41,11 @@ import androidx.compose.ui.viewinterop.AndroidView
 private fun DetailHeader(title: String, back: () -> Unit) {
     Row(Modifier.fillMaxWidth().height(58.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(54.dp, 58.dp).pressable(back), contentAlignment = Alignment.Center) {
-            Text("‹", color = KColors.White, fontSize = 48.sp)
+            KIcon(KIcon.Back, KColors.White, size = 28.dp)
         }
         Text(title, color = KColors.White, fontSize = 25.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
         Box(Modifier.size(54.dp, 58.dp), contentAlignment = Alignment.Center) {
-            Text("•••", color = KColors.Muted, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            KIcon(KIcon.Dots, KColors.Muted, size = 24.dp)
         }
     }
 }

@@ -52,7 +52,7 @@ fun ExerciseInfoScreen(info: ExerciseInfoUi, back: () -> Unit, animation: (heigh
     Column(Modifier.fillMaxSize().background(KColors.Bg).verticalScroll(rememberScrollState()).padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 24.dp)) {
         Row(Modifier.fillMaxWidth().height(58.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(54.dp, 58.dp).pressable(back), contentAlignment = Alignment.Center) {
-                Text("‹", color = KColors.White, fontSize = 40.sp)
+                KIcon(KIcon.Back, KColors.White, size = 28.dp)
             }
             Text(info.name, color = KColors.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         }
@@ -130,12 +130,12 @@ fun ExerciseRecordScreen(record: ExerciseRecordUi, back: () -> Unit, openInfo: (
     Column(Modifier.fillMaxSize().background(KColors.Bg).verticalScroll(scroll).padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 34.dp)) {
         Row(Modifier.fillMaxWidth().height(58.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(54.dp, 58.dp).pressable(back), contentAlignment = Alignment.Center) {
-                Text("‹", color = KColors.White, fontSize = 44.sp)
+                KIcon(KIcon.Back, KColors.White, size = 28.dp)
             }
             Spacer(Modifier.weight(1f))
             Text("●●●●●●", color = KColors.Muted, fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.width(120.dp))
             Box(Modifier.size(54.dp, 58.dp), contentAlignment = Alignment.Center) {
-                Text("•••", color = KColors.Muted, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                KIcon(KIcon.Dots, KColors.Muted, size = 24.dp)
             }
         }
         Spacer(Modifier.height(8.dp))
@@ -144,7 +144,7 @@ fun ExerciseRecordScreen(record: ExerciseRecordUi, back: () -> Unit, openInfo: (
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(record.name, color = KColors.White, fontSize = 25.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             Box(Modifier.size(54.dp, 58.dp).pressable(openInfo), contentAlignment = Alignment.Center) {
-                Text("ⓘ", color = KColors.Muted, fontSize = 24.sp)
+                KIcon(KIcon.Info, KColors.Muted, size = 24.dp)
             }
         }
         Spacer(Modifier.height(6.dp))
@@ -156,28 +156,28 @@ fun ExerciseRecordScreen(record: ExerciseRecordUi, back: () -> Unit, openInfo: (
             Text("${record.performed}회", color = KColors.Muted, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.height(22.dp))
-        Text("›  메모", color = KColors.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+        Row(verticalAlignment = Alignment.CenterVertically) { KIcon(KIcon.Forward, KColors.Muted, size = 18.dp); Spacer(Modifier.width(6.dp)); Text("메모", color = KColors.White, fontSize = 17.sp, fontWeight = FontWeight.Medium) }
         Spacer(Modifier.height(12.dp))
-        Text("›  기록", color = KColors.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+        Row(verticalAlignment = Alignment.CenterVertically) { KIcon(KIcon.Forward, KColors.Muted, size = 18.dp); Spacer(Modifier.width(6.dp)); Text("기록", color = KColors.White, fontSize = 17.sp, fontWeight = FontWeight.Medium) }
         Spacer(Modifier.height(16.dp))
         Row(Modifier.fillMaxWidth().height(42.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("세트", color = KColors.Muted, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             Text("회", color = KColors.Muted, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             Text("완료", color = KColors.Muted, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            Text("•••", color = KColors.Muted, fontSize = 16.sp, textAlign = TextAlign.Center, modifier = Modifier.width(42.dp))
+            Box(Modifier.width(42.dp), contentAlignment = Alignment.Center) { KIcon(KIcon.Dots, KColors.Muted, size = 20.dp) }
         }
         record.sets.forEach { set ->
             Row(Modifier.fillMaxWidth().height(58.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("${set.index + 1}", color = KColors.White, fontSize = 16.sp, modifier = Modifier.weight(1f))
                 Text("${set.reps}", color = KColors.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                Text(if (set.completed) "✓" else "", color = KColors.Accent, fontSize = 18.sp, modifier = Modifier.weight(1f))
-                Text("•••", color = KColors.Muted, fontSize = 16.sp, textAlign = TextAlign.Center, modifier = Modifier.width(42.dp))
+                Box(Modifier.weight(1f)) { if (set.completed) KIcon(KIcon.Check, KColors.Accent, size = 20.dp) }
+                Box(Modifier.width(42.dp), contentAlignment = Alignment.Center) { KIcon(KIcon.Dots, KColors.Muted, size = 20.dp) }
             }
         }
         Spacer(Modifier.height(18.dp))
         Row(Modifier.fillMaxWidth().height(54.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("＋ 세트추가", color = KColors.Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            Text("− 세트삭제", color = KColors.Soft, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) { KIcon(KIcon.Plus, KColors.Accent, size = 18.dp); Spacer(Modifier.width(6.dp)); Text("세트 추가", color = KColors.Accent, fontSize = 16.sp, fontWeight = FontWeight.Medium) }
+            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) { KIcon(KIcon.Minus, KColors.Soft, size = 18.dp); Spacer(Modifier.width(6.dp)); Text("세트 삭제", color = KColors.Soft, fontSize = 16.sp, fontWeight = FontWeight.Medium) }
         }
         Spacer(Modifier.height(28.dp))
         Text("현재 기록", color = KColors.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)

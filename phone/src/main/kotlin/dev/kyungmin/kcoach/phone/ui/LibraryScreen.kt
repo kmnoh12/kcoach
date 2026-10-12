@@ -122,7 +122,7 @@ fun LibraryScreen(
     Column(Modifier.fillMaxSize().background(KColors.Bg).padding(start = 18.dp, end = 18.dp, top = 14.dp)) {
         Row(Modifier.fillMaxWidth().height(58.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(54.dp, 58.dp).pressable(actions.back), contentAlignment = Alignment.Center) {
-                Text("‹", color = KColors.White, fontSize = 48.sp)
+                KIcon(KIcon.Back, KColors.White, size = 28.dp)
             }
             Box(
                 Modifier.weight(1f).height(58.dp).clip(KShape.Control).background(KColors.SurfaceRaised).padding(horizontal = 18.dp),
@@ -140,7 +140,7 @@ fun LibraryScreen(
             }
             Spacer(Modifier.width(12.dp))
             Box(Modifier.size(48.dp, 58.dp).pressable(actions.custom), contentAlignment = Alignment.Center) {
-                Text("⊞", color = KColors.White, fontSize = 34.sp)
+                KIcon(KIcon.Plus, KColors.White, size = 28.dp)
             }
         }
         Spacer(Modifier.height(14.dp))
@@ -152,10 +152,11 @@ fun LibraryScreen(
         Spacer(Modifier.height(4.dp))
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 20.dp)) {
             item(key = "custom") {
-                Text(
-                    "＋  커스텀 운동 추가", color = KColors.Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold,
-                    modifier = Modifier.fillMaxWidth().pressable(actions.custom).padding(14.dp, 14.dp),
-                )
+                Row(Modifier.fillMaxWidth().pressable(actions.custom).padding(14.dp, 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    KIcon(KIcon.Plus, KColors.Accent, size = 18.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text("커스텀 운동 추가", color = KColors.Accent, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                }
             }
             if (rows.isEmpty()) {
                 item(key = "empty") {
@@ -190,7 +191,7 @@ private fun FamilyRow(row: LibRow.Family, onToggle: () -> Unit) {
         Modifier.fillMaxWidth().pressable(onToggle).padding(horizontal = 4.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("›", color = KColors.Muted, fontSize = 22.sp, modifier = Modifier.width(30.dp).rotate(rotation), textAlign = TextAlign.Center)
+        Box(Modifier.width(30.dp), contentAlignment = Alignment.CenterStart) { KIcon(KIcon.Forward, KColors.Muted, Modifier.rotate(rotation), 20.dp) }
         Text(row.title, color = KColors.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
         Text("${row.count}가지", color = KColors.Muted, fontSize = 13.sp)
     }
@@ -211,7 +212,7 @@ private fun ExerciseRow(exercise: ExerciseDefinition, indented: Boolean, thumbna
             Spacer(Modifier.height(2.dp))
             Text("${exercise.muscles} · ${exercise.equipment}", color = KColors.Muted, fontSize = 12.sp)
         }
-        if (exercise.favorite) Text("♥", color = Color(0xFFE06687), fontSize = 14.sp)
+        if (exercise.favorite) KIcon(KIcon.Heart, Color(0xFFE06687), size = 16.dp, filled = true)
     }
 }
 
