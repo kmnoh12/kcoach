@@ -11,8 +11,8 @@
 
 ## 현재 버전
 
-- 배포됨: 폰 0.7.2, 워치 0.2.2 (R8 축소 ota 빌드). 그 뒤 커밋(실측 자동 시작 등)은 미배포.
-- 이번 배포 대상: 폰 0.7.3(versionCode 33), 워치 0.2.3(versionCode 31), 태그 `p0.7.3-w0.2.3`. 사용자가 2026-10-13 업데이트 배포를 승인했다. 이전 항목의 ‘미배포’는 작성 당시 상태이며, 이번 릴리스에는 항목 14/16/19~36의 변경을 포함한다. 공개 후 확인 내역을 기록한다.
+- 배포됨: 폰 0.7.3(versionCode 33), 워치 0.2.3(versionCode 31), R8 축소 OTA 빌드. [GitHub 최신 릴리스](https://github.com/kmnoh12/kcoach/releases/tag/p0.7.3-w0.2.3).
+- 사용자가 2026-10-13 업데이트 배포를 승인했고 `tools/release.sh`로 공개했다. 이전 항목의 ‘미배포’는 작성 당시 상태이며, 이번 릴리스에는 항목 14/16/19~36의 변경을 포함한다. 최신 manifest와 공개 APK의 해시 확인은 완료했으나 실제 폰·워치 설치와 실기기 검증은 미확인이다.
 
 ## 지금까지 한 것
 
@@ -37,7 +37,7 @@
 
 16. (미배포, 0.7.2 이후 로컬 커밋) 스와이프 세트 삭제 2단계(`ui/SwipeReveal.kt`), 시트 어디든 잡아 내려 닫기(`ui/Overlays.kt` SheetSurface), 세트 시트 = 항목별 막대 + 설명 한 줄(`SetSheet`, `SegmentedBar`: 선택 표시 하나가 손가락을 따라 미끄러짐), 떠 있는 탭 바(`FloatingTabBar` in `ui/RootScreens.kt`, 앱 전체에 하나만 두고 `MainActivity.navVisible/navSelected`로 제어), 운동 메뉴 시트 M2(큰 버튼 + 글자 목록, `SheetItem(featured/destructive/value)`), 값 선택 시트 P2(`ChoiceSheet`, 현재 값 강조), 실측 화면 열면 워치 실측 자동 시작(`WearSync.PATH_PROBE_START/STOP`), 말투 검사 확대.
 17. 정하지 못한 것: 세트 종류의 "슈퍼" 제거 여부, "운동 애니메이션"/"운동 정보" 메뉴 합치기, 라이브러리·운동 정보 탭에 미끄러지는 선택 표시 적용, 그립 설명 줄바꿈.
-18. 작업 규칙(사용자 요구): 시안은 3개씩 먼저 채팅에 이미지로 올리고(SendUserFile) 고른 뒤 반영, 마음대로 확정하지 않기. 배포(`tools/release.sh`)는 사용자가 "올려"라고 할 때만. 버전은 올리기 전 폰 0.7.3 / 워치 0.2.3으로.
+18. 작업 규칙(사용자 요구): 시안은 3개씩 먼저 채팅에 이미지로 올리고(SendUserFile) 고른 뒤 반영, 마음대로 확정하지 않기. 배포(`tools/release.sh`)는 사용자가 "올려"라고 할 때만. 다음 배포 버전은 위 현재 배포 버전을 기준으로 versionCode와 versionName을 올린다.
 
 19. (미배포, 2026-10-12) 백그라운드 세트 완료 처리: 원인은 `MainActivity`의 수신기가 화면이 닫히면 사라져 완료 저장·휴식 전환도 빠지던 것. `PhoneWearListenerService`가 `PhoneSessionController`로 완료를 먼저 저장하고 REST를 보내며, `PhoneWorkoutService`가 휴식 만료 후 SET/COMPLETE를 보낸다. 화면은 `ACTION_SESSION_CHANGED`와 `onStart`에서 저장 상태를 읽는다. `SessionStore`는 인스턴스 간 공통 잠금과 저장 revision으로 오래된 화면의 덮어쓰기를 거절한다. snapshot v3에 운동 이름·세트별 유효 휴식 추가(v1/v2 읽기 호환). `BackgroundWorkoutTest`로 화면 없는 수신, 중복·동시 수신, 서비스 타이머, 재생성·화면 복귀, 다음 운동·완료, 일시정지, 오래된 화면 보호 확인. 전체 운동의 이력·통계 저장과 마이마운틴 결정은 폰 화면 복귀 때 처리한다. 디자인 변경 없음. 실기기의 화면 꺼짐/연결 끊김은 미확인. 다음 안정성 작업은 워치 재연결 복구·완료 이벤트 ACK/재전송, 오래된 세션 명령 차단. 분석 결과 복구, 미확정 횟수→0회, 미측정 심박→60bpm 문제도 아직 남아 있다.
 
@@ -74,6 +74,8 @@
 35. (검증 범위, 2026-10-12) 리뷰의 워치 두 문제를 재현한 뒤 수정했고, 재부팅 전후 원본 각각의 KCS 유효성/파일 보존, 같은 부팅 재생성, 새 부팅 시간의 크기와 무관한 분리, 구형 런타임, 손상 복구와 부팅 변경 동시 발생, 주 스레드의 완료 복구 제거, 새 분석이 있는 세션만 재처리하는 검사를 추가했다. core 118/phone 127/wear 39 = 284건 및 두 debug APK/Roborazzi 통과. 같은 Mac 합성 자료 검사에서 1,000 완료 세션/분석의 복구는 수정 전 1,038ms → 수정 후 첫 이관 54ms, 재실행은 0개 재처리/11ms였다. 실제 폰 시작 시간/ANR/전력 측정이 아니다. 부팅 검사는 실제 워치를 재부팅한 것이 아닌 플랫폼 시간/부팅 번호를 바꾼 서비스 검사다. 상세 근거는 `docs/reviews/2026-10-12-recovery-followup.md`. 항목 32의 통과는 그 시점의 검사 범위에 대한 기록이며 전체 안정성 완료를 뜻하지 않는다. 실기기 연결/OS/배터리와 OTA 축소 빌드 검증은 남아 있다. 배포/push/앱 버전 변경 없음.
 
 36. (구조 정리, 미배포, 2026-10-13) `showActiveWorkout`에서 세션 저장/워치 SET 전송을 제거했다. 화면 복귀·정보 화면에서 돌아오기·분석 결과 갱신은 표시만 갱신한다. 실제 세트/운동 설정 편집과 운동 위치 변경은 `saveWorkoutChanges`, 운동 재개는 명시적인 `syncWorkingSet`을 통해 저장 후 전송한다. `WorkoutSessionReducer.nextPendingSet/advanceAfterRest`로 다음 미완료 세트와 휴식 진행 규칙을 모아 화면·컨트롤러·저장소·서비스가 공유한다. 휴식 건너뛰기도 같은 저장소 전환을 사용하며 백그라운드 타이머와 중복으로 진행하지 않는다. START/SET/REST/SET_COMPLETE/SYNC의 세트 정보는 `PhoneSessionController.command`에서 생성하며 시작 명령도 새 세션의 ID를 사용한다. 별도 NextWorkoutTarget 모델과 화면의 휴식 진행/명령 생성 중복을 제거했다. 화면과 저장 snapshot의 전체 모델 교체, 워치 복구 구조 재작성, 디자인 변경은 하지 않았다. `WorkoutPresentationTest`에서 화면 재표시 시 저장 revision/대기 명령 유지, 값 편집 저장/ID 전송, 휴식 건너뛰기의 완료 운동 건너뛰기, 일시정지 중 운동 변경 후 재개를 검사했다. core 118/phone 131/wear 39 = 288건과 두 debug APK 빌드 통과. 실기기 검증/배포/push/버전 변경 없음.
+
+37. (배포 확인, 2026-10-13) `tools/release.sh`로 `p0.7.3-w0.2.3`를 최신 정식 릴리스로 공개했다. 배포 코드 커밋은 `d6d739d`이며 기존 로컬 커밋과 이번 안정성/정리 변경을 push했다. core 검사와 두 OTA 축소 빌드 통과. 폰 33/0.7.3, 워치 31/0.2.3 및 기존 배포 APK와 동일한 서명을 확인했다. 앱이 사용하는 GitHub `releases/latest/download/update-phone.json`/`update-watch.json`이 새 버전을 반환하고, 각각의 공개 APK를 다운로드하여 manifest/로컬 배포 파일과 SHA-256 일치를 확인했다. 폰·워치 모두 앱의 업데이트 확인에서 새 버전을 받을 수 있다. 실제 설치 완료/화면 꺼짐/연결/배터리 확인은 별도이며 이번 배포에서 수행하지 않았다. 배포 산출물과 상세 검증 기록은 `build/release/p0.7.3-w0.2.3/`에 있다.
 
 ## 다음 할 일
 
