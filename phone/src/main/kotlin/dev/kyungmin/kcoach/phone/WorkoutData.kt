@@ -238,13 +238,4 @@ object WorkoutData {
             ),
         ),
     )
-
-    val records = listOf(
-        WorkoutRecord("2026-07-22", "가슴·삼두", 69, 22, 10_085),
-        WorkoutRecord("2026-07-05", "팔·하체", 75, 29, 13_547),
-        WorkoutRecord("2026-06-29", "어깨전문", 58, 23, 7_168),
-        WorkoutRecord("2026-06-28", "팔·하체", 77, 27, 14_285),
-        WorkoutRecord("2026-06-26", "가슴·삼두", 67, 24, 9_895),
-        WorkoutRecord("2026-06-25", "등·이두", 68, 22, 9_461),
-    )
 }

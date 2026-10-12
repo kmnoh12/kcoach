@@ -164,6 +164,9 @@ fun RecordsScreen(
         Text("최근 운동", color = KColors.Muted, fontSize = 13.sp)
         Spacer(Modifier.height(6.dp))
         Box(Modifier.fillMaxWidth().height(0.5.dp).background(KColors.Hairline))
+        if (records.isEmpty()) {
+            Text("아직 기록이 없어요", color = KColors.Muted, fontSize = 14.sp, modifier = Modifier.padding(vertical = 18.dp))
+        }
         records.take(4).forEach { record -> RecordCard(record) }
     }
 }
@@ -226,23 +229,23 @@ private fun RecordCard(record: WorkoutRecord) {
     }
 }
 
+class StatsUi(val monthLabel: String, val metrics: List<Pair<String, String>>, val byRoutine: List<Pair<String, String>>)
+
 @Composable
-fun StatsScreen() {
-    TabPage("통계", "7월", KIcon.Down) {
+fun StatsScreen(ui: StatsUi) {
+    TabPage("통계", ui.monthLabel) {
         Spacer(Modifier.height(30.dp))
-        Text("최근 4분할", color = KColors.Soft, fontSize = 15.sp)
-        Spacer(Modifier.height(6.dp))
-        MetricGrid(listOf("4회" to "운동", "270분" to "총 시간", "96세트" to "총 세트", "40,809kg" to "총 볼륨"))
-        Spacer(Modifier.height(28.dp))
-        SectionCard(
-            "부위별 흐름",
-            listOf("어깨" to "특화 · 주 2회", "등" to "풀업 총 26회", "가슴" to "프레스 8세트", "팔·하체" to "29세트"),
-        )
-        Spacer(Modifier.height(28.dp))
-        SectionCard(
-            "다음 목표",
-            listOf("풀업" to "총 28회", "벤치프레스" to "60kg 총 반복 +1~2", "덤벨 레터럴 레이즈" to "10kg 16회"),
-        )
+        if (ui.metrics.isEmpty()) {
+            Text("이번 달 기록이 없어요", color = KColors.Soft, fontSize = 15.sp)
+            Spacer(Modifier.height(4.dp))
+            Text("운동을 끝내면 여기에 쌓여요", color = KColors.Muted, fontSize = 13.sp)
+        } else {
+            Text("이번 달", color = KColors.Soft, fontSize = 15.sp)
+            Spacer(Modifier.height(6.dp))
+            MetricGrid(ui.metrics)
+            Spacer(Modifier.height(28.dp))
+            SectionCard("루틴별 세트", ui.byRoutine)
+        }
     }
 }
 

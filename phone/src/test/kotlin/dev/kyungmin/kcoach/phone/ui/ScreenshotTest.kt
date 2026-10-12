@@ -45,7 +45,18 @@ class ScreenshotTest {
     }
 
     @Test
-    fun stats() = shot("stats") { StatsScreen() }
+    fun stats() = shot("stats") {
+        StatsScreen(
+            StatsUi(
+                "10월",
+                listOf("4회" to "운동", "270분" to "총 시간", "96세트" to "총 세트", "40,809kg" to "총 볼륨"),
+                listOf("등·이두" to "32세트", "가슴·삼두" to "26세트", "어깨전문" to "24세트"),
+            ),
+        )
+    }
+
+    @Test
+    fun statsEmpty() = shot("stats_empty") { StatsScreen(StatsUi("10월", emptyList(), emptyList())) }
 
     @Test
     fun menu() = shot("menu") { MenuScreen("0.7.1", MenuActions({}, { null }, {})) }

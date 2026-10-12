@@ -40,6 +40,8 @@ import androidx.compose.ui.platform.ComposeView
 import dev.kyungmin.kcoach.phone.ui.ActiveWorkoutScreen
 import dev.kyungmin.kcoach.phone.ui.ExerciseUi
 import dev.kyungmin.kcoach.core.TrainingLoad
+import dev.kyungmin.kcoach.core.WorkoutLog
+import dev.kyungmin.kcoach.core.WorkoutStats
 import dev.kyungmin.kcoach.core.ExerciseHistory
 import dev.kyungmin.kcoach.core.ExerciseLog
 import dev.kyungmin.kcoach.core.LoggedSet
@@ -69,6 +71,7 @@ import dev.kyungmin.kcoach.phone.ui.RunningUi
 import dev.kyungmin.kcoach.phone.ui.SetField
 import dev.kyungmin.kcoach.phone.ui.SetUi
 import dev.kyungmin.kcoach.phone.ui.StatsScreen
+import dev.kyungmin.kcoach.phone.ui.StatsUi
 import dev.kyungmin.kcoach.phone.ui.UpdateUi
 import dev.kyungmin.kcoach.phone.ui.WorkoutActions
 import dev.kyungmin.kcoach.phone.ui.WorkoutUiModel
@@ -573,9 +576,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private val workoutLogStore by lazy { WorkoutLogStore(applicationContext) }
+
+    private fun workoutRecords(): List<WorkoutRecord> =
+        workoutLogStore.load().sortedByDescending { it.epochDay }.map {
+            WorkoutRecord(LocalDate.ofEpochDay(it.epochDay).toString(), it.title, it.minutes, it.sets, it.volumeKg)
+        }
+
     private fun weekRecords(today: LocalDate): List<WorkoutRecord> {
         val monday = today.minusDays((today.dayOfWeek.value - 1).toLong())
-        return WorkoutData.records.filter {
+        return workoutRecords().filter {
             val date = LocalDate.parse(it.date)
             !date.isBefore(monday) && !date.isAfter(monday.plusDays(6))
         }
@@ -875,7 +885,7 @@ class MainActivity : ComponentActivity() {
         )
         val title = lastWorkoutResult?.title
         showScaffold(ComposeView(this).apply {
-            setContent { RecordsScreen(WorkoutData.records, recordMonth, title, actions) }
+            setContent { RecordsScreen(workoutRecords(), recordMonth, title, actions) }
         }, null, RootTab.RECORDS)
     }
 
@@ -918,7 +928,8 @@ class MainActivity : ComponentActivity() {
         stopTicker()
         currentTab = RootTab.STATS
         currentScreen = Screen.ROOT
-        showScaffold(ComposeView(this).apply { setContent { StatsScreen() } }, null, RootTab.STATS)
+        showScaffold(ComposeView(this).apply { val stats = statsUi()
+            setContent { StatsScreen(stats) } }, null, RootTab.STATS)
     }
 
     private fun startOrStopCalibration() {
@@ -1375,6 +1386,39 @@ class MainActivity : ComponentActivity() {
             val done = item.sets.filter { it.completed }.map { LoggedSet(it.weightKg, it.targetReps) }
             if (done.isNotEmpty()) historyCache = historyStore.add(ExerciseLog(item.exercise.id, today, done))
         }
+    }
+
+    private fun recordWorkoutLog(workout: ActiveWorkout) {
+        val done = workout.routine.exercises.flatMap { item -> item.sets.filter { it.completed } }
+        if (done.isEmpty()) return
+        workoutLogStore.add(
+            WorkoutLog(
+                epochDay = LocalDate.now().toEpochDay(),
+                title = workout.routine.name,
+                minutes = (workoutElapsedSeconds(workout) / 60L).toInt(),
+                sets = done.size,
+                volumeKg = done.sumOf { (it.weightKg ?: 0.0) * it.targetReps }.toInt(),
+            ),
+        )
+    }
+
+    private fun statsUi(): StatsUi {
+        val today = LocalDate.now()
+        val month = YearMonth.from(today)
+        val logs = workoutLogStore.load()
+        val inMonth = logs.filter { LocalDate.ofEpochDay(it.epochDay).let { d -> YearMonth.from(d) == month } }
+        if (inMonth.isEmpty()) return StatsUi("${month.monthValue}월", emptyList(), emptyList())
+        val totals = WorkoutStats.between(logs, month.atDay(1).toEpochDay(), month.atEndOfMonth().toEpochDay())
+        return StatsUi(
+            "${month.monthValue}월",
+            listOf(
+                "${totals.workouts}회" to "운동",
+                "${totals.minutes}분" to "총 시간",
+                "${totals.sets}세트" to "총 세트",
+                "%,dkg".format(totals.volumeKg) to "총 볼륨",
+            ),
+            WorkoutStats.byTitle(inMonth).map { (title, sets) -> title to "${sets}세트" },
+        )
     }
 
     private fun plannedReps(item: RoutineExercise): Int =
@@ -2192,6 +2236,7 @@ class MainActivity : ComponentActivity() {
         if (completedWorkout != null) {
             if (!persistActiveWorkout(completedWorkout)) return
             recordHistory(completedWorkout)
+            recordWorkoutLog(completedWorkout)
             sendWear(WearSync.PATH_COMMAND, WearSync.command("COMPLETE", completedWorkout.sessionId, "", 0, 0))
             sessionStore.clearActive()
         }
