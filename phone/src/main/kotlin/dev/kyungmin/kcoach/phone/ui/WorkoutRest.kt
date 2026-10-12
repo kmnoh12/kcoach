@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -75,22 +74,22 @@ fun RestBar(
             if (active) Box(Modifier.fillMaxWidth(rest.fraction).fillMaxHeight().background(KColors.Accent))
         }
         Box(Modifier.fillMaxWidth().padding(top = 6.dp), contentAlignment = Alignment.Center) {
-            Box(Modifier.width(34.dp).height(4.dp).clip(RoundedCornerShape(2.dp)).background(KColors.Red).clickable { onExpand() })
+            Box(Modifier.width(34.dp).height(4.dp).clip(RoundedCornerShape(2.dp)).background(KColors.Faint).clickable { onExpand() })
         }
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f).clickable { onExpand() }) {
-                Text("휴식 시간", color = KColors.Red, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text("휴식 시간", color = KColors.Muted, fontSize = 11.sp, fontWeight = FontWeight.Medium)
                 Row(verticalAlignment = Alignment.Bottom) {
                     FlipText((if (active) rest.leftSeconds else idleSeconds).toString(), 26.sp, KColors.White)
                     Text(" 초", color = KColors.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 }
             }
-            RoundButton(KIcon.Minus, KColors.Red) { onAdjust(-10) }
+            RoundButton(KIcon.Minus, KColors.SurfaceRaised) { onAdjust(-10) }
             Spacer(Modifier.width(10.dp))
-            RoundButton(KIcon.Plus, KColors.Red) { onAdjust(10) }
+            RoundButton(KIcon.Plus, KColors.SurfaceRaised) { onAdjust(10) }
             Spacer(Modifier.width(10.dp))
             RoundButton(if (paused) KIcon.Play else KIcon.Pause, Color.Transparent) { onTogglePause() }
             Spacer(Modifier.width(6.dp))
@@ -120,10 +119,10 @@ fun ExpandedRestPanel(
             .padding(horizontal = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Box(Modifier.padding(top = 10.dp).width(34.dp).height(4.dp).clip(RoundedCornerShape(2.dp)).background(KColors.Red))
+        Box(Modifier.padding(top = 10.dp).width(34.dp).height(4.dp).clip(RoundedCornerShape(2.dp)).background(KColors.Faint))
         Row(Modifier.fillMaxWidth().padding(top = 14.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("휴식", color = KColors.White, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            Text("✕", color = KColors.Muted, fontSize = 22.sp, modifier = Modifier.clickable { onClose() }.padding(8.dp))
+            Box(Modifier.clickable { onClose() }.padding(8.dp)) { KIcon(KIcon.Close, KColors.Muted, size = 22.dp) }
         }
         Spacer(Modifier.height(28.dp))
         Box(contentAlignment = Alignment.Center) {
@@ -134,8 +133,8 @@ fun ExpandedRestPanel(
         }
         Spacer(Modifier.height(26.dp))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-            RoundButton(KIcon.Minus, KColors.Red, 52) { onAdjust(-10) }
-            RoundButton(KIcon.Plus, KColors.Red, 52) { onAdjust(10) }
+            RoundButton(KIcon.Minus, KColors.SurfaceRaised, 52) { onAdjust(-10) }
+            RoundButton(KIcon.Plus, KColors.SurfaceRaised, 52) { onAdjust(10) }
             RoundButton(if (paused) KIcon.Play else KIcon.Pause, KColors.SurfaceRaised, 52) { onTogglePause() }
             if (rest.resting) RoundButton(KIcon.Skip, KColors.SurfaceRaised, 52) { onSkip() }
         }
@@ -177,14 +176,14 @@ fun NextSetBanner(text: String, leftMs: Long, onSkip: () -> Unit) {
                 fontWeight = FontWeight.Bold,
             )
         }
-        Text("건너뛰기", color = KColors.Red, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { onSkip() }.padding(8.dp))
+        Text("건너뛰기", color = KColors.Bg, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { onSkip() }.padding(8.dp))
     }
 }
 
 @Composable
 fun RoundButton(icon: KIcon, fill: Color, sizeDp: Int = 38, onClick: () -> Unit) {
     Box(
-        Modifier.size(sizeDp.dp).clip(CircleShape).background(fill).clickable { onClick() },
+        Modifier.size(sizeDp.dp).clip(KShape.Control).background(fill).clickable { onClick() },
         contentAlignment = Alignment.Center,
     ) {
         KIcon(icon, KColors.White, size = (sizeDp * 0.52).dp)

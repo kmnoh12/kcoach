@@ -455,7 +455,7 @@ private fun Cell(
     onClick: () -> Unit,
     sub: String? = null,
 ) {
-    val border by animateColorAsState(if (editing == true) KColors.Red else androidx.compose.ui.graphics.Color.Transparent, Motion.ui(), label = "cell")
+    val border by animateColorAsState(if (editing == true) KColors.Accent else androidx.compose.ui.graphics.Color.Transparent, Motion.ui(), label = "cell")
     Box(
         modifier.padding(horizontal = 4.dp).height(40.dp)
             .clip(KShape.Control)

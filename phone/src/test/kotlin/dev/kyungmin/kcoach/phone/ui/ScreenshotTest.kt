@@ -109,4 +109,68 @@ class ScreenshotTest {
             {}, {},
         )
     }
+
+    @Test
+    fun routineDetail() = shot("routine_detail") {
+        val context = androidx.compose.ui.platform.LocalContext.current
+        val routine = WorkoutData.defaultRoutines()[1]
+        val rows = routine.exercises.mapIndexed { i, item ->
+            RoutineRowUi(i, item.exercise.name, "${item.sets.size}세트 · ${item.exercise.muscles}", { android.view.View(context) })
+        }
+        RoutineDetailScreen(
+            routine.name, rows, "시작", KIcon.Play, false,
+            RoutineDetailActions({}, {}, {}, {}, { _, _ -> }, {}, {}, {}),
+        )
+    }
+
+    private fun noActions(): WorkoutActions = java.lang.reflect.Proxy.newProxyInstance(
+        WorkoutActions::class.java.classLoader, arrayOf(WorkoutActions::class.java),
+    ) { proxy, method, args ->
+        when (method.name) {
+            "equals" -> proxy === args?.get(0)
+            "hashCode" -> System.identityHashCode(proxy)
+            "toString" -> "NoActions"
+            else -> null
+        }
+    } as WorkoutActions
+
+    private fun workoutModel(resting: Boolean): WorkoutUiModel {
+        val now = System.currentTimeMillis()
+        fun set(uid: Int, label: String, kg: String, reps: Int, done: Boolean, prev: String?) =
+            SetUi(uid, label, kg, reps, done, label == "노멀" && false, "", 90, false, null, prev)
+        val sets = listOf(
+            set(0, "1", "50", 10, true, "45×10"),
+            set(1, "2", "55", 10, true, "50×10"),
+            set(2, "3", "55", 10, false, "50×9"),
+            set(3, "4", "55", 8, false, null),
+        )
+        val ex = ExerciseUi(
+            "lat_pull_down", "랫 풀 다운", "등, 이두", true, 90, 10, 20, 2, 4, 2, sets,
+            volumeDone = 1050, volumeTarget = 2100,
+            history = HistoryUi("지난번 45×10 · 50×10 · 50×9", 1840, "55kg로 올리기", "모든 작업 세트를 목표 횟수까지 채웠어요", true),
+        )
+        return WorkoutUiModel(
+            "등·이두", false, false, now - 21 * 60_000L, 0L, 0L, 0, listOf(ex), false,
+            if (resting) now - 20_000L else 0L, if (resting) now + 70_000L else 0L, 0L, "다음 랫 풀 다운 3세트",
+        )
+    }
+
+    @Test
+    fun workout() = shot("workout") {
+        val context = androidx.compose.ui.platform.LocalContext.current
+        ActiveWorkoutScreen(
+            workoutModel(false), noActions(),
+            LiveLine("Watch8 연결됨 · 랫 풀 다운 · 세트 3", "t").also { it.setTextColor(0xFF2DD4BF.toInt()) },
+            LiveLine("7/10회 · 55kg · 심박 112bpm", "t"),
+        ) { android.view.View(context) }
+    }
+
+    @Test
+    fun workoutResting() = shot("workout_rest") {
+        val context = androidx.compose.ui.platform.LocalContext.current
+        ActiveWorkoutScreen(
+            workoutModel(true), noActions(),
+            LiveLine("Watch8 연결됨", "t"), LiveLine("휴식 중 · 10/10회 · 심박 98bpm", "t"),
+        ) { android.view.View(context) }
+    }
 }

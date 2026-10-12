@@ -105,7 +105,7 @@ fun RoutineDetailScreen(
                         Box(Modifier.size(54.dp, 58.dp).pressable(actions.back), contentAlignment = Alignment.Center) {
                             KIcon(KIcon.Back, KColors.White, size = 28.dp)
                         }
-                        Text(title, color = KColors.White, fontSize = 25.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                        Text(title, color = KColors.White, fontSize = 28.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
                         Box(Modifier.size(54.dp, 58.dp), contentAlignment = Alignment.Center) {
                             KIcon(KIcon.Dots, KColors.Muted, size = 24.dp)
                         }
@@ -125,7 +125,8 @@ fun RoutineDetailScreen(
                         .height(RowStride)
                         .graphicsLayer { if (dragging) translationY = dragOffset }
                         .scale(lift)
-                        .alpha(if (dragging) 0.85f else 1f),
+                        .alpha(if (dragging) 0.85f else 1f)
+                        .drawBehind { if (!dragging) drawLine(KColors.Hairline, Offset(0f, size.height), Offset(size.width, size.height), strokeWidth = 1f) },
                 ) {
                     ExerciseRow(
                         row = row,
@@ -224,7 +225,7 @@ private fun ExerciseRow(
         AndroidView(factory = { row.thumbnail() }, modifier = Modifier.size(58.dp).alpha(fade))
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text(row.name, color = KColors.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(row.name, color = KColors.White, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(2.dp))
             Text(row.subtitle, color = KColors.Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }

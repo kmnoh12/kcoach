@@ -214,7 +214,7 @@ private fun ExerciseRow(exercise: ExerciseDefinition, indented: Boolean, thumbna
             Spacer(Modifier.height(2.dp))
             Text("${exercise.muscles} · ${exercise.equipment}", color = KColors.Muted, fontSize = 12.sp)
         }
-        if (exercise.favorite) KIcon(KIcon.Heart, Color(0xFFE06687), size = 16.dp, filled = true)
+        if (exercise.favorite) KIcon(KIcon.Heart, KColors.Accent, size = 16.dp, filled = true)
     }
 }
 
