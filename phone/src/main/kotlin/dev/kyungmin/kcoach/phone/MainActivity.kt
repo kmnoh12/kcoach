@@ -1701,7 +1701,8 @@ class MainActivity : ComponentActivity() {
             val set = routineExercise.sets.getOrNull(setIndex) ?: return
             showChoiceSheet(
                 "이 세트 뒤 휴식",
-                listOf("기본값" to "운동 기본 휴식 ${routineExercise.restSeconds}초") +
+                selected = set.restSeconds?.let { "${it}초" } ?: "기본값",
+                items = listOf("기본값" to "운동 기본 휴식 ${routineExercise.restSeconds}초") +
                     listOf(30, 45, 60, 90, 120, 150, 180).map { "${it}초" to "" },
             ) { value ->
                 set.restSeconds = value.removeSuffix("초").toIntOrNull()
@@ -2093,13 +2094,13 @@ class MainActivity : ComponentActivity() {
                         dismiss()
                         showActiveWorkout()
                     },
-                    SheetItem(KIcon.Clock, "휴식 시간") {
-                        showChoiceSheet("휴식 시간", listOf("30초" to "짧은 휴식", "60초" to "일반 휴식", "90초" to "근비대 기본", "120초" to "고중량 휴식", "160초" to "긴 휴식")) { value ->
+                    SheetItem(KIcon.Clock, "휴식 시간", featured = true, value = "${routineExercise.restSeconds}초") {
+                        showChoiceSheet("휴식 시간", selected = "${routineExercise.restSeconds}초", items = listOf("30초" to "짧은 휴식", "60초" to "일반 휴식", "90초" to "근비대 기본", "120초" to "고중량 휴식", "160초" to "긴 휴식")) { value ->
                             routineExercise.restSeconds = value.removeSuffix("초").toInt()
                             showActiveWorkout()
                         }
                     },
-                    SheetItem(KIcon.Swap, "운동 대체") {
+                    SheetItem(KIcon.Swap, "운동 대체", featured = true) {
                         dismiss()
                         showExerciseAlternatives(workout.routine, workout.exerciseIndex) { showActiveWorkout() }
                     },
@@ -2153,7 +2154,7 @@ class MainActivity : ComponentActivity() {
                                 showActiveWorkout()
                             }
                         } + SegOption(if (quickGrips.none { it.first == grip }) grip else "더보기", quickGrips.none { it.first == grip }) {
-                            showChoiceSheet("그립", listOf("노멀" to "표준 그립", "오버핸드" to "손바닥이 몸 반대쪽을 향하는 그립", "언더핸드" to "손바닥이 몸 쪽을 향하는 그립", "뉴트럴" to "양손이 서로 마주 보는 그립", "와이드" to "어깨 너비보다 넓은 손 배치", "클로즈" to "어깨 너비보다 좁은 손 배치", "얼터네이트" to "한 손은 오버핸드, 다른 한 손은 언더핸드")) { value ->
+                            showChoiceSheet("그립", selected = grip, items = listOf("노멀" to "표준 그립", "오버핸드" to "손바닥이 몸 반대쪽을 향하는 그립", "언더핸드" to "손바닥이 몸 쪽을 향하는 그립", "뉴트럴" to "양손이 서로 마주 보는 그립", "와이드" to "어깨 너비보다 넓은 손 배치", "클로즈" to "어깨 너비보다 좁은 손 배치", "얼터네이트" to "한 손은 오버핸드, 다른 한 손은 언더핸드")) { value ->
                                 set.gripType = value
                                 showActiveWorkout()
                             }
@@ -2173,7 +2174,7 @@ class MainActivity : ComponentActivity() {
                                 showActiveWorkout()
                             }
                         } + SegOption(if (rpe != null && rpe !in quickRpe) rpe!! else "상세", rpe != null && rpe !in quickRpe) {
-                            showChoiceSheet("운동 강도 (RPE)", listOf("선택 안 함" to "", "10" to "더는 못 해요", "9.5" to "1개 정도 더 할 수 있을 것 같아요", "9" to "확실히 1개 더 할 수 있어요", "8.5" to "아마 2개 더 할 수 있어요", "8" to "확실히 2개 더 할 수 있어요", "7" to "꽤 할 만했어요", "6" to "웜업 정도예요")) { value ->
+                            showChoiceSheet("운동 강도 (RPE)", selected = rpe ?: "선택 안 함", items = listOf("선택 안 함" to "", "10" to "더는 못 해요", "9.5" to "1개 정도 더 할 수 있을 것 같아요", "9" to "확실히 1개 더 할 수 있어요", "8.5" to "아마 2개 더 할 수 있어요", "8" to "확실히 2개 더 할 수 있어요", "7" to "꽤 할 만했어요", "6" to "웜업 정도예요")) { value ->
                                 set.rpe = value.takeUnless { it == "선택 안 함" }
                                 showActiveWorkout()
                             }
@@ -2197,9 +2198,9 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun showChoiceSheet(title: String, items: List<Pair<String, String>>, onSelect: (String) -> Unit) {
+    private fun showChoiceSheet(title: String, items: List<Pair<String, String>>, selected: String? = null, onSelect: (String) -> Unit) {
         showSheet { dismiss ->
-            ChoiceSheet(title, items) { value ->
+            ChoiceSheet(title, items, selected) { value ->
                 dismiss()
                 onSelect(value)
             }
@@ -2472,10 +2473,10 @@ class MainActivity : ComponentActivity() {
                 exercise.name,
                 listOf(
                     SheetItem(KIcon.Play, "운동 애니메이션") { dismiss(); showExerciseInfo(exercise, onReturn) },
-                    SheetItem(KIcon.Info, "운동 정보") { dismiss(); showExerciseInfo(exercise, onReturn) },
+                    SheetItem(KIcon.Info, "운동 정보", featured = true) { dismiss(); showExerciseInfo(exercise, onReturn) },
                     SheetItem(KIcon.Link, "슈퍼세트 설정") {},
-                    SheetItem(KIcon.Trash, "운동 삭제") { dismiss(); confirmRemoveExercise(routine, index, active, onReturn) },
-                    SheetItem(KIcon.Swap, "운동 대체") { dismiss(); showExerciseAlternatives(routine, index, onReturn) },
+                    SheetItem(KIcon.Trash, "운동 삭제", destructive = true) { dismiss(); confirmRemoveExercise(routine, index, active, onReturn) },
+                    SheetItem(KIcon.Swap, "운동 대체", featured = true) { dismiss(); showExerciseAlternatives(routine, index, onReturn) },
                 ),
             )
         }
@@ -2631,8 +2632,8 @@ class MainActivity : ComponentActivity() {
             SheetOptions(
                 routine.name,
                 listOf(
-                    SheetItem(KIcon.Menu, "상세 보기") { dismiss(); showRoutine(routine) },
-                    SheetItem(KIcon.Plus, "운동 추가") {
+                    SheetItem(KIcon.Menu, "상세 보기", featured = true) { dismiss(); showRoutine(routine) },
+                    SheetItem(KIcon.Plus, "운동 추가", featured = true) {
                         dismiss()
                         openLibrary(
                             onSelect = { routine.exercises += RoutineExercise(it, mutableListOf(PlannedSet(null, 10))) },

@@ -246,129 +246,36 @@ class ScreenshotTest {
         )
     }
 
-    // ---- Floating tab bar drafts (test-only) ----
-
-    private val navItems = listOf(KIcon.Home to "홈", KIcon.Records to "기록", KIcon.Stats to "통계", KIcon.Calibrate to "보정", KIcon.Menu to "메뉴")
-
-    @androidx.compose.runtime.Composable
-    private fun HomeBehind(content: @androidx.compose.runtime.Composable androidx.compose.foundation.layout.BoxScope.() -> Unit) {
-        val routines = WorkoutData.defaultRoutines()
-        val rows = routines.mapIndexed { i, r -> RoutineRowUi2(r, if (i == 0) null else i * 3) }
-        val ui = HomeUi(
-            week = listOf(
-                WeekDayUi("월", 0.8, false, false), WeekDayUi("화", null, false, false),
-                WeekDayUi("수", 0.5, false, false), WeekDayUi("목", null, true, false),
-                WeekDayUi("금", null, false, true), WeekDayUi("토", null, false, true), WeekDayUi("일", null, false, true),
+    @Test
+    fun sheetMenu() = overlayShot("sheet_menu", true) {
+        SheetOptions(
+            "케이블 익스터널 로테이션",
+            listOf(
+                SheetItem(KIcon.Swap, "운동 대체", featured = true) {},
+                SheetItem(KIcon.Clock, "휴식 시간", featured = true, value = "90초") {},
+                SheetItem(KIcon.Reload, "지난 세트 불러오기") {},
+                SheetItem(KIcon.Sliders, "파운드로 단위 변경") {},
+                SheetItem(KIcon.Trash, "운동 삭제", destructive = true) {},
             ),
-            weekCount = 2, rows = rows + rows, longestRest = rows.lastOrNull(),
+            subtitle = "어깨전문 · 21분 경과",
         )
-        androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize().background(KColors.Bg)) {
-            HomeScreen(ui, null, HomeActions({}, {}, {}, {}, {}, {}, {}))
-            content()
-        }
     }
-
-    /** N1: a bar floating above the content, rounded rectangle, one thumb under the chosen tab. */
-    @androidx.compose.runtime.Composable
-    private fun NavN1() {
-        androidx.compose.foundation.layout.Row(
-            androidx.compose.ui.Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)
-                .androidx_shadow()
-                .clip(RoundedCornerShape(12.dp))
-                .background(KColors.Surface.copy(alpha = 0.94f))
-                .border(0.5.dp, KColors.Hairline, RoundedCornerShape(12.dp))
-                .padding(4.dp),
-        ) {
-            navItems.forEachIndexed { i, (icon, label) ->
-                androidx.compose.foundation.layout.Column(
-                    androidx.compose.ui.Modifier.weight(1f).height(54.dp).clip(KShape.Control)
-                        .background(if (i == 0) KColors.AccentWash else androidx.compose.ui.graphics.Color.Transparent),
-                    horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
-                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
-                ) {
-                    KIcon(icon, if (i == 0) KColors.Accent else KColors.Muted, size = 22.dp)
-                    androidx.compose.material3.Text(label, color = if (i == 0) KColors.Accent else KColors.Muted, fontSize = 11.sp, fontWeight = FontWeight.Medium)
-                }
-            }
-        }
-    }
-
-    /** N2: icons only; the chosen tab widens into icon + label, the others stay small. */
-    @androidx.compose.runtime.Composable
-    private fun NavN2() {
-        androidx.compose.foundation.layout.Row(
-            androidx.compose.ui.Modifier.padding(horizontal = 14.dp, vertical = 12.dp).fillMaxWidth()
-                .androidx_shadow()
-                .clip(RoundedCornerShape(12.dp))
-                .background(KColors.Surface.copy(alpha = 0.94f))
-                .border(0.5.dp, KColors.Hairline, RoundedCornerShape(12.dp))
-                .padding(4.dp),
-        ) {
-            navItems.forEachIndexed { i, (icon, label) ->
-                val chosen = i == 0
-                androidx.compose.foundation.layout.Row(
-                    androidx.compose.ui.Modifier.weight(if (chosen) 2.1f else 1f).height(48.dp).clip(KShape.Control)
-                        .background(if (chosen) KColors.AccentWash else androidx.compose.ui.graphics.Color.Transparent)
-                        .then(if (chosen) androidx.compose.ui.Modifier.border(1.dp, KColors.Accent, KShape.Control) else androidx.compose.ui.Modifier),
-                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                ) {
-                    KIcon(icon, if (chosen) KColors.Accent else KColors.Muted, size = 22.dp)
-                    if (chosen) {
-                        androidx.compose.foundation.layout.Spacer(androidx.compose.ui.Modifier.width(6.dp))
-                        androidx.compose.material3.Text(label, color = KColors.Accent, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                    }
-                }
-            }
-        }
-    }
-
-    /** N3: four main tabs in one bar, 보정 as its own small square beside it (like the separate search button). */
-    @androidx.compose.runtime.Composable
-    private fun NavN3() {
-        androidx.compose.foundation.layout.Row(androidx.compose.ui.Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-            androidx.compose.foundation.layout.Row(
-                androidx.compose.ui.Modifier.weight(1f)
-                    .androidx_shadow()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(KColors.Surface.copy(alpha = 0.94f))
-                    .border(0.5.dp, KColors.Hairline, RoundedCornerShape(12.dp))
-                    .padding(4.dp),
-            ) {
-                listOf(0, 1, 2, 4).forEachIndexed { slot, i ->
-                    val (icon, label) = navItems[i]
-                    androidx.compose.foundation.layout.Column(
-                        androidx.compose.ui.Modifier.weight(1f).height(54.dp).clip(KShape.Control)
-                            .background(if (slot == 0) KColors.AccentWash else androidx.compose.ui.graphics.Color.Transparent),
-                        horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
-                        verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
-                    ) {
-                        KIcon(icon, if (slot == 0) KColors.Accent else KColors.Muted, size = 22.dp)
-                        androidx.compose.material3.Text(label, color = if (slot == 0) KColors.Accent else KColors.Muted, fontSize = 11.sp, fontWeight = FontWeight.Medium)
-                    }
-                }
-            }
-            androidx.compose.foundation.layout.Spacer(androidx.compose.ui.Modifier.width(10.dp))
-            androidx.compose.foundation.layout.Box(
-                androidx.compose.ui.Modifier.size(62.dp)
-                    .androidx_shadow()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(KColors.Surface.copy(alpha = 0.94f))
-                    .border(0.5.dp, KColors.Hairline, RoundedCornerShape(12.dp)),
-                contentAlignment = androidx.compose.ui.Alignment.Center,
-            ) { KIcon(KIcon.Calibrate, KColors.Muted, size = 24.dp) }
-        }
-    }
-
-    private fun androidx.compose.ui.Modifier.androidx_shadow() =
-        this.shadow(14.dp, RoundedCornerShape(12.dp), ambientColor = androidx.compose.ui.graphics.Color.Black, spotColor = androidx.compose.ui.graphics.Color.Black)
 
     @Test
-    fun navN1() = shot("nav_n1") { HomeBehind { androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.align(androidx.compose.ui.Alignment.BottomCenter)) { NavN1() } } }
+    fun sheetPick() = overlayShot("sheet_pick", true) {
+        ChoiceSheet(
+            "운동 강도 (RPE)",
+            listOf("선택 안 함" to "", "10" to "더는 못 해요", "9.5" to "1개 정도 더 할 수 있을 것 같아요", "9" to "확실히 1개 더 할 수 있어요", "8.5" to "아마 2개 더 할 수 있어요", "8" to "확실히 2개 더 할 수 있어요", "7" to "꽤 할 만했어요", "6" to "웜업 정도예요"),
+            selected = "9.5",
+        ) {}
+    }
 
     @Test
-    fun navN2() = shot("nav_n2") { HomeBehind { androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.align(androidx.compose.ui.Alignment.BottomCenter)) { NavN2() } } }
-
-    @Test
-    fun navN3() = shot("nav_n3") { HomeBehind { androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.align(androidx.compose.ui.Alignment.BottomCenter)) { NavN3() } } }
+    fun sheetPickGrip() = overlayShot("sheet_pick_grip", true) {
+        ChoiceSheet(
+            "그립",
+            listOf("노멀" to "표준 그립", "오버핸드" to "손바닥이 몸 반대쪽을 향하는 그립", "언더핸드" to "손바닥이 몸 쪽을 향하는 그립", "뉴트럴" to "양손이 서로 마주 보는 그립", "와이드" to "어깨 너비보다 넓은 손 배치", "클로즈" to "어깨 너비보다 좁은 손 배치", "얼터네이트" to "한 손은 오버핸드, 다른 한 손은 언더핸드"),
+            selected = "와이드",
+        ) {}
+    }
 }

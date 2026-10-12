@@ -247,7 +247,18 @@ fun SheetOptionRow(icon: KIcon, title: String, onClick: () -> Unit) {
     }
 }
 
-class SheetItem(val icon: KIcon, val title: String, val onClick: () -> Unit)
+/**
+ * One action in a menu sheet. [featured] actions become big square buttons on top (at most three),
+ * [destructive] ones go last in red; [value] is a short current value shown under a featured title.
+ */
+class SheetItem(
+    val icon: KIcon,
+    val title: String,
+    val featured: Boolean = false,
+    val destructive: Boolean = false,
+    val value: String? = null,
+    val onClick: () -> Unit,
+)
 
 class SegOption(val label: String, val selected: Boolean, val onClick: () -> Unit)
 
@@ -372,29 +383,70 @@ private fun SegmentedBar(options: List<SegOption>, modifier: Modifier = Modifier
 }
 
 @Composable
-fun SheetOptions(title: String, items: List<SheetItem>) {
-    Column(Modifier.padding(bottom = 24.dp)) {
-        SheetTitle(title)
-        items.forEach { SheetOptionRow(it.icon, it.title, it.onClick) }
+fun SheetOptions(title: String, items: List<SheetItem>, subtitle: String? = null) {
+    val featured = items.filter { it.featured && !it.destructive }.take(3)
+    val plain = items.filter { it !in featured && !it.destructive }
+    val danger = items.filter { it.destructive }
+    Column(Modifier.padding(bottom = 16.dp)) {
+        Column(Modifier.padding(start = 22.dp, end = 22.dp, bottom = 12.dp)) {
+            Text(title, color = KColors.White, fontSize = 22.sp, fontWeight = FontWeight.Medium)
+            if (subtitle != null) Text(subtitle, color = KColors.Muted, fontSize = 13.sp)
+        }
+        if (featured.isNotEmpty()) {
+            Row(Modifier.padding(horizontal = 22.dp).padding(bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                featured.forEach { item ->
+                    Column(
+                        Modifier
+                            .weight(1f)
+                            .height(92.dp)
+                            .clip(KShape.Control)
+                            .background(KColors.SurfaceRaised)
+                            .pressable(item.onClick)
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        KIcon(item.icon, KColors.Accent, size = 24.dp)
+                        Column {
+                            Text(item.title, color = KColors.White, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                            // Always reserve the value line so titles sit at the same height across tiles.
+                            Text(item.value ?: " ", color = KColors.Muted, fontSize = 12.sp, maxLines = 1)
+                        }
+                    }
+                }
+            }
+        }
+        (plain + danger).forEach { item ->
+            Box(Modifier.padding(horizontal = 22.dp).fillMaxWidth().height(0.5.dp).background(KColors.Hairline))
+            Box(Modifier.fillMaxWidth().height(52.dp).pressable(item.onClick).padding(horizontal = 22.dp), contentAlignment = Alignment.CenterStart) {
+                Text(item.title, color = if (item.destructive) KColors.Red else KColors.Soft, fontSize = 15.sp)
+            }
+        }
     }
 }
 
+/** Pick one value. Every option is a block; the current one carries the same mint wash and outline as the set sheet's bar. */
 @Composable
-fun ChoiceSheet(title: String, items: List<Pair<String, String>>, onSelect: (String) -> Unit) {
-    Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = 20.dp)) {
-        SheetTitle(title)
+fun ChoiceSheet(title: String, items: List<Pair<String, String>>, selected: String? = null, onSelect: (String) -> Unit) {
+    val valueWidth = if (items.maxOfOrNull { it.first.length } ?: 0 > 3) 92.dp else 52.dp
+    Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = 16.dp)) {
+        Text(title, color = KColors.White, fontSize = 22.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(start = 22.dp, end = 22.dp, bottom = 12.dp))
         items.forEach { (value, description) ->
+            val chosen = value == selected
+            val wash by animateColorAsState(if (chosen) KColors.AccentWash else KColors.SurfaceRaised, Motion.ui(), label = "pickWash")
+            val edge by animateColorAsState(if (chosen) KColors.Accent else Color.Transparent, Motion.ui(), label = "pickEdge")
             Row(
-                Modifier.fillMaxWidth().heightIn(min = 62.dp).pressable { onSelect(value) }.padding(horizontal = 18.dp),
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 22.dp, vertical = 3.dp)
+                    .clip(KShape.Control)
+                    .background(wash)
+                    .border(1.dp, edge, KShape.Control)
+                    .pressable { onSelect(value) }
+                    .padding(horizontal = 14.dp, vertical = 11.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(Modifier.width(58.dp), contentAlignment = Alignment.CenterStart) {
-                    Box(Modifier.size(20.dp).border(1.5.dp, KColors.Faint, CircleShape))
-                }
-                Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
-                    Text(value, color = KColors.White, fontSize = 17.sp)
-                    if (description.isNotBlank()) Text(description, color = KColors.Muted, fontSize = 13.sp)
-                }
+                Text(value, color = if (chosen) KColors.Accent else KColors.White, fontSize = 16.sp, fontWeight = FontWeight.Medium, modifier = Modifier.width(valueWidth))
+                if (description.isNotBlank()) Text(description, color = if (chosen) KColors.Soft else KColors.Muted, fontSize = 13.sp, modifier = Modifier.weight(1f))
             }
         }
     }
