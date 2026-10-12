@@ -158,7 +158,7 @@ fun ActiveWorkoutScreen(
                         actions.onRemoveSet(page, setIndex)
                         scope.launch {
                             snackbar.currentSnackbarData?.dismiss()
-                            val result = snackbar.showSnackbar("세트를 지웠어", actionLabel = "되돌리기", duration = SnackbarDuration.Short)
+                            val result = snackbar.showSnackbar("세트를 삭제했어요", actionLabel = "되돌리기", duration = SnackbarDuration.Short)
                             if (result == SnackbarResult.ActionPerformed) actions.onUndoRemoveSet()
                         }
                     },
