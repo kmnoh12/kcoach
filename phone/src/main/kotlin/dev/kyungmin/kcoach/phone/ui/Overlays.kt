@@ -16,6 +16,7 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.background
@@ -238,7 +239,8 @@ class SheetItem(val icon: KIcon, val title: String, val onClick: () -> Unit)
 
 class SegOption(val label: String, val selected: Boolean, val onClick: () -> Unit)
 
-class SegGroup(val label: String, val options: List<SegOption>)
+/** [note] explains the chosen option and changes with it. */
+class SegGroup(val label: String, val options: List<SegOption>, val note: String? = null)
 
 class SheetAction(val label: String, val destructive: Boolean, val onClick: () -> Unit)
 
@@ -277,6 +279,12 @@ fun SetSheet(title: String, subtitle: String, groups: List<SegGroup>, actions: L
                         ) {
                             Text(option.label, color = text, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
                         }
+                    }
+                }
+                if (group.note != null) {
+                    Spacer(Modifier.height(6.dp))
+                    Crossfade(group.note, animationSpec = Motion.ui(), label = "segNote") { note ->
+                        Text(note, color = KColors.Muted, fontSize = 12.sp)
                     }
                 }
             }

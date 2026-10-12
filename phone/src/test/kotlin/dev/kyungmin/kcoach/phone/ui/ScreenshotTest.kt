@@ -236,9 +236,9 @@ class ScreenshotTest {
         SetSheet(
             "1세트", "케이블 익스터널 로테이션 · 25회",
             listOf(
-                SegGroup("세트 종류", seg("일반", "웜업", "슈퍼", "드랍", "실패", "보조", selected = 0)),
-                SegGroup("그립", seg("노멀", "오버", "언더", "뉴트럴", "더보기", selected = 0)),
-                SegGroup("운동 강도 (RPE)", seg("-", "6", "7", "8", "9", "10", "상세", selected = 0)),
+                SegGroup("세트 종류", seg("일반", "웜업", "슈퍼", "드랍", "실패", "보조", selected = 1), "근육을 준비하기 위한 워밍업"),
+                SegGroup("그립", seg("노멀", "오버", "언더", "뉴트럴", "더보기", selected = 0), "표준 그립"),
+                SegGroup("운동 강도 (RPE)", seg("-", "6", "7", "8", "9", "10", "상세", selected = 4), "확실히 1개 더 할 수 있어요"),
             ),
             listOf(SheetAction("이전에 세트 추가", false) {}, SheetAction("세트 삭제", true) {}),
         )

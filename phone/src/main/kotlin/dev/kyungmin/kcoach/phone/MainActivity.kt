@@ -2120,13 +2120,17 @@ class MainActivity : ComponentActivity() {
             val quickTypes = listOf("일반", "웜업", "슈퍼", "드랍", "실패", "보조")
             val quickGrips = listOf("노멀" to "노멀", "오버핸드" to "오버", "언더핸드" to "언더", "뉴트럴" to "뉴트럴")
             val quickRpe = listOf("6", "7", "8", "9", "10")
+            val typeNotes = mapOf("일반" to "기본 작업 세트", "웜업" to "근육을 준비하기 위한 워밍업", "슈퍼" to "두 운동을 쉬지 않고 연속으로", "드랍" to "휴식 없이 무게를 낮춰 이어서", "실패" to "실패까지 간 세트", "보조" to "도움을 받아 끝낸 세트")
+            val gripNotes = mapOf("노멀" to "표준 그립", "오버핸드" to "손바닥이 몸 반대쪽을 향하는 그립", "언더핸드" to "손바닥이 몸 쪽을 향하는 그립", "뉴트럴" to "양손이 서로 마주 보는 그립", "와이드" to "어깨 너비보다 넓은 손 배치", "클로즈" to "어깨 너비보다 좁은 손 배치", "얼터네이트" to "한 손은 오버핸드, 다른 한 손은 언더핸드")
+            val rpeNotes = mapOf("10" to "더는 못 해요", "9.5" to "1개 정도 더 할 수 있을 것 같아요", "9" to "확실히 1개 더 할 수 있어요", "8.5" to "아마 2개 더 할 수 있어요", "8" to "확실히 2개 더 할 수 있어요", "7" to "꽤 할 만했어요", "6" to "웜업 정도예요")
             SetSheet(
                 title = setLabel,
                 subtitle = "${routineExercise.exercise.name} · ${set.targetReps}회",
                 groups = listOf(
                     SegGroup(
                         "세트 종류",
-                        quickTypes.map { name ->
+                        note = typeNotes[type.displayName] ?: "",
+                        options = quickTypes.map { name ->
                             SegOption(name, type.displayName == name) {
                                 set.setType = SetType.fromStorage(name)
                                 type = set.setType
@@ -2136,7 +2140,8 @@ class MainActivity : ComponentActivity() {
                     ),
                     SegGroup(
                         "그립",
-                        quickGrips.map { (value, label) ->
+                        note = gripNotes[grip] ?: "",
+                        options = quickGrips.map { (value, label) ->
                             SegOption(label, grip == value) {
                                 set.gripType = value
                                 grip = value
@@ -2151,7 +2156,8 @@ class MainActivity : ComponentActivity() {
                     ),
                     SegGroup(
                         "운동 강도 (RPE)",
-                        listOf(SegOption("-", rpe == null) {
+                        note = rpeNotes[rpe] ?: "기록하지 않아요",
+                        options = listOf(SegOption("-", rpe == null) {
                             set.rpe = null
                             rpe = null
                             showActiveWorkout()
