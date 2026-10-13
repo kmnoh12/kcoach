@@ -1,4 +1,18 @@
+<div align="center">
+
 # KCoach
+
+**Galaxy Watch8 + Android personal hypertrophy coach.**
+
+[![Kotlin](https://img.shields.io/badge/Kotlin-7F52FF?logo=kotlin&logoColor=white)](#모듈)
+[![Wear OS](https://img.shields.io/badge/Wear_OS-4285F4?logo=wearos&logoColor=white)](#모듈)
+[![Android](https://img.shields.io/badge/Android-3DDC84?logo=android&logoColor=white)](#모듈)
+
+[모듈](#모듈) · [현재 단계](#현재-단계) · [앱 업데이트](#앱-업데이트) · [실기 검증](#실기-검증)
+
+</div>
+
+---
 
 개인용 Galaxy Watch8 + Android 근비대 코치.
 
