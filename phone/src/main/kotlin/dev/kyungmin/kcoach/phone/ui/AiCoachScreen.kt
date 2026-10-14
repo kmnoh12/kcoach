@@ -41,6 +41,7 @@ internal fun AiCoachScreen(ui: AiCoachUi, connection: ChatGptConnectionUi, model
     val ready = connection.connected && ui.accountId == connection.activeProfileId && ui.loaded
     val canSend = ready && ui.profile != null && connection.planAllowed && models.selectionValid && !connection.busy && !ui.busy
     val list = rememberLazyListState()
+    var showMemory by remember { mutableStateOf(false) }
     val draftProfile = remember(ui.accountId, ui.profile) { ui.profile ?: AiCoachProfile() }
     LaunchedEffect(ui.turns.size, ui.busy, ui.pendingQuestion, ready) {
         if (!ready) return@LaunchedEffect
@@ -84,6 +85,14 @@ internal fun AiCoachScreen(ui: AiCoachUi, connection: ChatGptConnectionUi, model
             else if (ready && ui.profile == null) Text("먼저 프로필을 저장해 주세요. 모르는 항목은 비워둘 수 있어요", color = KColors.Muted, fontSize = 14.sp)
             if (ready && ui.profile != null) Text("연결한 최근 기록 ${ui.records.count { it.linked }}회 · 입력 프로필과 확인된 기록으로 답해요",
                 color = KColors.Muted, fontSize = 12.sp)
+            Row {
+                TextButton(onClick = { showMemory = !showMemory }, enabled = ready) { Text("개인 요약") }
+                TextButton(onClick = { actions.send("연결된 기록과 프로필을 바탕으로 변화와 다음 운동 제안을 요약해 주세요") }, enabled = canSend) { Text("요약 갱신") }
+            }
+            if (showMemory) {
+                Text("AI 해석 · 직접 입력한 사실과 별도로 보관해요. 근거 기록이 바뀌면 제외돼요", color = KColors.Muted, fontSize = 12.sp)
+                ui.interpretations.takeLast(3).forEach { Text(it, color = KColors.Soft, fontSize = 13.sp) }
+            }
             HorizontalDivider(Modifier.padding(vertical = 10.dp), color = KColors.Hairline)
             LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = list, verticalArrangement = Arrangement.spacedBy(18.dp)) {
                 if (ready) items(ui.turns) { turn ->
@@ -129,6 +138,8 @@ internal fun AiCoachScreen(ui: AiCoachUi, connection: ChatGptConnectionUi, model
 
 @Composable
 private fun ProfileEditor(profile: AiCoachProfile, onDismiss: () -> Unit, save: (AiCoachProfile) -> Unit) {
+    var age by rememberSaveable { mutableStateOf(profile.ageYears?.toString().orEmpty()) }
+    var energy by rememberSaveable { mutableStateOf(profile.calorieBasis.isNotBlank()) }
     var height by rememberSaveable { mutableStateOf(profile.heightCm?.toString().orEmpty()) }
     var weight by rememberSaveable { mutableStateOf(profile.weightKg?.toString().orEmpty()) }
     var measured by rememberSaveable { mutableStateOf(profile.weightMeasuredOn.ifBlank { LocalDate.now().toString() }) }
@@ -145,6 +156,12 @@ private fun ProfileEditor(profile: AiCoachProfile, onDismiss: () -> Unit, save: 
         }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("모든 항목은 선택이에요. 입력하지 않은 정보는 추정해 채우지 않아요.", color = KColors.Muted, fontSize = 13.sp)
+            ProfileField("나이 (선택, 세션 평균 칼로리 기준용)", age, true) { age = it }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(energy, onCheckedChange = { energy = it })
+                Text("다종목 8~15회 일반 근력운동 기준으로 활동 칼로리 추정", color = KColors.Soft, fontSize = 13.sp)
+            }
+            Text("19~59세·운동일 전 90일 이내 체중에 3.5 MET 세션 평균을 적용해요. 개인 실측 칼로리가 아니에요.", color = KColors.Muted, fontSize = 12.sp)
             ProfileField("키 (cm)", height, true) { height = it }
             ProfileField("체중 (kg)", weight, true) { weight = it }
             ProfileField("체중 측정일 (YYYY-MM-DD)", measured) { measured = it }
@@ -160,7 +177,7 @@ private fun ProfileEditor(profile: AiCoachProfile, onDismiss: () -> Unit, save: 
             TextButton(onClick = {
                 try {
                     fun number(value: String) = value.trim().takeIf { it.isNotEmpty() }?.toDouble()
-                    val draft = profile.copy(heightCm = number(height), weightKg = number(weight),
+                    val draft = profile.copy(ageYears = if (age.isBlank()) null else age.trim().toInt(), calorieBasis = if (energy) "RESISTANCE_MULTIPLE_8_15" else "", heightCm = number(height), weightKg = number(weight),
                         weightMeasuredOn = if (weight.isBlank()) "" else measured.trim(), bodyFatPercent = number(fat),
                         goal = goal.trim(), experience = experience.trim(), constraints = constraints.trim(), equipment = equipment.trim())
                     save(draft)

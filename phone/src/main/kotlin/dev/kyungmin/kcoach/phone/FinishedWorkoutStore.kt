@@ -10,13 +10,15 @@ import java.time.ZoneId
 internal class FinishedWorkoutStore(private val context: Context) {
     private val prefs = context.getSharedPreferences("finished-workouts", Context.MODE_PRIVATE)
 
-    internal data class Evidence(val snapshot: WorkoutSnapshot, val title: String, val minutes: Int, val analysisRevision: Long)
+    internal data class Evidence(val snapshot: WorkoutSnapshot, val title: String, val minutes: Int, val analysisRevision: Long, val finishedAtMs: Long = snapshot.startedAtMs + minutes * 60_000L + snapshot.totalPausedMs)
 
     /** Read current snapshots, rather than stale projected totals, for a bounded AI context. */
     fun recentEvidence(limit: Int = 30, sessionIds: Set<String>? = null): List<Evidence> = synchronized(lock) {
         require(limit in 1..100)
         readEvidence(sessionIds).take(limit)
     }
+
+    fun allEvidence(): List<Evidence> = synchronized(lock) { readEvidence(null) }
 
     /** Personal summaries and routine baselines use the whole owned history, not a recent window. */
     fun evidenceForSessions(sessionIds: Set<String>): List<Evidence> = synchronized(lock) { readEvidence(sessionIds) }
@@ -28,7 +30,7 @@ internal class FinishedWorkoutStore(private val context: Context) {
                 val snapshot = WorkoutSnapshotCodec.decode(record.getString("snapshot"))
                 require(key == "session:${snapshot.sessionId}")
                 Evidence(snapshot, record.getString("title"),
-                    record.getInt("minutes"), record.optLong("analysisRevision", 0L))
+                    record.getInt("minutes"), record.optLong("analysisRevision", 0L), record.optLong("finishedAtMs", snapshot.startedAtMs + record.getInt("minutes") * 60_000L + snapshot.totalPausedMs))
             }.getOrNull()
         }.sortedWith(compareByDescending<Evidence> { it.snapshot.startedAtMs }.thenBy { it.snapshot.sessionId })
 
@@ -39,13 +41,15 @@ internal class FinishedWorkoutStore(private val context: Context) {
             .put("snapshot", WorkoutSnapshotCodec.encode(snapshot))
             .put("title", title).put("minutes", minutes).put("usePounds", usePounds)
             .put("epochDay", Instant.ofEpochMilli(snapshot.startedAtMs).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay())
-            .put("projected", false)
+            .put("projected", false).put("finishedAtMs", System.currentTimeMillis())
         val read = SetAnalysisStore(context).readForSession(snapshot.sessionId)
         val corrected = applyAnalyses(WorkoutSnapshotCodec.decode(record.getString("snapshot")), read.rows)
         if (record.getString("snapshot") != WorkoutSnapshotCodec.encode(corrected)) record.put("projected", false)
         record.put("snapshot", WorkoutSnapshotCodec.encode(corrected)).put("analysisRevision", read.revision)
         check(prefs.edit().putString(key, record.toString()).commit()) { "Failed to save finished session" }
+        WorkoutTimeStore(context).close(snapshot.sessionId, record.optLong("finishedAtMs", snapshot.startedAtMs + minutes * 60_000L + snapshot.totalPausedMs))
         project(key, record)
+        AutomaticWorkoutReview.finished(context, snapshot.sessionId)
     }
 
     fun reconcile(sessionId: String, indexedOnly: Boolean = false) = synchronized(lock) {

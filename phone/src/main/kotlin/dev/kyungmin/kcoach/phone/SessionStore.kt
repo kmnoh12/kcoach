@@ -9,7 +9,7 @@ import java.security.MessageDigest
 data class ManualSetApplication(val ack: ManualSetAck, val snapshot: WorkoutSnapshot?, val restStarted: Boolean = false)
 data class WatchWorkoutApplication(val ack: WatchWorkoutControlAck, val snapshot: WorkoutSnapshot?)
 
-class SessionStore(context: Context) {
+class SessionStore(private val context: Context) {
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     private val capturePrefs = context.getSharedPreferences("calibration-captures", Context.MODE_PRIVATE)
 
@@ -272,7 +272,7 @@ class SessionStore(context: Context) {
                 .put("ack", ack.encode(0, 0)))
             edit.putString(KEY_MANUAL_RECEIPTS, receipts.toString())
         }
-        return edit.commit().also { if (it) observedRevision = revision }
+        return edit.commit().also { if (it) { observedRevision = revision; runCatching { WorkoutTimeStore(context).record(snapshot, System.currentTimeMillis()) } } }
     }
 
     private fun revisionKey(set: PlannedSetSnapshot) = SetIdentity.key(set.exerciseId, set.setIndex, set.setId, set.attemptId)

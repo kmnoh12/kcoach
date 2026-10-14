@@ -38,23 +38,45 @@ class PatternCandidatesActivity : ComponentActivity() {
     private fun button(title: String, action: () -> Unit) = Button(this).apply { text = title; setOnClickListener { action() } }
 
     private fun showCandidates() {
-        root("개인 패턴·검증")
+        root("내 측정 엔진")
         candidateListVisible = true
         content.addView(text("후보를 만든 뒤 새 세트를 촬영하고 실제 횟수·반복 구간을 확인해 주세요. 학습했던 세트를 다시 맞히는 것으로 정확도가 높아졌다고 표시하지 않아요."))
         val status = text("저장한 후보 확인 중…"); content.addView(status)
         val revision = viewRevision
         worker.execute {
             val records = store.list()
+            val account = ChatGptAuth.get(this).state.value.activeProfileId
+            val provenance = records.getOrNull().orEmpty().associate { it.profile.id to account?.let { id -> AiCalibrationStore(this).provenance(id, it.profile.id) } }
+            val reports = records.getOrNull().orEmpty().associate { it.profile.id to store.savedValidationReports(it.profile.id).getOrDefault(emptyList()) }
             val states = records.getOrNull().orEmpty().associate { it.profile.id to controller.state(it.profile.id) }
             runOnUiThread {
                 if (isFinishing || isDestroyed || revision != viewRevision) return@runOnUiThread
                 records.onSuccess { list ->
                     status.text = if (list.isEmpty()) "아직 후보가 없어요. 촬영한 동작을 확인한 뒤 보정 후보를 만들어 주세요." else "${list.size}개 후보 · 적용 상태는 워치의 실제 사용 확인 기준"
-                    list.forEach { candidate ->
+                    var group: String? = null
+                    list.sortedWith(compareBy<PatternCandidate> { it.profile.compatibility.recipe.name + it.profile.compatibility.side + it.profile.compatibility.placement }.thenByDescending { it.profile.version }).forEach { candidate ->
+                        val key = "${candidate.profile.compatibility.recipe.label} · ${candidate.profile.compatibility.side} · ${candidate.profile.compatibility.placement}"
+                        if (group != key) { group = key; content.addView(text(key, 22f)) }
                         val profile = candidate.profile
                         val description = "${profile.compatibility.recipe.label} · 버전 ${profile.version}\n확인 반복 ${profile.trainingRepCount}회 · ${profile.sources.size}세트 · ${profile.sources.map { it.dayId }.distinct().size}일"
                         content.addView(text(description, 18f))
+                        content.addView(text("확인 자료 날짜 · ${profile.sources.minOf { it.dayId }} ~ ${profile.sources.maxOf { it.dayId }}"))
+                        reports[profile.id].orEmpty().forEach { report ->
+                            val native = report.optString("scope") == "OBSERVED_WATCH_OUTPUTS"
+                            content.addView(text("저장한 ${if (native) "워치 실측" else "폰 독립"} 검증 · ${java.time.Instant.ofEpochMilli(report.getLong("evaluatedAtMs"))}\n${report.optInt("sets")}세트 · ${report.optInt("reps")}회 · ${report.optInt("days")}일"))
+                            content.addView(text("당시의 횟수 오차 ${report.opt("mae") ?: report.opt("rawMae") ?: "미측정"}회 · 적용 전 원본과 라벨을 다시 검사해요"))
+                        }
                         val state = states[profile.id]?.getOrNull()
+                        if (state?.previousObserved != null) content.addView(text("이전 사용 확인 · 버전 ${state.previousObserved!!.command.runtime.version}"))
+                        provenance[profile.id]?.let { run ->
+                            content.addView(text("GPT 보정 · ${run.getString("actual_model")} · ${java.time.Instant.ofEpochMilli(run.getLong("finished_at_ms"))}"))
+                            content.addView(text(run.getJSONObject("answer").getString("summary")))
+                            val results = run.getJSONArray("candidates")
+                            (0 until results.length()).map { results.getJSONObject(it) }.firstOrNull { it.getString("id") == profile.id }?.let { result ->
+                                val replay = result.getJSONObject("training_replay")
+                                content.addView(text("학습 원본 재생 오차 ${if (replay.isNull("count_mae")) "미확인" else replay.getDouble("count_mae")}회 · 독립 검증과 별개"))
+                            }
+                        }
                         content.addView(text(state?.let(::describeState) ?: "적용 상태를 확인하지 못했어요. 저장 자료는 유지돼요."))
                         content.addView(button("새 검증 세트 촬영") {
                             val capture = CalibrationCaptureStore(this).load(profile.sources.first().captureId).getOrNull()
@@ -212,6 +234,21 @@ class PatternCandidatesActivity : ComponentActivity() {
                     summary.text = if (report.approved) "실측 기준 통과 · 적용 확인 대기" else "검증 대기 · 이전 설정 유지"
                     content.addView(text("${report.totalSets}세트 · 확인 ${report.totalReps}회 · 유효 ${report.validDays}일\n유효 출력 ${report.predictedSets}/${report.totalSets}세트\n정확 일치 ${report.exactSets}/${report.totalSets} · ±1회 ${report.withinOneSets}/${report.totalSets}"))
                     content.addView(text("평균 횟수 오차 ${number(report.mae)}회\n화면 프레임 제출 반응 p95 ${number(report.latencyP95Ms)}ms\n시작·전환·복귀 중 가장 큰 평균 오차 ${number(report.boundaryMaeMs)}ms"))
+                    if (report.approved) {
+                        val accountId = ChatGptAuth.get(this).state.value.activeProfileId
+                        if (accountId != null && AiTaskSettings(this).read(accountId).autoApplyValidatedEngine &&
+                            AiCalibrationStore(this).provenance(accountId, candidate.profile.id) != null) {
+                            content.addView(button("검증 후 자동 적용 상태 확인") { showCandidates() })
+                            worker.execute {
+                                val requested = if (ChatGptAuth.get(this).state.value.activeProfileId == accountId && AiTaskSettings(this).read(accountId).autoApplyValidatedEngine) controller.activate(candidate.profile.id) else Result.failure(IllegalStateException("Account or setting changed"))
+                                if (requested.isSuccess) bridge.retryPendingCommand()
+                                runOnUiThread {
+                                    if (!isFinishing && !isDestroyed && revision == viewRevision) content.addView(text(if (requested.isSuccess)
+                                        "자동 적용 요청 저장 · 다음 세트의 실제 워치 사용 확인 대기" else "전체 검증 조건을 아직 통과하지 못해 이전 설정을 유지해요"))
+                                }
+                            }
+                        }
+                    }
                     if (!report.approved) content.addView(text(report.failures.map(::explainFailure).joinToString("\n")))
                     val excluded = report.rows.count { it.exclusionReason != null }
                     if (excluded > 0) content.addView(text("사용할 수 없는 워치 기록 ${excluded}세트도 전체 분모에 포함했어요. 중단·다른 설정·에뮬레이션·시계 불일치 기록은 채택 증거로 쓰지 않아요."))

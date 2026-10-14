@@ -30,6 +30,7 @@ object WearSync {
     const val PATH_LIVE = "/kcoach/live"
     const val PATH_SAMPLE = "/kcoach/sample"
     const val PATH_PAIR = "/kcoach/pair"
+    const val PATH_HEART_RATE_SAMPLE = "/kcoach/heart-rate-sample"
     const val PATH_HEARTBEAT = "/kcoach/heartbeat"
     const val PATH_WATCH_UI_READY = "/kcoach/watch-ui-ready"
     const val PATH_COMPLETE = "/kcoach/complete"

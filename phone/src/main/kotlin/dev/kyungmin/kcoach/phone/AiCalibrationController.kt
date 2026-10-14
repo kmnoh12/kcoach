@@ -73,6 +73,7 @@ internal class AiCalibrationController(
     fun start() {
         if (state.value.busy || !state.value.loaded || state.value.input == null) return
         val accountId = state.value.accountId ?: return
+        if (!AiTaskSettings(app).read(accountId).calibrationEnabled) { state.value = state.value.copy(message = "설정에서 GPT 보정 도움을 켜 주세요"); return }
         val id = state.value.candidateId
         val validationStarted = System.nanoTime()
         val options = try { auth.selectedWorkRequestOptions() } catch (_: Exception) {

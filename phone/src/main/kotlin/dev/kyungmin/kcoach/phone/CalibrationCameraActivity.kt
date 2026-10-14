@@ -63,6 +63,10 @@ class CalibrationCameraActivity : ComponentActivity() {
     private var watchStartScheduled = false
     @Volatile private var selectedShadow: PatternProfileCommand? = null
     private var encoder: ReferenceVideoEncoder? = null
+    @Volatile private var poseReady = false
+    @Volatile private var previewLeft = true
+    private var poseReadySinceNs: Long? = null
+    private lateinit var startReviewed: CheckBox
     private var firstCameraNs: Long? = null
     private var lastModelMs = -1L
     private var frameIndex = 0L
@@ -99,13 +103,16 @@ class CalibrationCameraActivity : ComponentActivity() {
         setPadding(24, 16, 24, 20); setBackgroundColor(Color.rgb(9, 12, 11))
         addView(TextView(this@CalibrationCameraActivity).apply { text = "${exerciseName}\n영상으로 동작 확인"; textSize = 22f; setTextColor(Color.WHITE) })
         addView(TextView(this@CalibrationCameraActivity).apply {
-            val contract = ExerciseMeasurementContracts.resolve(exerciseId)
-            text = if (contract.recipe == MeasurementRecipe.SQUAT) "폰을 고정하고 머리부터 발까지 보이게 해 주세요."
-                else "폰을 고정하고 어깨·팔꿈치·손목과 몸통이 보이게 해 주세요. 평소 동작으로 6~8회부터 촬영해요."
+            val guide = CameraCaptureGuide.forExercise(exerciseId, intent.getBooleanExtra("watchOnLeft", true))
+            text = guide.direction + "\n" + guide.framing + "\n시작 · " + guide.startDescription + "\n평소 속도로 촬영하고 목표 횟수는 종료 후 확인해요."
             setTextColor(Color.LTGRAY); textSize = 14f; setPadding(0, 10, 0, 10)
         })
         hand = CheckBox(this@CalibrationCameraActivity).apply { text = "워치를 왼손에 착용"; isChecked = intent.getBooleanExtra("watchOnLeft", true); setTextColor(Color.WHITE) }
+        previewLeft = hand.isChecked
+        hand.setOnCheckedChangeListener { _, checked -> previewLeft = checked; poseReady = false; poseReadySinceNs = null }
         addView(hand)
+        startReviewed = CheckBox(this@CalibrationCameraActivity).apply { text = "안내의 시작 자세를 직접 확인했어요"; setTextColor(Color.WHITE) }
+        addView(startReviewed)
         this@CalibrationCameraActivity.orientation = Spinner(this@CalibrationCameraActivity).apply {
             adapter = ArrayAdapter(this@CalibrationCameraActivity, android.R.layout.simple_spinner_dropdown_item,
                 arrayOf("워치 화면 방향 선택", "손등 쪽", "손바닥 쪽"))
@@ -184,7 +191,9 @@ class CalibrationCameraActivity : ComponentActivity() {
     private fun beginCapture() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) { permission.launch(Manifest.permission.CAMERA); return }
         if (!cameraReady || capture != null || starting) return
+        if (!poseReady) { status.text = "필수 관절과 시작 위치가 보이게 맞춘 뒤 촬영해 주세요."; return }
         if (orientation.selectedItemPosition == 0) { status.text = "워치 화면이 손등 쪽인지 손바닥 쪽인지 선택해 주세요."; return }
+        if (CameraCaptureGuide.forExercise(exerciseId, hand.isChecked).metric == null && !startReviewed.isChecked) { status.text = "이 동작의 시작 자세는 안내와 영상을 직접 확인해 주세요."; return }
         starting = true; start.isEnabled = false
         Wearable.getNodeClient(this).connectedNodes.addOnSuccessListener { nodes ->
             if (nodes.isEmpty()) { starting = false; start.isEnabled = true; status.text = "워치를 연결한 뒤 함께 촬영해 주세요."; return@addOnSuccessListener }
@@ -274,6 +283,14 @@ class CalibrationCameraActivity : ComponentActivity() {
             val world = result.worldLandmarks().map { points -> points.map {
                 CameraLandmark(it.x().toDouble(), it.y().toDouble(), it.z().toDouble(), it.visibility().orElse(null)?.toDouble(), it.presence().orElse(null)?.toDouble())
             } }
+            val guide = CameraCaptureGuide.forExercise(exerciseId, previewLeft)
+            val pose = normalized.singleOrNull()
+            val worldPose = world.singleOrNull()
+            val readyMetric = if (pose != null && worldPose != null) guide.metric?.let { motion -> UpperBodyPoseGeometry.metric(worldPose.mapIndexed { i, p -> PosePoint(p.x, p.y, p.z, minOf(pose[i].visibility ?: 0.0, pose[i].presence ?: 0.0)) }, motion, previewLeft) } else null
+            val poseCandidate = pose != null && guide.visible(pose) && (guide.metric == null || readyMetric?.let { guide.metric!!.atRest(it) } == true)
+            if (poseCandidate) { if (poseReadySinceNs == null) poseReadySinceNs = cameraNs } else poseReadySinceNs = null
+            poseReady = poseReadySinceNs?.let { cameraNs - it >= 200_000_000L } == true
+            if (capture == null && !starting) main.post { if (cameraReady) status.text = if (poseReady) { if (guide.metric == null) "필수 관절 확인 · 안내의 시작 자세를 직접 확인해 주세요" else "관절과 시작 위치 확인 · 촬영을 시작할 수 있어요" } else "필수 관절과 시작 위치가 보이게 맞춰 주세요" }
             val active = capture
             if (active != null) {
                 val first = firstCameraNs ?: cameraNs.also { firstCameraNs = it }

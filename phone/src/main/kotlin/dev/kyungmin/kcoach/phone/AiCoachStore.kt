@@ -20,8 +20,12 @@ internal data class AiCoachProfile(
     val experience: String = "",
     val constraints: String = "",
     val equipment: String = "",
+    val ageYears: Int? = null,
+    val calorieBasis: String = "",
 ) {
     init {
+        require(ageYears == null || ageYears in 1..120)
+        require(calorieBasis in setOf("", "RESISTANCE_MULTIPLE_8_15"))
         require(id.isNotBlank() && revision >= 0)
         require(heightCm == null || (heightCm.isFinite() && heightCm in 50.0..260.0))
         require(weightKg == null || (weightKg.isFinite() && weightKg in 10.0..500.0))
@@ -33,12 +37,13 @@ internal data class AiCoachProfile(
     fun json(): JSONObject = JSONObject().put("id", id).put("revision", revision)
         .put("height_cm", heightCm ?: JSONObject.NULL).put("weight_kg", weightKg ?: JSONObject.NULL)
         .put("weight_measured_on", weightMeasuredOn).put("body_fat_percent", bodyFatPercent ?: JSONObject.NULL)
+        .put("age_years", ageYears ?: JSONObject.NULL).put("calorie_basis", calorieBasis)
         .put("goal", goal).put("experience", experience).put("constraints", constraints).put("equipment", equipment)
     companion object {
         fun fromJson(json: JSONObject) = AiCoachProfile(json.getString("id"), json.getLong("revision"),
             json.optionalDouble("height_cm"), json.optionalDouble("weight_kg"), json.optString("weight_measured_on"),
             json.optionalDouble("body_fat_percent"), json.optString("goal"), json.optString("experience"),
-            json.optString("constraints"), json.optString("equipment"))
+            json.optString("constraints"), json.optString("equipment"), if (json.isNull("age_years")) null else json.getInt("age_years"), json.optString("calorie_basis"))
     }
 }
 

@@ -948,7 +948,8 @@ class MainActivity : ComponentActivity() {
         )
         showStandalone(ComposeView(this).apply {
             setContent { WorkoutResultScreen(ui, back = { onBackPressed() }, toRecords = { showRecords() },
-                aiReview = { dev.kyungmin.kcoach.phone.ui.WorkoutReviewPanel(result.sessionId) }) }
+                aiReview = { dev.kyungmin.kcoach.phone.ui.WorkoutReviewPanel(result.sessionId) },
+                summary = { dev.kyungmin.kcoach.phone.ui.WorkoutSummaryPanel(result.sessionId) }) }
         })
         visibleWorkoutResultSessionId = result.sessionId
     }

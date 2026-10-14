@@ -160,6 +160,28 @@ class WorkoutReviewTest {
         assertNotNull(recovered.state.value.answerJson); assertEquals(1, calls.get())
     }
 
+    @Test fun automaticReviewRunsOnceOnlyWhenEnabledAndRequiresAnOwnedRecord() {
+        val context = fixture(); val auth = auth(); val calls = AtomicInteger()
+        val http = object : ChatGptWorkHttp {
+            override fun execute(accessToken: String, body: JSONObject, cancellation: ChatGptWorkCancellation, onDelta: (String) -> Unit): ChatGptResponseResult {
+                calls.incrementAndGet(); return ChatGptResponseResult("auto", "actual", answer(context).toString())
+            }
+        }
+        val controller = WorkoutReviewController(app, auth, http)
+        controller.automatic("fixture-a", "after")
+        shadowOf(Looper.getMainLooper()).idle(); assertEquals(0, calls.get())
+        AiTaskSettings(app).save("fixture-a", AiTaskPreferences(automaticReview = true))
+        controller.automatic("fixture-a", "after")
+        await("Automatic review did not complete") { controller.state.value.answerJson != null && !controller.state.value.busy }
+        assertEquals(1, calls.get())
+        controller.automatic("fixture-a", "after")
+        await("Automatic cache did not restore") { controller.state.value.loaded && !controller.state.value.busy }
+        assertEquals(1, calls.get())
+        controller.automatic("fixture-a", "not-owned")
+        await("Missing owned context did not settle") { controller.state.value.sessionId == "not-owned" && controller.state.value.loaded }
+        assertEquals(1, calls.get())
+    }
+
     @Test fun cancellationRejectsLateRepliesWithoutChangingWorkoutRecords() {
         val context = fixture(); val auth = auth(); val started = CountDownLatch(1); val release = CountDownLatch(1)
         val transport = object : ChatGptWorkHttp {

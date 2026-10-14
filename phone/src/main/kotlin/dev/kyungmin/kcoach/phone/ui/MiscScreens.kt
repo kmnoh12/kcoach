@@ -223,13 +223,15 @@ class ResultUi(
 )
 
 @Composable
-fun WorkoutResultScreen(result: ResultUi, back: () -> Unit, toRecords: () -> Unit, aiReview: (@Composable () -> Unit)? = null) {
+fun WorkoutResultScreen(result: ResultUi, back: () -> Unit, toRecords: () -> Unit, aiReview: (@Composable () -> Unit)? = null, summary: (@Composable () -> Unit)? = null) {
     Column(Modifier.fillMaxSize().background(KColors.Bg).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 20.dp)) {
         DetailHeader("운동 완료 결과", back)
         Spacer(Modifier.height(24.dp))
         Text(result.title, color = KColors.White, fontSize = 32.sp, fontWeight = FontWeight.Medium)
         Spacer(Modifier.height(8.dp))
         Text(result.subtitle, color = KColors.Muted, fontSize = 14.sp)
+        Spacer(Modifier.height(18.dp))
+        summary?.invoke()
         if (result.records.isNotEmpty()) {
             Spacer(Modifier.height(28.dp))
             Row(verticalAlignment = Alignment.Bottom) {

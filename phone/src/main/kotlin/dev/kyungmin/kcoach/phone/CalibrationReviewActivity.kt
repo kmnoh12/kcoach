@@ -143,6 +143,16 @@ class CalibrationReviewActivity : ComponentActivity() {
             addView(button("이전 프레임") { selectFrame((position - 1).coerceAtLeast(0)); slider.progress = position }, LinearLayout.LayoutParams(0, -2, 1f))
             addView(button("다음 프레임") { selectFrame((position + 1).coerceAtMost(frames.lastIndex)); slider.progress = position }, LinearLayout.LayoutParams(0, -2, 1f))
         })
+        content.addView(button("영상 반복 구간 자동 제안") {
+            val proposed = CameraRepProposals.propose(frames, selected.exerciseId, selected.watchOnLeft)
+            if (proposed.isEmpty()) { toast("보이는 기준 위치로 완성된 반복을 제안하지 못했어요. 수동으로 확인해 주세요.") }
+            else android.app.AlertDialog.Builder(this).setMessage("영상 후보 ${proposed.size}회예요. 실제 시작·전환·복귀 프레임을 확인하고 틀린 구간을 수정해 주세요. 현재 구간 목록을 바꿀까요?")
+                .setNegativeButton("유지", null).setPositiveButton("후보로 채우기") { _, _ ->
+                    cycles = proposed.toMutableList()
+                    getSharedPreferences("camera-rep-proposals", MODE_PRIVATE).edit().putString(id, org.json.JSONArray(proposed.map { c -> org.json.JSONArray(listOf(c.startNs, c.turnaroundNs, c.endNs)) }).toString()).commit()
+                    renderCycles(); toast("카메라 제안 · 아직 사람 확인 정답이 아니에요")
+                }.show()
+        })
         val mapping = reviews.alignment(id).getOrNull()
         val received = captures.sensor(id).getOrNull()
         content.addView(text(if (mapping == null) "워치 원본 또는 시간 확인이 부족해요. 자료를 받은 뒤 새로고침해 주세요."

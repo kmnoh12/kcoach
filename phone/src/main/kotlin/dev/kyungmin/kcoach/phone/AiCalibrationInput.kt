@@ -22,6 +22,7 @@ internal class AiCalibrationInputBuilder(private val context: Context) {
         val local = PatternCalibrationReplayer.replay(candidate.profile, sets, counts, checkpoint)
         val evidence = linkedSetOf("candidate:${candidate.profile.id}:${candidate.sha256}")
         val clips = JSONArray(); val reps = JSONArray()
+        val declaredSetups = mutableSetOf<String>()
         var omitted = 0
         var representativeBudgetReached = false
         sets.forEach { set ->
@@ -29,9 +30,13 @@ internal class AiCalibrationInputBuilder(private val context: Context) {
             val capture = captures.load(set.captureId).getOrThrow(); val review = reviews.load(set.captureId).getOrThrow()
             val sensor = captures.sensor(set.captureId).getOrThrow(); val frames = captures.frames(set.captureId).getOrThrow()
             val mapping = reviews.alignment(set.captureId).getOrThrow()
+            val setup = sensor.manifest.payload["startWristContext"].orEmpty()
+            declaredSetups.add(setup)
+            require(declaredSetups.size == 1) { "Declared wrist setup differs across training sources; review compatible sources first" }
             val clipEvidence = "capture:${set.captureId}:${set.rawSha256}"
             evidence.add(clipEvidence)
             clips.put(JSONObject().put("capture_id", set.captureId).put("raw_hash", set.rawSha256)
+                .put("declared_wrist_setup", setup.ifBlank { "UNSPECIFIED" }).put("watch_top_direction", "UNKNOWN_UNLESS_DECLARED")
                 .put("review_revision", review.revision).put("reference_digest", ReviewedPatternBuilder.referenceDigest(set.references.filter { it.eligibleForLearning }))
                 .put("camera_frames_hash", hashFile(File(captures.videoFile(set.captureId).parentFile, "frames.jsonl"), checkpoint))
                 .put("video_hash", hashFile(captures.videoFile(set.captureId), checkpoint))

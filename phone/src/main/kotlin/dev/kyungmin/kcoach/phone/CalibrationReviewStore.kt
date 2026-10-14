@@ -131,6 +131,8 @@ class CalibrationReviewStore(private val context: Context) {
             .put("count", review.countReference?.let { JSONObject().put("reps", it.reps).put("reviewedAtMs", it.reviewedAtMs) } ?: JSONObject.NULL)
             .put("cameraCycles", cycles(cameraCycles ?: cameraCycles(review.captureId).getOrThrow()))
             .put("cameraObservedMetrics", review.cameraMetrics?.let(::encodeMetrics) ?: JSONObject.NULL)
+            .put("cameraProposalOrigin", context.getSharedPreferences("camera-rep-proposals", Context.MODE_PRIVATE).getString(review.captureId, null)?.let(::JSONArray) ?: JSONObject.NULL)
+            .put("confirmationSource", "USER_REVIEWED_VIDEO")
             .put("references", JSONArray(review.references.map { reference -> JSONObject()
                 .put("cycle", cycles(listOf(reference.cycle)).getJSONObject(0)).put("uncertaintyNs", reference.alignmentUncertaintyNs ?: JSONObject.NULL)
                 .put("alignmentVerified", reference.alignmentVerified).put("sensorCovered", reference.sensorCoverageComplete)

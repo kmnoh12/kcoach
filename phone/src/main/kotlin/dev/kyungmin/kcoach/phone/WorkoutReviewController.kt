@@ -19,11 +19,25 @@ internal class WorkoutReviewController(context: Context, private val auth: ChatG
     private val handler = Handler(Looper.getMainLooper())
     private val worker = Executors.newSingleThreadExecutor { Thread(it, "kcoach-workout-review").apply { isDaemon = true } }
     val state = mutableStateOf(WorkoutReviewUi())
+    private val automaticQueue = java.util.ArrayDeque<Pair<String, String>>()
+    private var automaticSession: String? = null
     private var ticket = 0L
     private var cancellation: ChatGptWorkCancellation? = null
     private var request: JSONObject? = null
     private fun instructions(): String = app.assets.open("ai-coach/coach-skill.md").bufferedReader().use { it.readText() } + "\n\n" +
         app.assets.open("ai-coach/workout-review.prompt.md").bufferedReader().use { it.readText() }
+
+    fun automatic(accountId: String, sessionId: String) {
+        if (automaticQueue.none { it.second == sessionId } && automaticSession != sessionId) automaticQueue.add(accountId to sessionId)
+        drainAutomatic()
+    }
+    private fun drainAutomatic() {
+        if (state.value.busy || automaticSession != null || automaticQueue.isEmpty()) return
+        val (account, session) = automaticQueue.removeFirst()
+        if (auth.state.value.activeProfileId != account || !AiTaskSettings(app).read(account).automaticReview) { drainAutomatic(); return }
+        bind(account, session)
+        automaticSession = session
+    }
 
     fun bind(accountId: String?, sessionId: String) {
         if (state.value.accountId == accountId && state.value.sessionId == sessionId && state.value.busy) return
@@ -52,6 +66,10 @@ internal class WorkoutReviewController(context: Context, private val auth: ChatG
             handler.post {
                 if (ticket != generation) return@post
                 state.value = prepared.getOrElse { state.value.copy(loaded = true, message = "운동 프로필에 이 기록을 연결한 뒤 다시 열어 주세요") }
+                if (automaticSession == sessionId) {
+                    automaticSession = null
+                    if (state.value.context != null && state.value.answerJson == null) start() else drainAutomatic()
+                }
             }
         }
     }
@@ -59,6 +77,7 @@ internal class WorkoutReviewController(context: Context, private val auth: ChatG
     fun start() {
         if (state.value.busy || !state.value.loaded) return
         val accountId = state.value.accountId ?: return
+        if (!AiTaskSettings(app).read(accountId).reviewEnabled) { state.value = state.value.copy(message = "설정에서 운동 리뷰를 켜 주세요"); return }
         val sessionId = state.value.sessionId
         val options = try { auth.selectedWorkRequestOptions() } catch (_: Exception) {
             state.value = state.value.copy(message = "설정에서 계정 연결·한도 사용·모델 선택을 확인해 주세요"); return
@@ -80,8 +99,11 @@ internal class WorkoutReviewController(context: Context, private val auth: ChatG
                             val saved = store.lookup(key)
                             if (saved?.optString("status") == "COMPLETED") {
                                 WorkoutReviewAnswer.parse(saved.getJSONObject("answer").toString(), context)
-                                state.value = state.value.copy(busy = false, context = context, answerJson = saved.getJSONObject("answer").toString(),
-                                    model = saved.getString("actual_model"), message = "같은 기록·모델의 저장된 리뷰를 불러왔어요", stale = false)
+                                state.value = state.value.copy(
+                                    busy = false, context = context, answerJson = saved.getJSONObject("answer").toString(),
+                                    model = saved.getString("actual_model"), message = "같은 기록·모델의 저장된 리뷰를 불러왔어요", stale = false,
+                                )
+                                handler.post { drainAutomatic() }
                                 return@onSuccess
                             }
                             request = store.begin(key, accountId, context, options, aiCoachHash(instructions))
@@ -107,6 +129,7 @@ internal class WorkoutReviewController(context: Context, private val auth: ChatG
                                                                 store.complete(row.getString("key"), row.getString("request_id"), context, response)
                                                                 cancellation = null; request = null
                                                                 state.value = state.value.copy(busy = false, answerJson = response.text, model = response.model, message = "리뷰를 저장했어요", stale = false)
+                                                                drainAutomatic()
                                                             } catch (_: Exception) { failure(generation, "리뷰를 저장하지 못했어요. 운동 기록은 유지돼요", "save_failed") }
                                                         }
                                                 }
@@ -124,8 +147,10 @@ internal class WorkoutReviewController(context: Context, private val auth: ChatG
         request?.let { row -> runCatching { store.end(row.getString("key"), row.getString("request_id"), "FAILED", code) } }
         cancellation = null; request = null
         state.value = state.value.copy(busy = false, answerJson = null, message = message)
+        drainAutomatic()
     }
     fun cancel() {
+        automaticSession = null
         ++ticket; cancellation?.cancel(); cancellation = null
         request?.let { row -> runCatching { store.end(row.getString("key"), row.getString("request_id"), "CANCELLED", "cancelled") } }
         request = null

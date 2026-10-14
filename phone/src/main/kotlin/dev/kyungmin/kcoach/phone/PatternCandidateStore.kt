@@ -21,6 +21,17 @@ class PatternCandidateStore(private val context: Context) {
     private val captures = CalibrationCaptureStore(context)
     private val reviews = CalibrationReviewStore(context)
 
+    /** Historical report snapshots; activation always rechecks current originals and labels. */
+    fun savedValidationReports(candidateId: String): Result<List<JSONObject>> = synchronized(lock) { runCatching {
+        val candidate = load(candidateId).getOrThrow()
+        listOf("validation", "native-validation").mapNotNull { kind ->
+            val rows = File(root, "$candidateId-$kind").listFiles().orEmpty().filter { it.extension == "json" && it.length() <= 1_000_000 }
+                .mapNotNull { file -> runCatching { JSONObject(file.readText()) }.getOrNull() }
+                .filter { it.optString("candidateId") == candidateId && it.optString("candidateHash") == candidate.sha256 }
+            rows.maxByOrNull { it.getLong("evaluatedAtMs") }
+        }
+    } }
+
     fun localUserId(): String = synchronized(lock) {
         val prefs = context.getSharedPreferences("measurement-owner", Context.MODE_PRIVATE)
         prefs.getString("id", null) ?: UUID.randomUUID().toString().also { check(prefs.edit().putString("id", it).commit()) }

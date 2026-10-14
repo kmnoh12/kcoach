@@ -1214,6 +1214,11 @@ class WearWorkoutService : Service(), SensorEventListener {
                 val reading = event.values.firstOrNull()
                 heartRate = reading?.takeIf { it.isFinite() && it in 20f..240f }?.toInt() ?: 0
                 lastHeartRateNs = event.timestamp.takeIf { heartRate > 0 }
+                val ageMs = (android.os.SystemClock.elapsedRealtimeNanos() - event.timestamp) / 1_000_000L
+                if (heartRate > 0 && event.accuracy in 1..3 && ageMs in 0..10_000 && sessionId.isNotBlank()) {
+                    sendToPhone(WearSync.PATH_HEART_RATE_SAMPLE, listOf("1", sessionId, event.timestamp, heartRate, ageMs, event.accuracy,
+                        if (paused) "PAUSED" else if (resting) "RESTING" else "WORKING").joinToString("|"))
+                }
             }
         }
         lastSensorAccuracy = event.accuracy

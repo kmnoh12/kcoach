@@ -10,7 +10,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 data class ChatGptWorkMessage(val role: String, val text: String) {
     init { require(role in setOf("user", "assistant", "developer") && text.isNotBlank() && text.length <= 60_000) }
 }
-data class ChatGptResponseResult(val responseId: String, val model: String, val text: String)
+data class ChatGptResponseResult(val responseId: String, val model: String, val text: String, val outputJson: String = "[]")
 class ChatGptWorkError(val userMessage: String, val code: String = "request_failed", val httpStatus: Int? = null) : Exception(userMessage)
 
 internal object ChatGptResponseRequest {
@@ -77,8 +77,9 @@ internal object ChatGptResponseStream {
                         }
                     }
                     val text = parts.joinToString("\n")
-                    if (text.isBlank() || text.length > 120_000) throw ChatGptWorkError("완료된 답변을 확인할 수 없어요", "invalid_completion")
-                    return ChatGptResponseResult(id, model, text)
+                    val hasCalls = (0 until output.length()).any { output.optJSONObject(it)?.optString("type") == "function_call" }
+                    if ((!hasCalls && text.isBlank()) || text.length > 120_000) throw ChatGptWorkError("완료된 답변을 확인할 수 없어요", "invalid_completion")
+                    return ChatGptResponseResult(id, model, text, output.toString())
                 }
             }
             return null

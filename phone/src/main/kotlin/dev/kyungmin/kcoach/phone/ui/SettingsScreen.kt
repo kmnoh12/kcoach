@@ -30,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.kyungmin.kcoach.phone.AiTaskPreferences
 import dev.kyungmin.kcoach.phone.ChatGptConnectionUi
 import dev.kyungmin.kcoach.phone.ChatGptModelSettingsUi
 
@@ -40,6 +41,7 @@ class SettingsActions(
     val chooseModel: (String) -> Unit,
     val chooseEffort: (String?) -> Unit,
     val profile: () -> Unit = {},
+    val saveTasks: (AiTaskPreferences) -> Unit = {},
 )
 
 fun reasoningLabel(effort: String): String = when (effort) {
@@ -55,7 +57,7 @@ fun reasoningLabel(effort: String): String = when (effort) {
 }
 
 @Composable
-fun SettingsScreen(connection: ChatGptConnectionUi, modelUi: ChatGptModelSettingsUi, actions: SettingsActions) {
+fun SettingsScreen(connection: ChatGptConnectionUi, modelUi: ChatGptModelSettingsUi, actions: SettingsActions, tasks: AiTaskPreferences = AiTaskPreferences()) {
     var picker by rememberSaveable { mutableStateOf<String?>(null) }
     val model = modelUi.selectedModel
     val canChoose = connection.connected && connection.planAllowed && !connection.busy && modelUi.loaded && !modelUi.loading
@@ -110,7 +112,20 @@ fun SettingsScreen(connection: ChatGptConnectionUi, modelUi: ChatGptModelSetting
             Text("모델과 추론 강도는 계정별로 저장돼요. 설정 변경만으로 한도가 소모되지는 않아요.", color = KColors.Muted, fontSize = 13.sp)
             Spacer(Modifier.height(8.dp))
             TextButton(onClick = actions.profile) { Text("내 운동 프로필") }
-            Text("운동 상담은 메뉴에서 열 수 있어요. 종료 리뷰와 GPT 보정은 준비 중이에요", color = KColors.Muted, fontSize = 13.sp)
+            Text("운동 상담은 메뉴에서, GPT 보정 도움은 내 측정 엔진에서 요청해요", color = KColors.Muted, fontSize = 13.sp)
+            Spacer(Modifier.height(20.dp))
+            listOf(Triple("운동 상담", tasks.chatEnabled, { checked: Boolean -> tasks.copy(chatEnabled = checked) }),
+                Triple("운동 리뷰", tasks.reviewEnabled, { checked: Boolean -> tasks.copy(reviewEnabled = checked) }),
+                Triple("GPT 보정 도움", tasks.calibrationEnabled, { checked: Boolean -> tasks.copy(calibrationEnabled = checked) }),
+                Triple("운동 종료 후 자동 리뷰", tasks.automaticReview, { checked: Boolean -> tasks.copy(automaticReview = checked) }),
+                Triple("새 운동을 현재 프로필에 연결", tasks.linkNewWorkouts, { checked: Boolean -> tasks.copy(linkNewWorkouts = checked) }),
+                Triple("검증 통과한 개인 엔진 자동 적용", tasks.autoApplyValidatedEngine, { checked: Boolean -> tasks.copy(autoApplyValidatedEngine = checked) })).forEach { (label, checked, update) ->
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(label, Modifier.weight(1f), color = KColors.Soft, fontSize = 14.sp)
+                    androidx.compose.material3.Switch(checked, onCheckedChange = { actions.saveTasks(update(it)) }, enabled = connection.connected)
+                }
+            }
+            Text("자동 리뷰는 연결한 기록에만 실행하며 선택 모델의 구독 한도를 사용해요. 새 운동 연결은 현재 프로필 소유로 저장돼요. 엔진은 독립·워치 실측 검증을 모두 통과한 뒤 다음 세트부터 요청하고 실제 사용 확인을 기다려요.", color = KColors.Muted, fontSize = 12.sp)
         }
         if (picker == "model" && canChoose) {
             AlertDialog(onDismissRequest = { picker = null }, title = { Text("작업 모델 선택") }, text = {

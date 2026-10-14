@@ -29,6 +29,13 @@ internal class AiCalibrationStore(context: Context) {
         runs.keys().asSequence().map { runs.getJSONObject(it) }.filter { it.getString("account_id") == accountId &&
             it.getString("base_candidate_id") == candidateId }.maxByOrNull { it.getLong("started_at_ms") }
     }
+    fun provenance(accountId: String, candidateId: String): JSONObject? = synchronized(lock) {
+        val runs = read().getJSONObject("runs")
+        runs.keys().asSequence().map { runs.getJSONObject(it) }.filter { row -> row.getString("account_id") == accountId &&
+            row.getString("status") == "COMPLETED" && (row.getString("base_candidate_id") == candidateId ||
+                row.optJSONArray("candidates")?.let { candidates -> (0 until candidates.length()).any { candidates.getJSONObject(it).getString("id") == candidateId } } == true) }
+            .maxByOrNull { it.getLong("started_at_ms") }
+    }
     fun begin(key: String, accountId: String, input: AiCalibrationInput, options: JSONObject, promptHash: String): JSONObject = synchronized(lock) {
         val root = read(); val runs = root.getJSONObject("runs")
         val old = runs.optJSONObject(key)

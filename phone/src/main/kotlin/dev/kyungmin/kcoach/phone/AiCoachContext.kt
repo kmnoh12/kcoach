@@ -6,18 +6,27 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 internal data class AiCoachContext(val profileId: String, val json: String, val evidenceIds: Set<String>)
-internal data class AiCoachAnswer(val text: String, val citations: List<String>) {
+internal data class AiCoachAnswer(val text: String, val citations: List<String>, val memoryProposals: JSONArray = JSONArray()) {
     companion object {
         fun parse(text: String, context: AiCoachContext): AiCoachAnswer {
             val json = JSONObject(text)
-            require(json.keys().asSequence().toSet() == setOf("answer", "citations"))
+            require(json.keys().asSequence().toSet() in setOf(setOf("answer", "citations"), setOf("answer", "citations", "memory_proposals")))
             val answer = json.opt("answer") as? String ?: error("Invalid answer text")
             require(answer.isNotBlank() && answer.length <= 12_000)
             val refs = json.getJSONArray("citations")
             require(refs.length() <= context.evidenceIds.size)
             val citations = (0 until refs.length()).map { refs.get(it) as? String ?: error("Invalid citation") }
             require(citations.distinct().size == citations.size && citations.all { it in context.evidenceIds })
-            return AiCoachAnswer(answer, citations)
+            val proposals = json.optJSONArray("memory_proposals") ?: JSONArray()
+            require(proposals.length() <= 3)
+            for (i in 0 until proposals.length()) {
+                val row = proposals.getJSONObject(i)
+                require(row.keys().asSequence().toSet() == setOf("text", "citations"))
+                require(row.getString("text").isNotBlank() && row.getString("text").length <= 800)
+                val refs = row.getJSONArray("citations")
+                require(refs.length() in 1..20 && (0 until refs.length()).all { refs.get(it) is String && refs.getString(it) in context.evidenceIds })
+            }
+            return AiCoachAnswer(answer, citations, proposals)
         }
     }
 }
@@ -34,6 +43,7 @@ internal class AiCoachContextBuilder(private val context: Context) {
         val rows = JSONArray()
         val comparisons = JSONArray()
         val root = JSONObject().put("profile", profile.json()).put("personal_summary", summary)
+            .put("model_interpretations", AiCoachInterpretationStore(context).current(accountId, history))
             .put("records", rows).put("comparisons", comparisons)
             .put("evidence_revisions", revisions).put("records_linked", history.linkedCount)
             .put("records_available", records.size)
@@ -104,7 +114,7 @@ internal class AiCoachContextBuilder(private val context: Context) {
         return AiCoachContext(profile.id, encoded, ids)
     }
 
-    private fun recordJson(record: AiCoachHistoryRecord): JSONObject {
+    internal fun recordJson(record: AiCoachHistoryRecord): JSONObject {
         val saved = record.evidence
         val snapshot = saved.snapshot
         val done = snapshot.plannedSets.filter { it.completed }
@@ -136,6 +146,7 @@ internal class AiCoachContextBuilder(private val context: Context) {
             .put("record_reconciliation_pending", saved.analysisRevision != record.analysis.revision)
             .put("completed_sets", JSONArray(sets.map(::setJson))).put("sensor_summary", JSONArray(sensor))
             .put("sensor_rows_omitted", record.analysis.rows.size - sensor.size)
+            .put("capture_status", WorkoutCaptureStatus(context).read(snapshot))
             .put("planned_capture_states", JSONObject(snapshot.captureStates.mapValues { it.value.name }))
             .put("sets_omitted", done.size - sets.size)
     }

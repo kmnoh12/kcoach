@@ -72,9 +72,13 @@ internal fun WorkoutReviewContent(ui: WorkoutReviewUi, canStart: Boolean, modelL
                 val id = row.getString("exercise_id")
                 HorizontalDivider(color = KColors.Hairline)
                 TextButton(onClick = { expanded = if (expanded == id) null else id }, contentPadding = PaddingValues(0.dp)) {
-                    Column(Modifier.fillMaxWidth()) {
+                    Row(Modifier.fillMaxWidth()) {
+                        ResultExerciseAnimation(id)
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
                         Text(ui.context?.exerciseNames?.get(id).orEmpty(), color = KColors.White, fontSize = 16.sp)
                         Text(row.getString("headline"), color = KColors.Soft, fontSize = 14.sp)
+                        }
                     }
                 }
                 if (expanded == id) {

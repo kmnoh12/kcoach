@@ -625,6 +625,10 @@ class PhoneWearListenerService : WearableListenerService() {
                     sendBroadcast(Intent(ACTION_LIVE).setPackage(packageName).putExtra("payload", payload))
                 }
             }
+            WearSync.PATH_HEART_RATE_SAMPLE -> {
+                runCatching { WorkoutVitalsStore(this).receive(payload, System.currentTimeMillis()) }
+                    .onFailure { Log.w(TAG, "fresh heart sample rejected") }
+            }
             WearSync.PATH_SAMPLE -> {
                 prefs.edit().putString("lastSample", payload).apply()
                 sendBroadcast(Intent(ACTION_SAMPLE).setPackage(packageName).putExtra("payload", payload))
