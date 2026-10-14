@@ -13,16 +13,24 @@ internal class FinishedWorkoutStore(private val context: Context) {
     internal data class Evidence(val snapshot: WorkoutSnapshot, val title: String, val minutes: Int, val analysisRevision: Long)
 
     /** Read current snapshots, rather than stale projected totals, for a bounded AI context. */
-    fun recentEvidence(limit: Int = 30): List<Evidence> = synchronized(lock) {
+    fun recentEvidence(limit: Int = 30, sessionIds: Set<String>? = null): List<Evidence> = synchronized(lock) {
         require(limit in 1..100)
-        prefs.all.filterKeys { it.startsWith("session:") }.values.mapNotNull { value ->
+        readEvidence(sessionIds).take(limit)
+    }
+
+    /** Personal summaries and routine baselines use the whole owned history, not a recent window. */
+    fun evidenceForSessions(sessionIds: Set<String>): List<Evidence> = synchronized(lock) { readEvidence(sessionIds) }
+
+    private fun readEvidence(sessionIds: Set<String>?): List<Evidence> =
+        prefs.all.filterKeys { it.startsWith("session:") && (sessionIds == null || it.removePrefix("session:") in sessionIds) }.mapNotNull { (key, value) ->
             runCatching {
                 val record = JSONObject(value as String)
-                Evidence(WorkoutSnapshotCodec.decode(record.getString("snapshot")), record.getString("title"),
+                val snapshot = WorkoutSnapshotCodec.decode(record.getString("snapshot"))
+                require(key == "session:${snapshot.sessionId}")
+                Evidence(snapshot, record.getString("title"),
                     record.getInt("minutes"), record.optLong("analysisRevision", 0L))
             }.getOrNull()
-        }.sortedByDescending { it.snapshot.startedAtMs }.take(limit)
-    }
+        }.sortedWith(compareByDescending<Evidence> { it.snapshot.startedAtMs }.thenBy { it.snapshot.sessionId })
 
     fun finish(snapshot: WorkoutSnapshot, title: String, minutes: Int, usePounds: Boolean = false) = synchronized(lock) {
         if (snapshot.plannedSets.none { it.completed }) return@synchronized

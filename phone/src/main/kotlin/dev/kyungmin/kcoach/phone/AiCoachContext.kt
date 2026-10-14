@@ -24,71 +24,120 @@ internal data class AiCoachAnswer(val text: String, val citations: List<String>)
 
 internal class AiCoachContextBuilder(private val context: Context) {
     fun build(accountId: String, question: String): AiCoachContext {
-        val store = AiCoachStore(context)
-        val profile = store.profile(accountId) ?: error("Save a workout profile first")
-        val linked = store.sessionIds(accountId)
-        val recent = FinishedWorkoutStore(context).recentEvidence(100).filter { it.snapshot.sessionId in linked }
-        val relevant = recent.filter { record -> record.title.isNotBlank() && question.contains(record.title) ||
-            record.snapshot.plannedSets.any { it.exerciseName.isNotBlank() && question.contains(it.exerciseName) } }
-        val selected = (relevant + recent).distinctBy { it.snapshot.sessionId }.take(20)
-        val ids = linkedSetOf("profile:${profile.id}:${profile.revision}")
+        require(question.isNotBlank() && question.length <= 4_000)
+        val history = AiCoachHistoryReader(context).read(accountId)
+        val records = history.records
+        val summary = AiCoachSummaryStore(context).refresh(accountId, history)
+        val profile = history.profile
+        val ids = linkedSetOf("profile:${profile.id}:${profile.revision}", summary.getString("evidence_id"))
+        val revisions = JSONObject()
         val rows = JSONArray()
-        var truncated = selected.size < recent.size
-        var size = profile.json().toString().length
-        val included = mutableListOf<FinishedWorkoutStore.Evidence>()
-        selected.forEach { record ->
-            val snapshot = record.snapshot
-            val evidenceId = "session:${snapshot.sessionId}"
-            val done = snapshot.plannedSets.filter { it.completed }
-            val sets = done.take(60)
-            val analysis = SetAnalysisStore(context).readForSession(snapshot.sessionId, savedSnapshot = snapshot)
-            val sensor = analysis.rows.values.take(60).map { row ->
-                JSONObject().put("set_id", row.setId).put("exercise_id", row.exerciseId).put("set_index", row.setIndex)
-                    .put("watch_estimate", row.watchReps ?: JSONObject.NULL).put("phone_estimate", row.phoneReps ?: JSONObject.NULL)
-                    .put("confirmed_count", row.confirmedReps ?: JSONObject.NULL)
-                    .put("capture_id", row.captureId).put("signal_quality", row.signalQuality ?: JSONObject.NULL)
-                    .put("tempo_consistency", row.tempoConsistency ?: JSONObject.NULL)
-                    .put("wrist_motion_speed", row.wristMotionSpeed ?: JSONObject.NULL)
-                    .put("wrist_motion_range", row.wristMotionRange ?: JSONObject.NULL)
-                    .put("tracking_status", row.trackingStatus)
-                    .put("observed_wrist_motion", row.motionMetrics?.let { motion ->
-                        JSONObject().put("source", motion.source).put("observed_cycles", motion.reps.size)
-                            .put("average_cycle_ms", motion.averageCycleMs)
-                            .put("average_departure_ms", motion.averageDepartureMs).put("average_return_ms", motion.averageReturnMs)
-                            .put("average_concentric_ms", motion.averageConcentricMs ?: JSONObject.NULL)
-                            .put("average_eccentric_ms", motion.averageEccentricMs ?: JSONObject.NULL)
-                            .put("average_pause_ms", motion.averagePauseMs ?: JSONObject.NULL)
-                            .put("average_wrist_angular_speed_rad_s", motion.averageAngularSpeedRadS)
-                            .put("tempo_coefficient_of_variation", motion.tempoCoefficientOfVariation ?: JSONObject.NULL)
-                            .put("late_cycle_change_ratio", motion.lateCycleChangeRatio ?: JSONObject.NULL)
-                            .put("late_wrist_angular_travel_change_ratio", motion.lateWristAngularTravelChangeRatio ?: JSONObject.NULL)
-                    } ?: JSONObject.NULL)
-            }
-            val row = JSONObject().put("evidence_id", evidenceId).put("session_id", snapshot.sessionId)
-                .put("routine_id", snapshot.routineId).put("title", record.title).put("started_at_ms", snapshot.startedAtMs)
-                .put("minutes", record.minutes).put("analysis_revision", analysis.revision)
-                .put("snapshot_analysis_revision", record.analysisRevision)
-                .put("record_reconciliation_pending", record.analysisRevision != analysis.revision)
-                .put("completed_sets", JSONArray(sets.map(::setJson))).put("sensor_summary", JSONArray(sensor))
-                .put("planned_capture_states", JSONObject(snapshot.captureStates.mapValues { it.value.name }))
-                .put("sets_omitted", done.size - sets.size)
-            if (size + row.toString().length > 44_000) { truncated = true; return@forEach }
-            rows.put(row); ids.add(evidenceId); included.add(record); size += row.toString().length
-        }
         val comparisons = JSONArray()
-        included.take(8).forEach { current ->
-            val previous = recent.filter { it.snapshot.routineId == current.snapshot.routineId &&
-                it.snapshot.startedAtMs < current.snapshot.startedAtMs }.maxByOrNull { it.snapshot.startedAtMs }
-            if (previous != null && included.any { it.snapshot.sessionId == previous.snapshot.sessionId }) comparisons.put(compare(current, previous))
-            else if (previous != null) truncated = true
+        val root = JSONObject().put("profile", profile.json()).put("personal_summary", summary)
+            .put("records", rows).put("comparisons", comparisons)
+            .put("evidence_revisions", revisions).put("records_linked", history.linkedCount)
+            .put("records_available", records.size)
+            .put("count_sources_note", "watch_estimate/phone_estimate/phone_record_proposal은 알고리즘 추정·제안. completed_sets의 rep_source=MANUAL만 사용자 입력 횟수. observed_wrist_motion은 손목 관측값이며 관절 ROM·자세 점수가 아님.")
+            .put("coverage_note", "연결된 전체 완료 기록에서 직전 동일 루틴 기준을 찾음. 개인 요약은 전체 기록의 계산 사실이며 요청 원본은 질문 관련·최근 기록의 일부. 최신 분석을 읽되 수동 횟수를 우선함.")
+        val trends = summary.getJSONArray("recent_condition_trends")
+        for (i in 0 until trends.length()) {
+            val trend = trends.getJSONObject(i)
+            listOf("current_evidence_id", "baseline_evidence_id").forEach { field ->
+                if (!trend.isNull(field)) {
+                    val id = trend.getString(field)
+                    records.firstOrNull { "session:${it.evidence.snapshot.sessionId}" == id }?.let {
+                        ids.add(id); revisions.put(id, it.sourceRevision)
+                    }
+                }
+            }
         }
-        val root = JSONObject().put("profile", profile.json()).put("records", rows).put("comparisons", comparisons)
-            .put("evidence_index", JSONArray(ids.toList())).put("records_linked", linked.size)
-            .put("context_is_partial", truncated || linked.size > recent.size)
-            .put("coverage_note", "최근 100회 중 연결된 기록에서 질문 관련 운동과 최근 기록 최대 20회. 손목 신호는 자세 점수가 아님. 원본 센서 전체가 아닌 저장된 분석 요약.")
+        fun withinBudget(): Boolean {
+            root.put("evidence_index", JSONArray(ids.toList()))
+            return root.toString().length <= 57_000
+        }
+        val relevant = records.filter { record -> record.evidence.title.isNotBlank() && question.contains(record.evidence.title) ||
+            record.evidence.snapshot.plannedSets.any { it.exerciseName.isNotBlank() && question.contains(it.exerciseName) } }
+        val selected = (relevant + records).distinctBy { it.evidence.snapshot.sessionId }.take(20)
+        val snapshots = records.map { it.evidence.snapshot }
+        val included = linkedMapOf<String, AiCoachHistoryRecord>()
+        var partial = history.linkedCount > records.size
+        var recordBytes = 0
+        fun include(record: AiCoachHistoryRecord): Boolean {
+            val id = record.evidence.snapshot.sessionId
+            if (id in included) return true
+            val row = recordJson(record)
+            val length = row.toString().length
+            if (included.size >= 28 || recordBytes + length > 35_000) { partial = true; return false }
+            rows.put(row)
+            val evidenceId = "session:$id"
+            val alreadyKnown = evidenceId in ids
+            ids.add(evidenceId); revisions.put(evidenceId, record.sourceRevision)
+            if (!withinBudget()) {
+                rows.remove(rows.length() - 1)
+                if (!alreadyKnown) { ids.remove(evidenceId); revisions.remove(evidenceId) }
+                partial = true; return false
+            }
+            included[id] = record
+            if (record.evidence.snapshot.plannedSets.count { it.completed } > 60 || record.analysis.rows.size > 60) partial = true
+            recordBytes += length
+            return true
+        }
+        var comparisonBytes = 0
+        selected.forEach { current ->
+            val snapshot = current.evidence.snapshot
+            val previousId = dev.kyungmin.kcoach.core.WorkoutComparison.previous(snapshot, snapshots)?.sessionId
+            val previous = records.firstOrNull { it.evidence.snapshot.sessionId == previousId }
+            if (include(current) && (previous == null || include(previous)) && comparisons.length() < 8) {
+                val comparison = aiCoachComparison(current, previous, history)
+                val length = comparison.toString().length
+                if (comparisonBytes + length <= 9_000) {
+                    comparisons.put(comparison)
+                    if (withinBudget()) comparisonBytes += length
+                    else { comparisons.remove(comparisons.length() - 1); partial = true }
+                }
+                else partial = true
+            }
+        }
+        root.put("evidence_index", JSONArray(ids.toList())).put("context_is_partial", partial || included.size < records.size)
         val encoded = root.toString()
         require(encoded.length <= 60_000) { "Context exceeds supported request size" }
         return AiCoachContext(profile.id, encoded, ids)
+    }
+
+    private fun recordJson(record: AiCoachHistoryRecord): JSONObject {
+        val saved = record.evidence
+        val snapshot = saved.snapshot
+        val done = snapshot.plannedSets.filter { it.completed }
+        val sets = done.take(60)
+        val sensor = record.analysis.rows.values.take(60).map { row ->
+            JSONObject().put("set_id", row.setId).put("attempt_id", row.attemptId)
+                .put("exercise_id", row.exerciseId).put("set_index", row.setIndex)
+                .put("watch_estimate", row.watchReps ?: JSONObject.NULL).put("phone_estimate", row.phoneReps ?: JSONObject.NULL)
+                .put("phone_record_proposal", row.confirmedReps ?: JSONObject.NULL)
+                .put("capture_id", row.captureId).put("signal_quality", row.signalQuality ?: JSONObject.NULL)
+                .put("tempo_consistency", row.tempoConsistency ?: JSONObject.NULL).put("tracking_status", row.trackingStatus)
+                .put("observed_wrist_motion", row.motionMetrics?.let { motion ->
+                    JSONObject().put("source", motion.source).put("observed_cycles", motion.reps.size)
+                        .put("average_cycle_ms", motion.averageCycleMs)
+                        .put("average_departure_ms", motion.averageDepartureMs).put("average_return_ms", motion.averageReturnMs)
+                        .put("average_concentric_ms", motion.averageConcentricMs ?: JSONObject.NULL)
+                        .put("average_eccentric_ms", motion.averageEccentricMs ?: JSONObject.NULL)
+                        .put("average_pause_ms", motion.averagePauseMs ?: JSONObject.NULL)
+                        .put("average_wrist_angular_speed_rad_s", motion.averageAngularSpeedRadS)
+                        .put("tempo_coefficient_of_variation", motion.tempoCoefficientOfVariation ?: JSONObject.NULL)
+                        .put("late_cycle_change_ratio", motion.lateCycleChangeRatio ?: JSONObject.NULL)
+                        .put("late_wrist_angular_travel_change_ratio", motion.lateWristAngularTravelChangeRatio ?: JSONObject.NULL)
+                } ?: JSONObject.NULL)
+        }
+        return JSONObject().put("evidence_id", "session:${snapshot.sessionId}").put("session_id", snapshot.sessionId)
+            .put("source_revision", record.sourceRevision).put("routine_id", snapshot.routineId).put("title", saved.title)
+            .put("started_at_ms", snapshot.startedAtMs).put("minutes", saved.minutes).put("analysis_revision", record.analysis.revision)
+            .put("snapshot_analysis_revision", saved.analysisRevision)
+            .put("record_reconciliation_pending", saved.analysisRevision != record.analysis.revision)
+            .put("completed_sets", JSONArray(sets.map(::setJson))).put("sensor_summary", JSONArray(sensor))
+            .put("sensor_rows_omitted", record.analysis.rows.size - sensor.size)
+            .put("planned_capture_states", JSONObject(snapshot.captureStates.mapValues { it.value.name }))
+            .put("sets_omitted", done.size - sets.size)
     }
 
     private fun setJson(set: PlannedSetSnapshot) = JSONObject().put("set_id", set.setId).put("exercise_id", set.exerciseId)
@@ -96,32 +145,4 @@ internal class AiCoachContextBuilder(private val context: Context) {
         .put("weight_kg", set.weightKg ?: JSONObject.NULL).put("performed_reps", set.performedReps ?: JSONObject.NULL)
         .put("rep_source", set.repSource?.name ?: JSONObject.NULL).put("rpe", set.rpe ?: JSONObject.NULL)
         .put("equipment", set.equipment).put("grip", set.gripType).put("family", set.family)
-
-    private fun compare(current: FinishedWorkoutStore.Evidence, previous: FinishedWorkoutStore.Evidence): JSONObject {
-        fun groups(record: FinishedWorkoutStore.Evidence) = record.snapshot.plannedSets
-            .filter { it.completed && it.setType == "NORMAL" }
-            .groupBy { listOf(it.exerciseId, it.equipment, it.gripType, it.family) }
-        val before = groups(previous)
-        val after = groups(current)
-        val rows = after.map { (condition, sets) ->
-            val prior = before[condition]
-            fun reps(values: List<PlannedSetSnapshot>?) = values?.takeIf { it.all { set -> set.performedReps != null } }
-                ?.sumOf { it.performedReps!! }
-            fun volume(values: List<PlannedSetSnapshot>?) = values?.takeIf { it.all { set -> set.performedReps != null && set.weightKg != null } }
-                ?.sumOf { it.performedReps!! * it.weightKg!! }
-            val oldVolume = volume(prior)
-            val newVolume = volume(sets)
-            JSONObject().put("exercise_id", condition[0]).put("equipment", condition[1]).put("grip", condition[2]).put("family", condition[3])
-                .put("previous_sets", prior?.size ?: JSONObject.NULL).put("current_sets", sets.size)
-                .put("previous_reps", reps(prior) ?: JSONObject.NULL).put("current_reps", reps(sets) ?: JSONObject.NULL)
-                .put("previous_volume_kg_reps", oldVolume ?: JSONObject.NULL).put("current_volume_kg_reps", newVolume ?: JSONObject.NULL)
-                .put("volume_change_kg_reps", if (oldVolume != null && newVolume != null) newVolume - oldVolume else JSONObject.NULL)
-                .put("volume_change_percent", if (oldVolume != null && oldVolume > 0 && newVolume != null) (newVolume - oldVolume) / oldVolume * 100 else JSONObject.NULL)
-                .put("set_count_changed", prior != null && prior.size != sets.size)
-        }
-        return JSONObject().put("current_evidence_id", "session:${current.snapshot.sessionId}")
-            .put("baseline_evidence_id", "session:${previous.snapshot.sessionId}").put("exercises", JSONArray(rows))
-            .put("removed_conditions", JSONArray((before.keys - after.keys).map { JSONArray(it) }))
-            .put("basis", "동일 routineId의 제공 범위 내 직전 완료 기록. 일반 세트만, 동일 운동·기구·그립·변형 조건별 계산. 훈련량 변화는 근육 성장률이 아님.")
-    }
 }
