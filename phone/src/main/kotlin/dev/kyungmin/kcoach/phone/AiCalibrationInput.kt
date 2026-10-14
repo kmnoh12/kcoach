@@ -30,13 +30,14 @@ internal class AiCalibrationInputBuilder(private val context: Context) {
             val capture = captures.load(set.captureId).getOrThrow(); val review = reviews.load(set.captureId).getOrThrow()
             val sensor = captures.sensor(set.captureId).getOrThrow(); val frames = captures.frames(set.captureId).getOrThrow()
             val mapping = reviews.alignment(set.captureId).getOrThrow()
-            val setup = sensor.manifest.payload["startWristContext"].orEmpty()
+            val declared = sensor.manifest.payload["startWristContext"]?.takeIf { it.isNotBlank() }?.let(StartWristContextCodec::decode)
+            val setup = declared?.let { JSONObject().put("side", it.side).put("placement", it.placement).put("device_top", it.deviceTop).put("variant", it.variant).toString() }.orEmpty()
             declaredSetups.add(setup)
             require(declaredSetups.size == 1) { "Declared wrist setup differs across training sources; review compatible sources first" }
             val clipEvidence = "capture:${set.captureId}:${set.rawSha256}"
             evidence.add(clipEvidence)
             clips.put(JSONObject().put("capture_id", set.captureId).put("raw_hash", set.rawSha256)
-                .put("declared_wrist_setup", setup.ifBlank { "UNSPECIFIED" }).put("watch_top_direction", "UNKNOWN_UNLESS_DECLARED")
+                .put("declared_wrist_setup", if (setup.isBlank()) JSONObject.NULL else JSONObject(setup)).put("watch_top_direction", declared?.deviceTop ?: "UNKNOWN")
                 .put("review_revision", review.revision).put("reference_digest", ReviewedPatternBuilder.referenceDigest(set.references.filter { it.eligibleForLearning }))
                 .put("camera_frames_hash", hashFile(File(captures.videoFile(set.captureId).parentFile, "frames.jsonl"), checkpoint))
                 .put("video_hash", hashFile(captures.videoFile(set.captureId), checkpoint))

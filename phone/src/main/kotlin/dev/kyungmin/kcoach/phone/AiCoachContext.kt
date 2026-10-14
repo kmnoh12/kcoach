@@ -137,6 +137,11 @@ internal class AiCoachContextBuilder(private val context: Context) {
                         .put("tempo_coefficient_of_variation", motion.tempoCoefficientOfVariation ?: JSONObject.NULL)
                         .put("late_cycle_change_ratio", motion.lateCycleChangeRatio ?: JSONObject.NULL)
                         .put("late_wrist_angular_travel_change_ratio", motion.lateWristAngularTravelChangeRatio ?: JSONObject.NULL)
+                        .put("representative_repetitions", JSONArray(motion.reps.withIndex().filter { (index, _) -> index < 6 || index >= motion.reps.size - 6 }.map { (index, rep) ->
+                            JSONObject().put("rep_index", index).put("duration_ms", rep.durationMs).put("departure_ms", rep.departureMs)
+                                .put("return_ms", rep.returnMs).put("concentric_ms", rep.concentricMs ?: JSONObject.NULL)
+                                .put("eccentric_ms", rep.eccentricMs ?: JSONObject.NULL).put("angular_travel_rad", rep.angularTravelRad)
+                        })).put("repetitions_omitted", (motion.reps.size - 12).coerceAtLeast(0))
                 } ?: JSONObject.NULL)
         }
         return JSONObject().put("evidence_id", "session:${snapshot.sessionId}").put("session_id", snapshot.sessionId)
