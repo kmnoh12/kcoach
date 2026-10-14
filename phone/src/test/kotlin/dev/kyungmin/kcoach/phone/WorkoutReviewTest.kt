@@ -236,4 +236,59 @@ class WorkoutReviewTest {
         controller.bind("fixture-a", "after"); await("Fresh context did not load") { controller.state.value.loaded }
         assertTrue(controller.state.value.stale); assertNull(controller.state.value.answerJson)
     }
+
+    @Test fun disablingReviewsDuringInferenceDoesNotSaveTheLateCompletedReview() {
+        val context = fixture(); val auth = auth(); val started = CountDownLatch(1); val release = CountDownLatch(1)
+        val controller = WorkoutReviewController(app, auth, object : ChatGptWorkHttp {
+            override fun execute(accessToken: String, body: JSONObject, cancellation: ChatGptWorkCancellation,
+                onDelta: (String) -> Unit): ChatGptResponseResult {
+                started.countDown(); check(release.await(5, TimeUnit.SECONDS))
+                return ChatGptResponseResult("late-disabled", "actual", answer(context).toString())
+            }
+        })
+        controller.bind("fixture-a", "after"); await("Evidence did not load") { controller.state.value.loaded }
+        controller.start(); await("Inference did not start") { started.count == 0L }
+        AiTaskSettings(app).save("fixture-a", AiTaskPreferences(reviewEnabled = false))
+        release.countDown(); await("Disabled review did not settle") { !controller.state.value.busy }
+        assertNull(controller.state.value.answerJson)
+        assertNotEquals("COMPLETED", WorkoutReviewStore(app).latest("fixture-a", context)!!.getString("status"))
+    }
+
+    @Test fun sensorRevisionChangesDuringInferenceInvalidateTheReviewAndRefreshComputedSummary() {
+        val context = fixture(); val auth = auth(); val started = CountDownLatch(1); val release = CountDownLatch(1)
+        val before = JSONObject(AiCoachContextBuilder(app).build("fixture-a", "질문").json).getJSONObject("personal_summary")
+        val controller = WorkoutReviewController(app, auth, object : ChatGptWorkHttp {
+            override fun execute(accessToken: String, body: JSONObject, cancellation: ChatGptWorkCancellation,
+                onDelta: (String) -> Unit): ChatGptResponseResult {
+                started.countDown(); check(release.await(5, TimeUnit.SECONDS))
+                return ChatGptResponseResult("late-analysis", "actual", answer(context).toString())
+            }
+        })
+        controller.bind("fixture-a", "after"); await("Evidence did not load") { controller.state.value.loaded }
+        controller.start(); await("Inference did not start") { started.count == 0L }
+        val prefs = app.getSharedPreferences("wear-sync", Context.MODE_PRIVATE)
+        prefs.edit().putLong("analysis-revision:after", prefs.getLong("analysis-revision:after", 0) + 1).commit()
+        release.countDown(); await("Changed evidence did not settle") { !controller.state.value.busy }
+        assertNull(controller.state.value.answerJson)
+        val after = JSONObject(AiCoachContextBuilder(app).build("fixture-a", "질문").json).getJSONObject("personal_summary")
+        assertNotEquals(before.getString("input_fingerprint"), after.getString("input_fingerprint"))
+        assertEquals(17, after.getInt("normal_reps"))
+    }
+
+    @Test fun disablingAutomaticReviewDuringInferenceRejectsItsReplyEvenIfManualReviewStaysOn() {
+        val context = fixture(); val auth = auth(); val started = CountDownLatch(1); val release = CountDownLatch(1)
+        AiTaskSettings(app).save("fixture-a", AiTaskPreferences(automaticReview = true))
+        val controller = WorkoutReviewController(app, auth, object : ChatGptWorkHttp {
+            override fun execute(accessToken: String, body: JSONObject, cancellation: ChatGptWorkCancellation,
+                onDelta: (String) -> Unit): ChatGptResponseResult {
+                started.countDown(); check(release.await(5, TimeUnit.SECONDS))
+                return ChatGptResponseResult("late-auto-off", "actual", answer(context).toString())
+            }
+        })
+        controller.automatic("fixture-a", "after"); await("Auto inference did not start") { started.count == 0L }
+        AiTaskSettings(app).save("fixture-a", AiTaskPreferences(automaticReview = false, reviewEnabled = true))
+        release.countDown(); await("Disabled automatic review did not settle") { !controller.state.value.busy }
+        assertNull(controller.state.value.answerJson)
+        assertNotEquals("COMPLETED", WorkoutReviewStore(app).latest("fixture-a", context)!!.getString("status"))
+    }
 }

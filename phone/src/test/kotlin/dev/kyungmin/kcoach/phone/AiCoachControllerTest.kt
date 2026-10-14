@@ -29,7 +29,8 @@ class AiCoachControllerTest {
             val file = File(app.noBackupFilesDir, name)
             file.delete(); File(file.path + ".bak").delete()
         }
-        app.getSharedPreferences("finished-workouts", Context.MODE_PRIVATE).edit().clear().commit()
+        for (name in listOf("finished-workouts", "wear-sync", "ai-task-settings", "ai-coach-summary", "ai-coach-interpretations"))
+            app.getSharedPreferences(name, Context.MODE_PRIVATE).edit().clear().commit()
     }
 
     private fun await(description: String, predicate: () -> Boolean) {
@@ -213,5 +214,254 @@ class AiCoachControllerTest {
         assertEquals("기록 기반 상담", controller.state.value.profile!!.goal)
         assertEquals(0, calls.get())
         assertTrue(controller.state.value.turns.isEmpty())
+    }
+
+    @Test fun disablingChatDuringInferenceRejectsTheLateCompletedAnswer() {
+        val auth = auth(); val store = AiCoachStore(app)
+        store.saveProfile("fixture-client-a", AiCoachProfile())
+        val started = CountDownLatch(1); val release = CountDownLatch(1)
+        val controller = AiCoachController(app, auth, object : ChatGptWorkHttp {
+            override fun execute(accessToken: String, body: JSONObject, cancellation: ChatGptWorkCancellation,
+                onDelta: (String) -> Unit): ChatGptResponseResult {
+                started.countDown(); check(release.await(5, TimeUnit.SECONDS))
+                return response(answer("꺼진 상담의 늦은 응답"))
+            }
+        })
+        bind(controller); controller.send("질문")
+        await("Inference did not start") { started.count == 0L }
+        AiTaskSettings(app).save("fixture-client-a", AiTaskPreferences(chatEnabled = false))
+        release.countDown()
+        await("Late disabled answer did not settle") { !controller.state.value.busy }
+        assertTrue(store.turns("fixture-client-a").isEmpty())
+        assertTrue(controller.state.value.turns.isEmpty())
+    }
+
+    @Test fun duplicateInterpretationCitationsRejectTheWholeAnswerBeforeAnyTurnIsPersisted() {
+        val auth = auth(); val store = AiCoachStore(app)
+        val profile = store.saveProfile("fixture-client-a", AiCoachProfile())
+        val ref = "profile:${profile.id}:${profile.revision}"
+        val invalid = JSONObject(answer("형식이 잘못된 응답"))
+            .put("memory_proposals", JSONArray().put(JSONObject().put("text", "중복 참조")
+                .put("citations", JSONArray(listOf(ref, ref))))).toString()
+        val controller = AiCoachController(app, auth, object : ChatGptWorkHttp {
+            override fun execute(accessToken: String, body: JSONObject, cancellation: ChatGptWorkCancellation,
+                onDelta: (String) -> Unit) = response(invalid)
+        })
+        bind(controller); controller.send("질문")
+        await("Malformed interpretation did not settle") { !controller.state.value.busy }
+        assertTrue(store.turns("fixture-client-a").isEmpty())
+        assertEquals(0, AiCoachInterpretationStore(app).current("fixture-client-a", AiCoachHistoryReader(app).read("fixture-client-a")).length())
+    }
+
+    @Test fun logoutRebindingAndTimeoutCannotPublishALateAnswerOrPartialDelta() {
+        val auth = auth(); val store = AiCoachStore(app)
+        store.saveProfile("fixture-client-a", AiCoachProfile())
+        val started = CountDownLatch(1); val release = CountDownLatch(1)
+        val controller = AiCoachController(app, auth, object : ChatGptWorkHttp {
+            override fun execute(accessToken: String, body: JSONObject, cancellation: ChatGptWorkCancellation,
+                onDelta: (String) -> Unit): ChatGptResponseResult {
+                started.countDown(); check(release.await(5, TimeUnit.SECONDS))
+                onDelta("로그아웃 뒤 부분 응답")
+                return response(answer("로그아웃 뒤 완료 응답"))
+            }
+        })
+        bind(controller); controller.send("질문"); await("Inference did not start") { started.count == 0L }
+        controller.bindAccount(null); release.countDown(); await("Transport did not settle") { !auth.state.value.busy }
+        assertNull(controller.state.value.accountId); assertTrue(store.turns("fixture-client-a").isEmpty())
+        val timeout = AiCoachController(app, auth, object : ChatGptWorkHttp {
+            override fun execute(accessToken: String, body: JSONObject, cancellation: ChatGptWorkCancellation,
+                onDelta: (String) -> Unit): ChatGptResponseResult {
+                onDelta("시간 초과 전 임시 응답"); throw ChatGptWorkError("시간이 초과됐어요", "timeout")
+            }
+        })
+        bind(timeout); timeout.send("질문"); await("Timeout did not settle") { !timeout.state.value.busy }
+        assertTrue(store.turns("fixture-client-a").isEmpty()); assertTrue(timeout.state.value.turns.isEmpty())
+    }
+
+    @Test fun manualProfileAndSensorRevisionChangesDuringInferenceRejectFrozenEvidence() {
+        val auth = auth(); val store = AiCoachStore(app)
+        val profile = store.saveProfile("fixture-client-a", AiCoachProfile())
+        finish("owned", 1_000, 8); store.linkSessions("fixture-client-a", setOf("owned"))
+        val edits = listOf<() -> Unit>(
+            { val prefs = app.getSharedPreferences("finished-workouts", Context.MODE_PRIVATE)
+                val row = JSONObject(prefs.getString("session:owned", null)!!).put("minutes", 31)
+                prefs.edit().putString("session:owned", row.toString()).commit(); Unit },
+            { store.saveProfile("fixture-client-a", profile.copy(goal = "새 목표")); Unit },
+            { val prefs = app.getSharedPreferences("wear-sync", Context.MODE_PRIVATE)
+                SetAnalysisStore(app).revision("owned")
+                prefs.edit().putLong("analysis-revision:owned", prefs.getLong("analysis-revision:owned", 0) + 1).commit(); Unit },
+        )
+        edits.forEach { edit ->
+            val started = CountDownLatch(1); val release = CountDownLatch(1)
+            val controller = AiCoachController(app, auth, object : ChatGptWorkHttp {
+                override fun execute(accessToken: String, body: JSONObject, cancellation: ChatGptWorkCancellation,
+                    onDelta: (String) -> Unit): ChatGptResponseResult {
+                    started.countDown(); check(release.await(5, TimeUnit.SECONDS))
+                    return response(answer("이전 근거의 답변", listOf("session:owned")))
+                }
+            })
+            bind(controller); controller.send("질문"); await("Inference did not start") { started.count == 0L }
+            edit(); release.countDown(); await("Stale answer did not settle") { !controller.state.value.busy }
+            assertTrue(store.turns("fixture-client-a").isEmpty())
+        }
+    }
+
+    @Test fun duplicateFinishAndRecreatedControllerNeverReissueAFailedAutomaticReview() {
+        val auth = auth(); AiCoachStore(app).saveProfile("fixture-client-a", AiCoachProfile())
+        finish("auto", 1_000, 8)
+        AiTaskSettings(app).save("fixture-client-a", AiTaskPreferences(automaticReview = true, linkNewWorkouts = true))
+        val calls = AtomicInteger()
+        val http = object : ChatGptWorkHttp {
+            override fun execute(accessToken: String, body: JSONObject, cancellation: ChatGptWorkCancellation,
+                onDelta: (String) -> Unit): ChatGptResponseResult {
+                calls.incrementAndGet(); throw ChatGptWorkError("시간이 초과됐어요", "timeout")
+            }
+        }
+        val reviews = WorkoutReviewController(app, auth, http)
+        AutomaticWorkoutReview.finished(app, "auto", auth, reviews)
+        AutomaticWorkoutReview.finished(app, "auto", auth, reviews)
+        await("Automatic finish did not settle") { calls.get() == 1 && !reviews.state.value.busy }
+        val recreated = WorkoutReviewController(app, auth, http)
+        AutomaticWorkoutReview.finished(app, "auto", auth, recreated)
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(2))
+        assertEquals(1, calls.get())
+        assertEquals(setOf("auto"), AiCoachStore(app).sessionIds("fixture-client-a"))
+    }
+
+    @Test fun queuedFinishCannotAttachTheOriginalAccountsNewRecordToTheNextAccount() {
+        val auth = auth(); val store = AiCoachStore(app)
+        store.saveProfile("fixture-client-a", AiCoachProfile())
+        store.saveProfile("fixture-client-b", AiCoachProfile())
+        finish("new-unowned", 1_000, 8)
+        for (id in listOf("fixture-client-a", "fixture-client-b"))
+            AiTaskSettings(app).save(id, AiTaskPreferences(automaticReview = true, linkNewWorkouts = true))
+        val calls = AtomicInteger()
+        val reviews = WorkoutReviewController(app, auth, object : ChatGptWorkHttp {
+            override fun execute(accessToken: String, body: JSONObject, cancellation: ChatGptWorkCancellation,
+                onDelta: (String) -> Unit): ChatGptResponseResult {
+                calls.incrementAndGet(); throw ChatGptWorkError("테스트 종료", "fixture")
+            }
+        })
+        val running = CountDownLatch(1); val release = CountDownLatch(1)
+        val coach = AiCoachController(app, auth, object : ChatGptWorkHttp {
+            override fun execute(accessToken: String, body: JSONObject, cancellation: ChatGptWorkCancellation,
+                onDelta: (String) -> Unit): ChatGptResponseResult {
+                running.countDown(); check(release.await(5, TimeUnit.SECONDS)); return response(answer("준비 완료"))
+            }
+        })
+        bind(coach); coach.send("기존 상담"); await("Existing request did not start") { running.count == 0L }
+        AutomaticWorkoutReview.finished(app, "new-unowned", auth, reviews)
+        shadowOf(Looper.getMainLooper()).idle() // Finish must wait for the existing A-account request.
+        release.countDown(); await("Existing request did not finish") { !coach.state.value.busy && !auth.state.value.busy }
+        auth.select("fixture-client-b")
+        await("Second account did not select") { auth.state.value.activeProfileId == "fixture-client-b" && !auth.state.value.busy }
+        auth.loadModels(); await("Second account models did not load") { auth.modelSettings.value.loaded && !auth.state.value.busy }
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(2))
+        await("Preparation did not settle") { !auth.state.value.busy }
+        assertTrue(store.sessionIds("fixture-client-b").isEmpty())
+        assertEquals(0, calls.get())
+    }
+
+    private fun toolCall(id: String, name: String = "read_profile", args: JSONObject = JSONObject(), namespace: String = "coach_records") =
+        JSONObject().put("type", "function_call").put("namespace", namespace).put("name", name)
+            .put("call_id", id).put("arguments", args.toString())
+    private fun toolResponse(calls: List<JSONObject>): ChatGptResponseResult = ChatGptResponseResult("tool-response", "actual", "",
+        JSONArray().put(JSONObject().put("type", "reasoning").put("encrypted_content", "fixture-reasoning"))
+            .apply { calls.forEach { put(it) } }.toString())
+
+    @Test fun sixReadCallsAcrossTwoRoundsStayOwnedAndTheThirdRoundCanOnlyReturnAnAnswer() {
+        val auth = auth(); val store = AiCoachStore(app)
+        store.saveProfile("fixture-client-a", AiCoachProfile())
+        store.saveProfile("fixture-client-b", AiCoachProfile())
+        finish("owned", 1_000, 8); finish("private-b", 2_000, 99)
+        store.linkSessions("fixture-client-a", setOf("owned")); store.linkSessions("fixture-client-b", setOf("private-b"))
+        val calls = AtomicInteger()
+        val controller = AiCoachController(app, auth, object : ChatGptWorkHttp {
+            override fun execute(accessToken: String, body: JSONObject, cancellation: ChatGptWorkCancellation,
+                onDelta: (String) -> Unit): ChatGptResponseResult {
+                val round = calls.getAndIncrement()
+                assertFalse(body.toString().contains("private-b"))
+                assertEquals("coach_records", body.getJSONArray("tools").getJSONObject(0).getString("name"))
+                if (round < 2) return toolResponse(listOf(toolCall("profile-$round"),
+                    toolCall("workouts-$round", "read_workouts", JSONObject().put("routine_id", JSONObject.NULL)
+                        .put("exercise_id", JSONObject.NULL).put("from_ms", JSONObject.NULL).put("to_ms", JSONObject.NULL)
+                        .put("limit", 10).put("offset", 0)),
+                    toolCall("sensor-$round", "read_sensor_summary", JSONObject().put("session_id", "owned").put("set_id", JSONObject.NULL))))
+                assertEquals("none", body.getString("tool_choice"))
+                val input = body.getJSONArray("input")
+                assertEquals(6, (0 until input.length()).count { input.getJSONObject(it).optString("type") == "function_call_output" })
+                assertTrue(body.toString().contains("fixture-reasoning"))
+                return response(answer("소유 기록 8회만 확인했어", listOf("session:owned")))
+            }
+        })
+        bind(controller); controller.send("질문")
+        await("Read-tool answer did not finish") { !controller.state.value.busy }
+        assertEquals(3, calls.get()); assertEquals(1, store.turns("fixture-client-a").size)
+        val frozen = JSONObject(store.turns("fixture-client-a").single().contextJson)
+        assertEquals(6, frozen.getJSONArray("read_tool_results").length())
+        assertTrue(store.turns("fixture-client-b").isEmpty())
+    }
+
+    @Test fun excessiveRoundsCallsDuplicateIdsAndForeignReadsFailWithoutSavingOrRetrying() {
+        val auth = auth(); val store = AiCoachStore(app)
+        store.saveProfile("fixture-client-a", AiCoachProfile())
+        store.saveProfile("fixture-client-b", AiCoachProfile())
+        finish("private-b", 1_000, 99); store.linkSessions("fixture-client-b", setOf("private-b"))
+        for (scenario in listOf("four-calls", "third-round", "duplicate-id", "foreign-namespace", "foreign-record")) {
+            val calls = AtomicInteger()
+            val controller = AiCoachController(app, auth, object : ChatGptWorkHttp {
+                override fun execute(accessToken: String, body: JSONObject, cancellation: ChatGptWorkCancellation,
+                    onDelta: (String) -> Unit): ChatGptResponseResult {
+                    val round = calls.getAndIncrement()
+                    return toolResponse(when (scenario) {
+                        "four-calls" -> (1..4).map { toolCall("call-$it") }
+                        "third-round" -> (1..3).map { toolCall("call-$round-$it") }
+                        "duplicate-id" -> listOf(toolCall("same-id"))
+                        "foreign-namespace" -> listOf(toolCall("call", namespace = "other_account"))
+                        else -> listOf(toolCall("call", "read_sensor_summary", JSONObject().put("session_id", "private-b").put("set_id", JSONObject.NULL)))
+                    })
+                }
+            })
+            bind(controller); controller.send("질문")
+            await("Invalid tool request did not settle: $scenario") { !controller.state.value.busy }
+            assertEquals(when (scenario) { "third-round" -> 3; "duplicate-id" -> 2; else -> 1 }, calls.get())
+            assertTrue(store.turns("fixture-client-a").isEmpty()); assertTrue(store.turns("fixture-client-b").isEmpty())
+        }
+    }
+
+    @Test fun cancellationBetweenReadRoundsDoesNotMakeTheNextModelCall() {
+        val auth = auth(); val store = AiCoachStore(app)
+        store.saveProfile("fixture-client-a", AiCoachProfile())
+        val started = CountDownLatch(1); val release = CountDownLatch(1); val calls = AtomicInteger()
+        val controller = AiCoachController(app, auth, object : ChatGptWorkHttp {
+            override fun execute(accessToken: String, body: JSONObject, cancellation: ChatGptWorkCancellation,
+                onDelta: (String) -> Unit): ChatGptResponseResult {
+                calls.incrementAndGet(); started.countDown(); check(release.await(5, TimeUnit.SECONDS))
+                return toolResponse(listOf(toolCall("late-call")))
+            }
+        })
+        bind(controller); controller.send("질문"); await("Read round did not start") { started.count == 0L }
+        controller.cancel(); release.countDown(); await("Cancelled round did not settle") { !auth.state.value.busy }
+        assertEquals(1, calls.get()); assertTrue(store.turns("fixture-client-a").isEmpty())
+    }
+
+    @Test fun savedInterpretationsBecomeUnavailableWhenTheirOriginalEvidenceChanges() {
+        val auth = auth(); val store = AiCoachStore(app)
+        store.saveProfile("fixture-client-a", AiCoachProfile())
+        finish("owned", 1_000, 8); store.linkSessions("fixture-client-a", setOf("owned"))
+        val output = JSONObject(answer("기록을 확인했어", listOf("session:owned")))
+            .put("memory_proposals", JSONArray().put(JSONObject().put("text", "이 기록에서는 8회를 수행했어")
+                .put("citations", JSONArray(listOf("session:owned"))))).toString()
+        val controller = AiCoachController(app, auth, object : ChatGptWorkHttp {
+            override fun execute(accessToken: String, body: JSONObject, cancellation: ChatGptWorkCancellation,
+                onDelta: (String) -> Unit) = response(output)
+        })
+        bind(controller); controller.send("질문"); await("Interpretation did not save") { !controller.state.value.busy }
+        val interpretations = AiCoachInterpretationStore(app)
+        assertEquals(1, interpretations.current("fixture-client-a", AiCoachHistoryReader(app).read("fixture-client-a")).length())
+        val prefs = app.getSharedPreferences("finished-workouts", Context.MODE_PRIVATE)
+        val row = JSONObject(prefs.getString("session:owned", null)!!).put("minutes", 31)
+        prefs.edit().putString("session:owned", row.toString()).commit()
+        assertEquals(0, interpretations.current("fixture-client-a", AiCoachHistoryReader(app).read("fixture-client-a")).length())
     }
 }
