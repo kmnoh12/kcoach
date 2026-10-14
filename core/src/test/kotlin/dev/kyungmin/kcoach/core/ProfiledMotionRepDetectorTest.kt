@@ -5,6 +5,39 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class ProfiledMotionRepDetectorTest {
+    @Test fun explicitlyFrozenV3KeepsHistoricalFinishSemanticsForReanalysis() {
+        val profile = testProfile(MotionFamily.PULL_RETURN, TrackingSignal.ROTATION_ENERGY)
+            .copy(id = requireNotNull(MotionFamily.PULL_RETURN.legacyAlgorithmId))
+        val detector = ProfiledMotionRepDetector(profile)
+        var t = 1_000_000_000L
+        for (rate in listOf(1.25f, -1.25f)) repeat(10) {
+            detector.add(sample(t, rate, 0f)); t += 50_000_000L
+        }
+        assertTrue(detector.finish() != null)
+    }
+    @Test fun endingWhileReturnIsStillMovingDoesNotInventItsCompletion() {
+        val detector = ProfiledMotionRepDetector(testProfile(MotionFamily.PULL_RETURN, TrackingSignal.ROTATION_ENERGY))
+        var t = 1_000_000_000L
+        var count = 0
+        for (rate in listOf(1.25f, -1.25f)) repeat(10) {
+            if (detector.add(sample(t, rate, 0f)) != null) count++
+            t += 50_000_000L
+        }
+        assertEquals(0, count)
+        assertEquals(null, detector.finish())
+    }
+
+    @Test fun twoSameDirectionMovementsSeparatedByAStopAreNotAnOutAndBackRep() {
+        val detector = ProfiledMotionRepDetector(testProfile(MotionFamily.PULL_RETURN, TrackingSignal.ROTATION_ENERGY))
+        var t = 1_000_000_000L
+        var count = 0
+        for (rate in listOf(1.25f, 0f, 1.25f, 0f)) repeat(10) {
+            if (detector.add(sample(t, rate, 0f)) != null) count++
+            t += 50_000_000L
+        }
+        assertEquals(0, count)
+        assertEquals(null, detector.finish())
+    }
     @Test fun knownUnreliableSignedLobesCannotCompleteARep() {
         val detector = ProfiledMotionRepDetector(testProfile(MotionFamily.PULL_RETURN, TrackingSignal.ROTATION_ENERGY))
         var t = 1_000_000_000L
@@ -72,6 +105,7 @@ class ProfiledMotionRepDetectorTest {
             if (detector.add(sample(timestamp, -1.0f, -0.25f)) != null) events += 1
             timestamp += 50_000_000L
         }
+        if (detector.add(sample(timestamp, 0f, 0f)) != null) events += 1
         assertTrue(detector.finish() != null || events == 1)
 
         val shaking = ProfiledMotionRepDetector(profile)
@@ -100,7 +134,7 @@ class ProfiledMotionRepDetectorTest {
         assertEquals(36, profiles.count { it.family != MotionFamily.UNOBSERVABLE_MANUAL })
         assertEquals(7, profiles.count { it.mode == TrackingMode.MANUAL_REQUIRED })
         assertTrue(profiles.filter { it.mode != TrackingMode.MANUAL_REQUIRED }.all {
-            it.id.endsWith(if (it.family == MotionFamily.FLEXION_EXTENSION) "-v4" else "-v3")
+            it.id.endsWith("-v4")
         })
     }
 

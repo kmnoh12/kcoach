@@ -8,7 +8,8 @@ import java.io.File
 import java.io.FileOutputStream
 
 data class CalibrationReview(val captureId: String, val revision: Long, val countReference: SetCountReference?,
-    val references: List<RepReference>, val cameraMetrics: CameraObservedMetrics? = null)
+    val references: List<RepReference>, val cameraMetrics: CameraObservedMetrics? = null,
+    val nonRepIntervals: List<NonRepInterval> = emptyList())
 
 /** Manual totals and reviewed video boundaries have different evidential meaning. */
 class CalibrationReviewStore(private val context: Context) {
@@ -56,7 +57,8 @@ class CalibrationReviewStore(private val context: Context) {
         mapping
     }
 
-    fun saveCycles(id: String, cycles: List<RepCycle>, alignmentReviewed: Boolean, expectedRevision: Long, simultaneousArmsReviewed: Boolean = false): Result<CalibrationReview> = synchronized(lock) {
+    fun saveCycles(id: String, cycles: List<RepCycle>, alignmentReviewed: Boolean, expectedRevision: Long,
+        simultaneousArmsReviewed: Boolean = false, nonRepIntervals: List<NonRepInterval>? = null): Result<CalibrationReview> = synchronized(lock) {
         runCatching {
             val capture = captures.load(id).getOrThrow()
             require(capture.status == CalibrationCaptureStatus.REVIEW_PENDING && capture.videoComplete)
@@ -71,6 +73,10 @@ class CalibrationReviewStore(private val context: Context) {
                 kotlin.math.abs(frame.videoPresentationUs - pts) <= 1_000
             })
             val frameTimes = written.map { it.cameraTimestampNs }.toSet()
+            val excluded = nonRepIntervals ?: current.nonRepIntervals
+            require(excluded.size <= 1_000 && excluded.zipWithNext().all { (a, b) -> a.endNs <= b.startNs })
+            require(excluded.all { interval -> interval.startNs in frameTimes && interval.endNs in frameTimes &&
+                cycles.none { it.startNs < interval.endNs && interval.startNs < it.endNs } })
             val contract = ExerciseMeasurementContracts.resolve(capture.exerciseId)
             require(cycles.all { it.departurePhase == contract.departurePhase &&
                 it.startNs in frameTimes && it.turnaroundNs in frameTimes && it.endNs in frameTimes })
@@ -111,7 +117,8 @@ class CalibrationReviewStore(private val context: Context) {
             }
             val eligibleCameraCycles = cycles.filterIndexed { index, _ -> references[index].eligibleForLearning }
             val metrics = CameraObservedAnalyzer.analyze(frames, eligibleCameraCycles, capture.watchOnLeft, simultaneousArmsReviewed)
-            val next = current.copy(revision = current.revision + 1, references = references, cameraMetrics = metrics)
+            val next = current.copy(revision = current.revision + 1, references = references, cameraMetrics = metrics,
+                nonRepIntervals = excluded)
             write(next, cycles)
             next
         }
@@ -130,6 +137,8 @@ class CalibrationReviewStore(private val context: Context) {
         val json = JSONObject().put("schemaVersion", 1).put("captureId", review.captureId).put("revision", review.revision)
             .put("count", review.countReference?.let { JSONObject().put("reps", it.reps).put("reviewedAtMs", it.reviewedAtMs) } ?: JSONObject.NULL)
             .put("cameraCycles", cycles(cameraCycles ?: cameraCycles(review.captureId).getOrThrow()))
+            .put("nonRepIntervals", JSONArray(review.nonRepIntervals.map { interval -> JSONObject()
+                .put("startNs", interval.startNs).put("endNs", interval.endNs).put("reason", interval.reason.name) }))
             .put("cameraObservedMetrics", review.cameraMetrics?.let(::encodeMetrics) ?: JSONObject.NULL)
             .put("cameraProposalOrigin", context.getSharedPreferences("camera-rep-proposals", Context.MODE_PRIVATE).getString(review.captureId, null)?.let(::JSONArray) ?: JSONObject.NULL)
             .put("confirmationSource", "USER_REVIEWED_VIDEO")
@@ -158,7 +167,13 @@ class CalibrationReviewStore(private val context: Context) {
                 ReferenceSource.REVIEWED_VIDEO, if (ref.isNull("uncertaintyNs")) null else ref.getLong("uncertaintyNs"),
                 ref.getBoolean("alignmentVerified"), ref.getBoolean("sensorCovered"), ref.getLong("reviewedAtMs"),
                 if (ref.isNull("exclusion")) null else ref.getString("exclusion"), revision)
-        }, if (json.isNull("cameraObservedMetrics") || !json.has("cameraObservedMetrics")) null else decodeMetrics(json.getJSONObject("cameraObservedMetrics")))
+        }, if (json.isNull("cameraObservedMetrics") || !json.has("cameraObservedMetrics")) null else decodeMetrics(json.getJSONObject("cameraObservedMetrics")),
+            (json.optJSONArray("nonRepIntervals") ?: JSONArray()).let { rows ->
+                require(rows.length() <= 1_000)
+                List(rows.length()) { index -> rows.getJSONObject(index).let {
+                    NonRepInterval(it.getLong("startNs"), it.getLong("endNs"), NonRepReason.valueOf(it.getString("reason")))
+                } }
+            })
     }
 
     private fun encodeMetrics(metrics: CameraObservedMetrics) = JSONObject().put("schemaVersion", 1)

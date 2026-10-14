@@ -2,6 +2,16 @@ package dev.kyungmin.kcoach.core
 
 enum class ReferenceSource { REVIEWED_VIDEO, CAMERA_CANDIDATE, WATCH_CANDIDATE }
 
+/** Human video annotations, never inferred repetitions or positive training examples. */
+enum class NonRepReason(val label: String) {
+    PREPARATION("준비 동작"), PARTIAL_REPETITION("불완전 반복 · 복귀 안 됨"),
+    HOLD("중간에 멈춘 구간"), PUTTING_DOWN("중량 내려놓기"), OCCLUDED("가려져 확인 불가")
+}
+
+data class NonRepInterval(val startNs: Long, val endNs: Long, val reason: NonRepReason) {
+    init { require(startNs >= 0 && endNs > startNs) }
+}
+
 data class RepPause(val startNs: Long, val endNs: Long) {
     init { require(startNs >= 0 && endNs > startNs) }
 }

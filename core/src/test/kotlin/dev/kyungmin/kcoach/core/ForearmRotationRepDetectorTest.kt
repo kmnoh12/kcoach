@@ -8,6 +8,44 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class ForearmRotationRepDetectorTest {
+    @Test fun explicitlyFrozenV3ReplaysItsHistoricalStopBoundary() {
+        val profile = ExerciseTrackingProfiles.resolve("external_rotation")
+            .copy(id = requireNotNull(MotionFamily.FOREARM_ROTATION.legacyAlgorithmId))
+        val detector = ForearmRotationRepDetector(TrackingProfileSnapshot.decode(TrackingProfileSnapshot.encode(profile)))
+        var timestamp = 1_000_000_000L
+        for (rate in listOf(1.45, -1.45)) repeat(36) { index ->
+            detector.add(naturalSample(timestamp, rate, index)); timestamp += 20_000_000L
+        }
+        assertTrue(detector.finish() != null)
+    }
+    @Test fun manualStopWhileReturningDoesNotCompleteTheMovingLobe() {
+        val detector = ForearmRotationRepDetector(ExerciseTrackingProfiles.resolve("external_rotation"))
+        var timestamp = 1_000_000_000L
+        var count = 0
+        for (rate in listOf(1.45, -1.45)) repeat(36) { index ->
+            if (detector.add(naturalSample(timestamp, rate, index)) != null) count++
+            timestamp += 20_000_000L
+        }
+        assertEquals(0, count)
+        assertEquals(null, detector.finish())
+    }
+
+    @Test fun twoRotationsWithSamePolarityAndAQuietGapCannotMakeAnOutAndBackRep() {
+        val detector = ForearmRotationRepDetector(ExerciseTrackingProfiles.resolve("external_rotation"))
+        var timestamp = 1_000_000_000L
+        var count = 0
+        repeat(2) {
+            repeat(36) { index ->
+                if (detector.add(naturalSample(timestamp, 1.45, index)) != null) count++
+                timestamp += 20_000_000L
+            }
+            repeat(12) {
+                if (detector.add(naturalSample(timestamp, 0.0, it)) != null) count++
+                timestamp += 20_000_000L
+            }
+        }
+        assertEquals(0, count)
+    }
     @Test fun knownUnreliableRotationsCannotCompleteARep() {
         val detector = ForearmRotationRepDetector(ExerciseTrackingProfiles.resolve("external_rotation"))
         var t = 1_000_000_000L
@@ -41,6 +79,10 @@ class ForearmRotationRepDetectorTest {
                 timestamp += 20_000_000L
             }
             timestamp += 180_000_000L
+        }
+        repeat(12) { index ->
+            if (detector.add(naturalSample(timestamp, 0.0, index)) != null) events += 1
+            timestamp += 20_000_000L
         }
         if (detector.finish() != null) events += 1
         assertEquals(5, events)

@@ -49,6 +49,7 @@ class ForearmRotationRepDetector(
     }
 
     private val preferredAxis = profile?.preferredAxis?.takeIf { it in 0..2 }
+    private val legacyLobes = profile != null && profile.id.substringBefore('+') == MotionFamily.FOREARM_ROTATION.legacyAlgorithmId
     private val minimumProjectedRate = max(
         profile?.minimumFeatureRate ?: DEFAULT_MIN_PROJECTED_RATE,
         (profile?.gyroNoiseFloor ?: 0.0) * 2.2,
@@ -77,6 +78,7 @@ class ForearmRotationRepDetector(
     private var firstLobeEndNs = 0L
     private var firstLobePeakRate = 0.0
     private var firstLobeAngle = 0.0
+    private var firstLobeDirection = 0
     private var lastTimestampNs = 0L
     private var quietSinceNs = 0L
     private var lastMotionNs = 0L
@@ -173,8 +175,9 @@ class ForearmRotationRepDetector(
         return completed
     }
 
-    /** Flushes the current return lobe when a set is ended manually. */
+    /** New engines require observed settling/reversal; a manual stop cannot fabricate a return. */
     fun finish(): ForearmRotationRepEvent? {
+        if (!legacyLobes) { resetMotion(releaseAxis = false); return null }
         if (direction == 0 || lastTimestampNs == 0L) return null
         val completed = closeLobe(lastMotionNs.takeIf { it > 0L } ?: lastTimestampNs)
         resetMotion(releaseAxis = false)
@@ -253,11 +256,12 @@ class ForearmRotationRepDetector(
             return null
         }
 
-        if (firstLobeStartNs == 0L) {
+        if (firstLobeStartNs == 0L || !legacyLobes && firstLobeDirection == direction) {
             firstLobeStartNs = lobeStartNs
             firstLobeEndNs = endTimestampNs
             firstLobePeakRate = lobePeakRate
             firstLobeAngle = lobeAngle
+            firstLobeDirection = direction
             return null
         }
 
@@ -332,6 +336,7 @@ class ForearmRotationRepDetector(
         firstLobeEndNs = 0L
         firstLobePeakRate = 0.0
         firstLobeAngle = 0.0
+        firstLobeDirection = 0
     }
 
     private fun resetAxisLearning(countReset: Boolean) {

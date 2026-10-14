@@ -29,6 +29,8 @@ class CalibrationReviewActivity : ComponentActivity() {
     private var review: CalibrationReview? = null
     private var frames = emptyList<CameraPoseFrame>()
     private var cycles = mutableListOf<RepCycle>()
+    private var nonRepIntervals = mutableListOf<NonRepInterval>()
+    private var nonRepStart: Long? = null
     private var position = 0
     private var startMark: Long? = null
     private var turnMark: Long? = null
@@ -99,6 +101,8 @@ class CalibrationReviewActivity : ComponentActivity() {
         review = reviews.load(id).getOrNull()
         frames = captures.frames(id).getOrDefault(emptyList()).filter { it.videoFrameWritten }
         cycles = reviews.cameraCycles(id).getOrDefault(emptyList()).toMutableList()
+        nonRepIntervals = review?.nonRepIntervals.orEmpty().toMutableList()
+        nonRepStart = null
         startMark = null; turnMark = null; splitIndex = null; position = 0
         root()
         content.addView(text("${selected.exerciseName}\n반복 구간 확인", 24f))
@@ -130,7 +134,7 @@ class CalibrationReviewActivity : ComponentActivity() {
             } }; dialog.show()
         }
         content.addView(countButton)
-        if (selected.status != CalibrationCaptureStatus.RECORDING && captures.videoFile(id).isFile) addVideoRetention(id)
+        if (selected.status == CalibrationCaptureStatus.REVIEW_PENDING && selected.videoComplete && captures.videoFile(id).isFile) addVideoRetention(id)
         if (!captures.videoFile(id).isFile && selected.videoComplete) {
             content.addView(text(if (CalibrationVideoRetention(this).logsOnly(id))
                 "로그만 보관 중이에요. 센서·관절·기존 확인 라벨은 남아 있으며 실제 영상으로 동작을 다시 확인하거나 새 영상 라벨을 만들 수는 없어요."
@@ -139,6 +143,7 @@ class CalibrationReviewActivity : ComponentActivity() {
             cycleRows = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
             content.addView(cycleRows)
             cycles.forEachIndexed { index, cycle -> cycleRows?.addView(text("확인한 ${index + 1}회 · ${"%.2f".format(cycle.durationMs / 1000.0)}초")) }
+            nonRepIntervals.forEach { interval -> cycleRows?.addView(text("횟수 제외 · ${interval.reason.label} · ${"%.2f".format((interval.endNs - interval.startNs) / 1e9)}초")) }
             content.addView(button("개인 패턴·검증 현황") { startActivity(Intent(this, PatternCandidatesActivity::class.java)) })
             content.addView(button("촬영 목록") { showList() }); return
         }
@@ -206,16 +211,19 @@ class CalibrationReviewActivity : ComponentActivity() {
         content.addView(observedMetricsText)
         markerButtons = listOf(button("시작 위치 지정") { startMark = currentNs(); toast("첫 위치를 지정했어요.") },
             button("전환 위치 지정") { turnMark = currentNs(); toast("전환 위치를 지정했어요.") },
-            button("복귀 지정 · 1회 추가") { addBoundary() })
+            button("복귀 지정 · 1회 추가") { addBoundary() },
+            button("횟수 제외 구간 · 시작 지정") { nonRepStart = currentNs(); toast("제외할 동작의 끝으로 이동해 주세요.") },
+            button("횟수 제외 구간 · 끝과 이유 지정") { addNonRepInterval() })
         markerButtons.forEach { content.addView(it) }
-        content.addView(button("표시하던 구간 취소") { splitIndex = null; startMark = null; turnMark = null; updateMarkerTitles() })
+        content.addView(text("준비·멈춤·끝에 남은 반 반복·내려놓기·가림은 따로 표시해 주세요. 제외 구간은 횟수·학습 정답에 들어가지 않아요."))
+        content.addView(button("표시하던 구간 취소") { splitIndex = null; startMark = null; turnMark = null; nonRepStart = null; updateMarkerTitles() })
         cycleRows = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         content.addView(cycleRows); renderCycles()
         content.addView(button("확인한 구간 저장") {
-            reviews.saveCycles(id, cycles, alignment.isChecked, review?.revision ?: 0, simultaneous.isChecked).onSuccess {
+            reviews.saveCycles(id, cycles, alignment.isChecked, review?.revision ?: 0, simultaneous.isChecked, nonRepIntervals).onSuccess {
                 review = it
                 observedMetricsText?.text = cameraObservedMetricsText(it.cameraMetrics)
-                toast("${it.references.size}개 구간 저장 · 보정 자료 조건 통과 ${it.references.count { ref -> ref.eligibleForLearning }}개")
+                toast("완전 반복 ${it.references.size}개 · 제외 구간 ${it.nonRepIntervals.size}개 저장 · 보정 자료 조건 통과 ${it.references.count { ref -> ref.eligibleForLearning }}개")
             }.onFailure { toast("구간·총 횟수 또는 영상 상태를 다시 확인해 주세요.") }
         })
         content.addView(button("원본 수신 상태 새로고침") { showCapture(id) })
@@ -346,6 +354,20 @@ class CalibrationReviewActivity : ComponentActivity() {
     }
 
     private fun currentNs() = frames.getOrNull(position)?.cameraTimestampNs?.takeIf { displayedPosition == position }
+    private fun addNonRepInterval() {
+        val start = nonRepStart ?: return toast("제외 구간의 시작을 먼저 지정해 주세요.")
+        val end = currentNs() ?: return
+        if (end <= start || cycles.any { it.startNs < end && start < it.endNs } ||
+            nonRepIntervals.any { it.startNs < end && start < it.endNs }) {
+            toast("시작보다 뒤의 프레임을 선택하고, 완전 반복·다른 제외 구간과 겹치지 않게 해 주세요.")
+            return
+        }
+        AlertDialog.Builder(this).setTitle("횟수에서 제외한 이유")
+            .setItems(NonRepReason.entries.map { it.label }.toTypedArray()) { _, index ->
+                nonRepIntervals.add(NonRepInterval(start, end, NonRepReason.entries[index]))
+                nonRepIntervals.sortBy { it.startNs }; nonRepStart = null; renderCycles()
+            }.show()
+    }
     private fun addBoundary() {
         val first = startMark ?: return toast("첫 위치를 먼저 지정해 주세요.")
         val turn = turnMark ?: return toast("전환 위치를 먼저 지정해 주세요.")
@@ -356,6 +378,7 @@ class CalibrationReviewActivity : ComponentActivity() {
             if (index == null) {
                 val cycle = RepCycle(first, turn, end, phase)
                 require(cycles.none { it.startNs < cycle.endNs && cycle.startNs < it.endNs })
+                require(nonRepIntervals.none { it.startNs < cycle.endNs && cycle.startNs < it.endNs })
                 cycles.add(cycle); cycles.sortBy { it.startNs }
             } else {
                 val old = cycles[index]
@@ -395,6 +418,10 @@ class CalibrationReviewActivity : ComponentActivity() {
                     }.onFailure { toast("합칠 반복의 전환 위치를 영상에서 선택해 주세요.") }
                 }, LinearLayout.LayoutParams(0, -2, 1f))
             })
+        }
+        nonRepIntervals.forEachIndexed { index, interval ->
+            rows.addView(text("횟수 제외 · ${interval.reason.label} · ${"%.2f".format((interval.startNs - origin) / 1e9)} → ${"%.2f".format((interval.endNs - origin) / 1e9)}초"))
+            rows.addView(button("제외 표시 지우기") { nonRepIntervals.removeAt(index); renderCycles() })
         }
     }
 

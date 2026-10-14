@@ -78,7 +78,7 @@ internal class CalibrationVideoRetention(context: Context) {
         val directionRevision = directions.reviewRevision(id).getOrThrow()
         require(reviewed.revision == expectedReviewRevision && directionRevision == expectedDirectionRevision) { "Review changed; reopen the clip" }
         val directionReview = if (directionRevision > 0) directions.loadReview(id).getOrThrow() else null
-        require(reviewed.countReference != null || reviewed.references.isNotEmpty() ||
+        require(reviewed.countReference != null || reviewed.references.isNotEmpty() || reviewed.nonRepIntervals.isNotEmpty() ||
             directionReview?.intervals?.any { it.reviewSource == StartDirectionReviewSource.HUMAN_VIDEO } == true) { "Review the clip before removing its image" }
         synchronized(lock) {
             if (logsOnly(id)) return@synchronized

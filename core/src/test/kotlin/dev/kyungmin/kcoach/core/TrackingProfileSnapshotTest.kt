@@ -36,4 +36,13 @@ class TrackingProfileSnapshotTest {
         }
     }
 
+    @Test fun `historical lobe snapshots remain explicit and do not masquerade as the new detector`() {
+        ExerciseCapabilityMatrix.standardExerciseIds().map { ExerciseTrackingProfiles.resolve(it) }
+            .filter { it.family.legacyAlgorithmId != null }.distinctBy { it.family }.forEach { current ->
+            val legacy = current.copy(id = requireNotNull(current.family.legacyAlgorithmId) + "+personal-123")
+            assertEquals(legacy, TrackingProfileSnapshot.decode(TrackingProfileSnapshot.encode(legacy)))
+            assertEquals(current, TrackingProfileSnapshot.decode(TrackingProfileSnapshot.encode(current)))
+        }
+    }
+
 }

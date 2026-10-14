@@ -15,7 +15,11 @@ if [ -n "$(git status --porcelain)" ]; then
     exit 1
 fi
 
-"$TOOLS/gradle-8.11.1/bin/gradle" :core:test :updates:testDebugUnitTest :phone:assembleOta :wear:assembleOta
+# One final integration pass after all implementation and parallel work is committed.
+# Do not run a second full pass outside this script before publishing.
+"$TOOLS/gradle-8.11.1/bin/gradle" -Pkotlin.incremental=false \
+    :core:test :updates:testDebugUnitTest :phone:testDebugUnitTest :wear:testDebugUnitTest \
+    :phone:lint :wear:lint :phone:assembleOta :wear:assembleOta
 
 version() { sed -n "s/.*$2 = \"\{0,1\}\([^\"]*\)\"\{0,1\}$/\1/p" "$1/build.gradle.kts" | head -1; }
 PHONE_CODE=$(version phone versionCode)

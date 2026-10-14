@@ -16,11 +16,18 @@ enum class MotionFamily {
     val sharedAlgorithmId: String
         get() = when (this) {
             FLEXION_EXTENSION -> "flexion-extension-pose-v4"
-            PRESS_RETURN -> "press-return-family-v3"
-            PULL_RETURN -> "pull-return-family-v3"
-            MULTI_AXIS_RETURN -> "multi-axis-return-family-v3"
-            FOREARM_ROTATION -> "forearm-rotation-family-v3"
+            PRESS_RETURN -> "press-return-family-v4"
+            PULL_RETURN -> "pull-return-family-v4"
+            MULTI_AXIS_RETURN -> "multi-axis-return-family-v4"
+            FOREARM_ROTATION -> "forearm-rotation-family-v4"
             UNOBSERVABLE_MANUAL -> "manual-required-v3"
+        }
+
+    /** Accepted only to replay an explicitly frozen historical detector. */
+    val legacyAlgorithmId: String?
+        get() = when (this) {
+            PRESS_RETURN, PULL_RETURN, MULTI_AXIS_RETURN, FOREARM_ROTATION -> sharedAlgorithmId.removeSuffix("v4") + "v3"
+            else -> null
         }
 
     val displayLabel: String
@@ -64,6 +71,7 @@ class ProfiledMotionRepDetector(
     }
 
     private val poseCounter = if (profile.family == MotionFamily.FLEXION_EXTENSION) ReturnToPoseRepDetector(profile.minimumRepMs) else null
+    private val legacyLobes = profile.id.substringBefore('+') == profile.family.legacyAlgorithmId
 
     private var lastTimestampNs = 0L
     private var gravityInitialized = false
@@ -80,6 +88,7 @@ class ProfiledMotionRepDetector(
     private var pendingPeakRate = 0.0
     private var pendingDisplacement = 0.0
     private var pendingSpread = 0.0
+    private var pendingDirection = 0
     private var lastCommittedEndNs = Long.MIN_VALUE
     private var refractoryUntilNs = 0L
 
@@ -135,6 +144,7 @@ class ProfiledMotionRepDetector(
 
     fun finish(): ProfiledMotionRepEvent? {
         if (poseCounter != null) return null // A partial return never becomes a rep when the set ends.
+        if (!legacyLobes) { resetAll(); return null } // Only observed quiet/reversal closes a new-engine lobe.
         if (direction == 0 || lastTimestampNs == 0L) return null
         val result = closeLobe(lastTimestampNs)
         resetActiveLobe()
@@ -153,6 +163,7 @@ class ProfiledMotionRepDetector(
         pendingPeakRate = 0.0
         pendingDisplacement = 0.0
         pendingSpread = 0.0
+        pendingDirection = 0
         lastCommittedEndNs = Long.MIN_VALUE
         refractoryUntilNs = 0L
         lockedAxis = -1
@@ -218,12 +229,13 @@ class ProfiledMotionRepDetector(
             return null
         }
 
-        val result = if (pendingStartNs == 0L) {
+        val result = if (pendingStartNs == 0L || !legacyLobes && pendingDirection == direction) {
             pendingStartNs = lobeStartNs
             pendingTurnaroundNs = endTimestampNs
             pendingPeakRate = lobePeakRate
             pendingDisplacement = lobeDisplacement
             pendingSpread = spread
+            pendingDirection = direction
             null
         } else {
             val repDurationMs = ((endTimestampNs - pendingStartNs) / 1_000_000L).coerceAtLeast(0L)
@@ -253,6 +265,7 @@ class ProfiledMotionRepDetector(
             pendingPeakRate = 0.0
             pendingDisplacement = 0.0
             pendingSpread = 0.0
+            pendingDirection = 0
             event
         }
         resetActiveLobe()
@@ -286,6 +299,7 @@ class ProfiledMotionRepDetector(
         pendingPeakRate = 0.0
         pendingDisplacement = 0.0
         pendingSpread = 0.0
+        pendingDirection = 0
         lockedAxis = -1
         refractoryUntilNs = 0L
     }

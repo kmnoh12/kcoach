@@ -24,7 +24,8 @@ object TrackingProfileSnapshot {
             preferredDirection = f[20].takeIf(String::isNotEmpty)?.toInt(), gyroNoiseFloor = f[21].toDouble(),
             calibrationProfileVersion = f[22].takeIf(String::isNotEmpty)?.toInt(),
         ).also { p ->
-            require(p.exerciseId.isNotBlank() && p.id.substringBefore('+') == p.family.sharedAlgorithmId) {
+            require(p.exerciseId.isNotBlank() && p.id.substringBefore('+') in
+                listOfNotNull(p.family.sharedAlgorithmId, p.family.legacyAlgorithmId)) {
                 "unsupported recorded detector version"
             }
             val generic = ExerciseTrackingProfiles.resolve(p.exerciseId, p.label)

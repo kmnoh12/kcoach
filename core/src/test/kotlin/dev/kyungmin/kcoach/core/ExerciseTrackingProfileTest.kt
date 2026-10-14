@@ -132,7 +132,7 @@ class ExerciseTrackingProfileTest {
         )
         assertEquals(3, output.result.phoneReanalyzedReps)
         assertEquals(3, output.events.size)
-        assertEquals("pull-return-family-v3", output.result.algorithmVersion)
+        assertEquals("pull-return-family-v4", output.result.algorithmVersion)
         assertEquals(CapabilityTier.B_AUTO_COUNT_LIMITED_METRICS, output.result.capabilityTier)
         assertTrue(output.result.signalQuality != null)
     }
