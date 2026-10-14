@@ -33,5 +33,8 @@
   "realModelLatencyGoal30SecondsVerified": false,
   "published": false,
   "entireGoalComplete": false,
-  "validationLogSha256": "6ae26b7e27851273a2807c1bae5f01a83ae8291871d748ffbd8eb47866ff8dd5"
+  "validationLogSha256": "6ae26b7e27851273a2807c1bae5f01a83ae8291871d748ffbd8eb47866ff8dd5",
+  "integratedMainCommit": "8bd434f",
+  "otherSessionUncommittedFilesPreservedByHash": 10,
+  "rendered390dpUiVerified": true
 }
