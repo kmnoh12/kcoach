@@ -411,11 +411,17 @@ internal class ChatGptAuth internal constructor(
     /** Runs only when invoked by an app task; settings changes alone never consume a plan allowance. */
     fun performWork(instructions: String, messages: List<ChatGptWorkMessage>,
         onDelta: (String) -> Unit = {}, onResult: (Result<ChatGptResponseResult>) -> Unit,
-        transport: ChatGptWorkHttp = ChatGptResponsesHttps()): ChatGptWorkCancellation {
+        transport: ChatGptWorkHttp = ChatGptResponsesHttps(), expectedAccountId: String? = null,
+        expectedOptions: org.json.JSONObject? = null): ChatGptWorkCancellation {
         val cancellation = ChatGptWorkCancellation()
         val frozen = synchronized(lock) {
             val options = selectedWorkRequestOptions()
             val account = requireNotNull(saved.active)
+            if (expectedAccountId != null && expectedAccountId != account.clientId)
+                throw ChatGptWorkError("계정 연결이 바뀌었어요. 다시 요청해 주세요", "account_changed")
+            if (expectedOptions != null && (expectedOptions.optString("model") != options.optString("model") ||
+                    expectedOptions.optJSONObject("reasoning")?.optString("effort") != options.optJSONObject("reasoning")?.optString("effort")))
+                throw ChatGptWorkError("모델 설정이 바뀌었어요. 다시 요청해 주세요", "settings_changed")
             val body = ChatGptResponseRequest.build(options, instructions, messages)
             busy = true
             Triple(account, body, connectionRevision)

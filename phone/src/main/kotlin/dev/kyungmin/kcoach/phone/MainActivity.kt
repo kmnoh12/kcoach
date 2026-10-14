@@ -1142,6 +1142,7 @@ class MainActivity : ComponentActivity() {
             install = { updateManager.requestInstall() },
             openCalibration = ::showCalibration,
             openSettings = { startActivity(Intent(this, SettingsActivity::class.java)) },
+            openCoach = { startActivity(Intent(this, AiCoachActivity::class.java)) },
         )
         showScaffold(ComposeView(this).apply {
             setContent {

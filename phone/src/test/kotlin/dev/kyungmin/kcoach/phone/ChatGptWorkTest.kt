@@ -94,6 +94,22 @@ class ChatGptWorkTest {
         } catch (_: ChatGptAuthError) { }
     }
 
+    @Test fun frozenContextCannotBeSentAfterAccountOrModelSelectionChanges() {
+        val auth = fixture()
+        val transport = object : ChatGptWorkHttp {
+            override fun execute(accessToken: String, body: JSONObject, cancellation: ChatGptWorkCancellation,
+                onDelta: (String) -> Unit): ChatGptResponseResult = error("Stale context must not reach transport")
+        }
+        for ((owner, model) in listOf("another-account" to "fixture-model", "fixture-client" to "another-model")) {
+            try {
+                auth.performWork("지침", listOf(ChatGptWorkMessage("user", "계정별 맥락")), onResult = {}, transport = transport,
+                    expectedAccountId = owner, expectedOptions = JSONObject().put("model", model)
+                        .put("reasoning", JSONObject().put("effort", "high")))
+                fail("Stale context")
+            } catch (e: ChatGptWorkError) { assertTrue(e.code in setOf("account_changed", "settings_changed")) }
+        }
+    }
+
     @Test fun cancellingAfterAQueuedPreviewSuppressesItAndCannotReturnSuccess() {
         val auth = fixture()
         val started = CountDownLatch(1)

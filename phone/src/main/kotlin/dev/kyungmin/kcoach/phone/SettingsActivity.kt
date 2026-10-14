@@ -18,6 +18,7 @@ class SettingsActivity : ComponentActivity() {
             refreshModels = { auth.loadModels(force = true) },
             chooseModel = auth::chooseModel,
             chooseEffort = auth::chooseEffort,
+            profile = { startActivity(Intent(this, AiCoachActivity::class.java).putExtra(AiCoachActivity.EXTRA_PROFILE, true)) },
         )
         setContent {
             val connection = auth.state.value

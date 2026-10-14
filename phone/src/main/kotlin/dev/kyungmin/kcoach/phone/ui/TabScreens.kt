@@ -286,6 +286,7 @@ class MenuActions(
     val install: () -> String?,
     val openCalibration: () -> Unit,
     val openSettings: () -> Unit = {},
+    val openCoach: () -> Unit = {},
 )
 
 @Composable
@@ -317,6 +318,9 @@ fun MenuScreen(version: String, actions: MenuActions, wearing: dev.kyungmin.kcoa
         }
         Spacer(Modifier.height(10.dp))
         MenuButton("측정·보정", filled = false, onClick = actions.openCalibration)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            androidx.compose.material3.TextButton(onClick = actions.openCoach) { Text("운동 상담", color = KColors.Muted) }
+        }
     }
 }
 

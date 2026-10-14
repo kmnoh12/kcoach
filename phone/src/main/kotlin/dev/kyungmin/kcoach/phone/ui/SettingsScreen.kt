@@ -39,6 +39,7 @@ class SettingsActions(
     val refreshModels: () -> Unit,
     val chooseModel: (String) -> Unit,
     val chooseEffort: (String?) -> Unit,
+    val profile: () -> Unit = {},
 )
 
 fun reasoningLabel(effort: String): String = when (effort) {
@@ -108,7 +109,8 @@ fun SettingsScreen(connection: ChatGptConnectionUi, modelUi: ChatGptModelSetting
             Spacer(Modifier.height(18.dp))
             Text("모델과 추론 강도는 계정별로 저장돼요. 설정 변경만으로 한도가 소모되지는 않아요.", color = KColors.Muted, fontSize = 13.sp)
             Spacer(Modifier.height(8.dp))
-            Text("GPT 운동 분석은 아직 준비 중이에요", color = KColors.Muted, fontSize = 13.sp)
+            TextButton(onClick = actions.profile) { Text("내 운동 프로필") }
+            Text("운동 상담은 메뉴에서 열 수 있어요. 종료 리뷰와 GPT 보정은 준비 중이에요", color = KColors.Muted, fontSize = 13.sp)
         }
         if (picker == "model" && canChoose) {
             AlertDialog(onDismissRequest = { picker = null }, title = { Text("작업 모델 선택") }, text = {

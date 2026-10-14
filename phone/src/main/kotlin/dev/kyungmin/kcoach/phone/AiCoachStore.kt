@@ -112,6 +112,13 @@ internal class AiCoachStore(context: Context) {
         val owners = root.getJSONObject("session_owners")
         owners.keys().asSequence().filter { owners.getString(it) == id }.toSet()
     }
+    fun linkableSessionIds(accountId: String, candidates: Collection<String>): Set<String> = synchronized(lock) {
+        val root = read()
+        val id = root.getJSONObject("accounts").optJSONObject(accountId)?.optJSONObject("profile")?.getString("id")
+            ?: return@synchronized emptySet()
+        val owners = root.getJSONObject("session_owners")
+        candidates.filter { !owners.has(it) || owners.getString(it) == id }.toSet()
+    }
     fun turns(accountId: String): List<AiCoachTurn> = synchronized(lock) {
         val turns = read().getJSONObject("accounts").optJSONObject(accountId)?.optJSONArray("turns")
             ?: return@synchronized emptyList()
