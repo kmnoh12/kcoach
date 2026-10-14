@@ -26,5 +26,20 @@
   "published": false,
   "entireGoalComplete": false,
   "finalValidationLogSha256": "0f2d7d131a3fe063d91df04d0d385fbbe0847d8baaaf663be9442a4ff74db9be",
-  "officialRequestContract": "https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations"
+  "officialRequestContract": "https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations",
+  "integratedMainTests": {
+    "tests": 10,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "integratedMainDebugBuildSucceeded": true,
+  "existingStartOrientationEditsPreserved": true,
+  "mainSourceCommits": [
+    "d242fb4",
+    "4306668",
+    "af11e43"
+  ],
+  "integratedMainValidationLogSha256": "a3d3dc7799bec85d055140bf5f31631b35278e5b2ea874d527630c648f3f1e98",
+  "rendered390dpUiVerified": true
 }
