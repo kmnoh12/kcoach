@@ -1,0 +1,76 @@
+{
+  "tests": {
+    "core": {
+      "tests": 230,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 2
+    },
+    "updates": {
+      "tests": 14,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "phone": {
+      "tests": 287,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "wear": {
+      "tests": 69,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "apks": {
+    "phone": {
+      "sha256": "963d35084e4e58c75ce422df1eb446b4d3f6ab2e1ecaa7ddefd9be1358e3776c",
+      "bytes": 60617970
+    },
+    "wear": {
+      "sha256": "affb79c2cfce65787231c303bcd9863fd858d3782cf8accc164192444ab17515",
+      "bytes": 1223418
+    }
+  },
+  "date": "2026-10-14",
+  "implementation_head": "475026d8b652a9e02d311ed744ce5d83e420a6f5",
+  "verification": "BUILD_TESTS_AND_LOCAL_RENDER_ONLY",
+  "actual_account_inference": false,
+  "physical_device_test": false,
+  "user_delivery_flow": "update_then_user_usage_feedback",
+  "status": "READY_FOR_RELEASE",
+  "integration": {
+    "old_head": "3cbdcdebbe5cc60b918fe10dee36bfa4047c156d",
+    "new_head": "475026d8b652a9e02d311ed744ce5d83e420a6f5",
+    "original_pending_paths": [
+      "core/src/main/kotlin/dev/kyungmin/kcoach/core/ReviewedStartWristDirection.kt",
+      "core/src/main/kotlin/dev/kyungmin/kcoach/core/StartPoseStabilityGate.kt",
+      "core/src/test/kotlin/dev/kyungmin/kcoach/core/ReviewedStartWristDirectionTest.kt",
+      "core/src/test/kotlin/dev/kyungmin/kcoach/core/StartWristOrientationTest.kt",
+      "docs/reviews/2026-10-14-start-wrist-context.json",
+      "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/CalibrationCameraActivity.kt",
+      "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/CalibrationCaptureStore.kt",
+      "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/StartDirectionReviewStore.kt",
+      "phone/src/test/kotlin/dev/kyungmin/kcoach/phone/CalibrationCaptureStoreTest.kt",
+      "phone/src/test/kotlin/dev/kyungmin/kcoach/phone/FinishedRecoverySelectionTest.kt",
+      "phone/src/test/kotlin/dev/kyungmin/kcoach/phone/StartDirectionReviewStoreTest.kt",
+      "wear/src/main/kotlin/dev/kyungmin/kcoach/wear/WearWorkoutService.kt",
+      "wear/src/test/kotlin/dev/kyungmin/kcoach/wear/StartWristContextServiceTest.kt"
+    ],
+    "unmodified_other_paths_preserved": true,
+    "overlapping_wip_reverse_merge_verified": true,
+    "main_fast_forward_only": true
+  },
+  "certificate_sha256": "45130eab69678aeee288c565de466912b97dab48c317cbcf0983430a22c1da2c",
+  "lint_error_fatal_count": 0,
+  "ui_render": {
+    "width_dp": 390,
+    "font_scale": 1.5,
+    "test_fixture_only": true,
+    "visual_inspection": true
+  },
+  "merged_working_tree_compile": "PASS"
+}
