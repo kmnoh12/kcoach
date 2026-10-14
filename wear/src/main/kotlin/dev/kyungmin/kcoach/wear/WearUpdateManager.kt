@@ -35,7 +35,10 @@ class WearUpdateManager(
     private val updateDirectory = File(activity.cacheDir, "updates")
     private val updateFile = File(updateDirectory, "kcoach-wear-update.apk")
     private val manifestUrls = listOf(manifestUrl)
-    private var pendingInstall = false
+    private val installPrefs = activity.applicationContext.getSharedPreferences("update-install", Context.MODE_PRIVATE)
+    private var pendingInstall: Boolean
+        get() = installPrefs.getBoolean("pending-permission", false)
+        set(value) { check(installPrefs.edit().putBoolean("pending-permission", value).commit()) }
 
     fun checkAndDownload(onState: (WearUpdateState) -> Unit) {
         Thread {
@@ -71,14 +74,19 @@ class WearUpdateManager(
             return "워치 설정에서 KCoach의 앱 설치 권한을 허용해 주세요"
         }
         launchInstaller()
+        pendingInstall = false
         return null
     }
 
     fun resumePendingInstall(): String? {
         if (!pendingInstall) return null
+        if (!updateFile.isFile) {
+            pendingInstall = false
+            return "워치 업데이트 파일이 없어 다시 다운로드해야 해요"
+        }
         if (!activity.packageManager.canRequestPackageInstalls()) return "설치 권한이 아직 허용되지 않았어요"
-        pendingInstall = false
         launchInstaller()
+        pendingInstall = false
         return "워치 설치 화면을 열었어요"
     }
 

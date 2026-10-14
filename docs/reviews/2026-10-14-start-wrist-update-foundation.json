@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "checkedAtUtc": "2026-10-14T11:45:59.636853+00:00",
+  "scope": "START_POLICY_AND_UPDATE_PROGRESS_PERMISSION_RECOVERY",
+  "tests": {
+    "core": {
+      "tests": 217,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "phone": {
+      "tests": 257,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "wear": {
+      "tests": 68,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "lint": {
+    "phone": {
+      "Fatal": 0,
+      "Error": 0,
+      "Warning": 155
+    },
+    "wear": {
+      "Fatal": 0,
+      "Error": 0,
+      "Warning": 38
+    }
+  },
+  "debugBuildsVerified": [
+    "phone",
+    "wear"
+  ],
+  "verificationLog": "work/start-wrist-update-foundation-final.log",
+  "verificationLogSha256": "91fe84dcb0690f359f5f3ff6cc60e687b7d5c362fbd17e1a5a4c70fa99b671ae",
+  "deferredExercisesHaveNoUniversalTwoSecondPoseGate": 33,
+  "startCandidatesRemainUnconfirmedWithoutReviewedTarget": 3,
+  "manualCatalogExercisesUnchanged": 7,
+  "sharedExpectedGravityGateSyntheticTestsPassed": true,
+  "wristVariantMountingProfileBindingImplemented": false,
+  "physicalStartDirectionValidationVerified": false,
+  "menuUpdateProgressDuplicateClickRegressionVerified": true,
+  "phoneAndWatchInstallPermissionActivityRecoveryVerified": true,
+  "phoneWatchUnifiedUpdateImplemented": false,
+  "watchIndependentUpdateButtonRemoved": false,
+  "installationVerifiedOnPhysicalDevices": false,
+  "parallelHistorySummaryCoachAndManualReviewCodePreserved": true,
+  "cameraRetestUserReport": "관절 인식을 시작하지 못했어요",
+  "cameraRetestInstalledVersionIndependentlyVerified": false,
+  "cameraDetailedErrorCopyDeferredByUser": true,
+  "cameraFixedOnPhysicalDeviceVerified": false,
+  "published": false,
+  "entireGoalComplete": false
+}

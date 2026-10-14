@@ -957,10 +957,20 @@ class WearWorkoutService : Service(), SensorEventListener {
         } else {
             null
         }
-        measurementReady = trackingProfile.mode == TrackingMode.MANUAL_REQUIRED
+        // START/SET is already an explicit request for this set. No exercise name alone has a
+        // hardware-reviewed wrist target yet. Do not reinterpret an arbitrary quiet wrist as
+        // a correct pose or make deferred grips wait two seconds. The legacy calibration
+        // baseline is a separate sensor-stability task, not an exercise posture verdict.
+        val needsCalibrationBaseline = calibrationStage == CalibrationStage.BASELINE &&
+            trackingProfile.mode != TrackingMode.MANUAL_REQUIRED
+        measurementReady = !needsCalibrationBaseline
         measurementArmed = measurementReady
         startPoseGate = if (measurementReady) null else
-            StartPoseStabilityGate(StartPoseGateConfig.forProfile(trackingProfile))
+            StartPoseStabilityGate(StartPoseGateConfig.forProfile(trackingProfile).copy(requireSetupMotion = false))
+        if (measurementReady && trackingProfile.mode != TrackingMode.MANUAL_REQUIRED) {
+            forearmRotationDetector?.beginCounting()
+            profiledMotionDetector?.beginCounting()
+        }
     }
 
     private fun startRest(intent: Intent) {
@@ -1053,8 +1063,8 @@ class WearWorkoutService : Service(), SensorEventListener {
             if (measurementReady || trackingProfile.mode == TrackingMode.MANUAL_REQUIRED) {
                 sendLiveState(currentWorkingPhase(), true, force = true)
             } else {
-                startPoseGate = StartPoseStabilityGate(StartPoseGateConfig.forProfile(trackingProfile))
-                measurementArmed = false
+                startPoseGate = StartPoseStabilityGate(StartPoseGateConfig.forProfile(trackingProfile).copy(requireSetupMotion = false))
+                measurementArmed = true
                 sendLiveState(currentWorkingPhase(), true, force = true)
             }
             broadcastState(force = true)
@@ -1138,7 +1148,7 @@ class WearWorkoutService : Service(), SensorEventListener {
                         sensorAccuracy = event.accuracy,
                     )
                     if (!measurementReady) {
-                        val gate = startPoseGate?.observe(sensorSample)
+                        val gate = startPoseGate?.observe(sensorSample, lastAccelerometerNs)
                         measurementArmed = gate?.armed == true
                         if (gate?.ready == true) {
                             if (calibrationStage == CalibrationStage.BASELINE) {
@@ -1278,6 +1288,7 @@ class WearWorkoutService : Service(), SensorEventListener {
             trackingProfile.mode == TrackingMode.MANUAL_REQUIRED -> "MANUAL_REQUIRED"
             !measurementReady && !measurementArmed -> "POSITIONING"
             !measurementReady -> "PREPARING"
+            dev.kyungmin.kcoach.core.StartWristOrientationPolicy.uncheckedStartStatus(exerciseId) == "UNCONFIRMED" -> "WORKING_START_UNCHECKED"
             else -> "WORKING"
         }
     }
@@ -1430,6 +1441,8 @@ class WearWorkoutService : Service(), SensorEventListener {
                     "patternBinding" to patternBinding,
                     "patternWearing" to patternWearing,
                     "patternSelectionMode" to patternSelectionMode,
+                    "startDirectionStatus" to dev.kyungmin.kcoach.core.StartWristOrientationPolicy.uncheckedStartStatus(exerciseId),
+                    "startDirectionCandidate" to dev.kyungmin.kcoach.core.StartWristOrientationPolicy.candidate(exerciseId).name,
                     "patternActiveCommandId" to frozenActive?.commandId.orEmpty(),
                     "patternBaselineCount" to reps.toString(),
                     "patternBaselineSampleCalls" to activeSampleCalls.toString(),

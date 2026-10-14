@@ -1137,7 +1137,7 @@ class MainActivity : ComponentActivity() {
         val actions = MenuActions(
             checkUpdate = { report ->
                 updateManager.checkAndDownload { state ->
-                    runOnUiThread { report(UpdateUi(state.message, state.readyToInstall)) }
+                    runOnUiThread { report(UpdateUi(state.message, state.readyToInstall, state.busy)) }
                 }
             },
             install = { updateManager.requestInstall() },
@@ -1833,8 +1833,9 @@ class MainActivity : ComponentActivity() {
         val firstLine = "$exerciseName · 세트 ${observed.setIndex + 1}" +
             if (personalizedTracking) " · 개인보정 적용" else ""
         val secondLine = when (phase) {
-            "POSITIONING" -> "팔을 준비 자세로 옮겨 주세요 · 움직이는 동안은 세지 않아요"
-            "PREPARING" -> "자세 고정 · 흔들림 없이 2초 후 시작"
+            "POSITIONING" -> "측정 준비 중 · 손목 안정 확인"
+            "PREPARING" -> "손목 안정 확인 · 흔들림 없이 2초 유지"
+            "WORKING_START_UNCHECKED" -> "시작 방향 미확인 · ${reps}/${targetReps}회$weightText · ${heartRateText(heartRate)}"
             "RESTING" -> "휴식 중 · ${reps}/${targetReps}회$weightText · ${heartRateText(heartRate)}"
             "SET_COMPLETE" -> "세트 완료 · ${reps}회$weightText · ${heartRateText(heartRate)}"
             else -> "${reps}/${targetReps}회$weightText · ${heartRateText(heartRate)}"

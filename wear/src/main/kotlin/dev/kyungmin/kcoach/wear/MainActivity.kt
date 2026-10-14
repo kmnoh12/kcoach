@@ -399,8 +399,8 @@ class MainActivity : Activity() {
             runtimePhase == "CAPTURE_RECOVERY_REQUIRED" -> "센서 기록 복구 필요"
             runtimePhase == "MANUAL_PENDING" -> "횟수 저장 대기"
             runtimePhase == "MANUAL_CONFLICT" -> "횟수를 확인해 주세요"
-            running && runtimePhase == "POSITIONING" -> "준비 자세 잡기"
-            running && runtimePhase in setOf("PREPARING", "BASELINE") -> "첫 자세 고정"
+            running && runtimePhase == "POSITIONING" -> "손목 안정 확인"
+            running && runtimePhase in setOf("PREPARING", "BASELINE") -> "센서 기준 확인"
             running && runtimePhase == "CONTROLLED_REPS" -> "진동 후 동작 시작"
             running -> "운동 진행 중"
             resting -> "다음 운동"
@@ -424,8 +424,10 @@ class MainActivity : Activity() {
         val weightText = weightKg?.let { " · ${if (it % 1.0 == 0.0) it.toInt() else "%.1f".format(it)}kg" } ?: ""
         setText.text = when {
             runtimePhase == "CAPTURE_RECOVERY_REQUIRED" -> "센서 기록이 일부 없거나 손상됐어요"
+            running && runtimePhase == "WORKING_START_UNCHECKED" ->
+                "시작 방향 미확인\n세트 ${setIndex + 1} · 목표 ${targetReps}회$weightText"
             running && runtimePhase == "POSITIONING" ->
-                "팔을 준비 위치로 옮겨 주세요"
+                "준비 손목의 흔들림을 확인하고 있어요"
             running && runtimePhase in setOf("PREPARING", "BASELINE") ->
                 "흔들림 없이 2초 유지해 주세요"
             running && runtimePhase == "CONTROLLED_REPS" ->

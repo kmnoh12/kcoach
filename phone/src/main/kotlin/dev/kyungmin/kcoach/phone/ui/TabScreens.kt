@@ -279,7 +279,7 @@ fun StatsScreen(ui: StatsUi) {
     }
 }
 
-class UpdateUi(val message: String, val readyToInstall: Boolean)
+class UpdateUi(val message: String, val readyToInstall: Boolean, val busy: Boolean = false)
 
 class MenuActions(
     val checkUpdate: ((UpdateUi) -> Unit) -> Unit,
@@ -292,7 +292,6 @@ class MenuActions(
 @Composable
 fun MenuScreen(version: String, actions: MenuActions, wearing: dev.kyungmin.kcoach.phone.WorkoutWearingSelection? = null) {
     var state by remember { mutableStateOf(UpdateUi("업데이트를 확인할 수 있어요", false)) }
-    var busy by remember { mutableStateOf(false) }
     TabPage("메뉴", "", KIcon.Settings, actions.openSettings) {
         Spacer(Modifier.height(28.dp))
         SectionCard("기기", listOf("워치 연결" to "운동 화면에서 확인",
@@ -304,15 +303,14 @@ fun MenuScreen(version: String, actions: MenuActions, wearing: dev.kyungmin.kcoa
         Spacer(Modifier.height(24.dp))
         Text(state.message, color = KColors.Muted, fontSize = 14.sp)
         Spacer(Modifier.height(10.dp))
-        MenuButton(if (state.readyToInstall) "다운로드 완료 · 설치" else "업데이트 확인") {
+        MenuButton(if (state.busy) "업데이트 진행 중…" else if (state.readyToInstall) "다운로드 완료 · 설치" else "업데이트 확인") {
+            if (state.busy) return@MenuButton
             if (state.readyToInstall) {
                 actions.install()?.let { state = UpdateUi(it, true) }
-            } else if (!busy) {
-                busy = true
-                state = UpdateUi("최신 버전 확인 중…", false)
+            } else {
+                state = UpdateUi("최신 버전 확인 중…", false, busy = true)
                 actions.checkUpdate { result ->
                     state = result
-                    busy = false
                 }
             }
         }

@@ -4,11 +4,11 @@ import kotlin.math.abs
 import kotlin.math.sqrt
 
 /**
- * Shared start gate for every wrist-observable exercise.
+ * Stability check for a deliberately selected preparation task, optionally constrained to an expected direction.
  *
- * The watch cannot prove elbow angle or palm direction from one wrist, so this
- * gate deliberately only claims what it can observe: a plausible gravity
- * vector, quiet gyro, and a continuously stable wrist orientation.
+ * A gravity target can distinguish some palm-up/down variants in a known wearing configuration.
+ * It cannot prove elbow position or rotation about gravity. Without a target this is only a stability check,
+ * and must not be installed as a universal exercise posture gate.
  */
 data class StartPoseGateConfig(
     val stableDurationMs: Long = 2_000L,
@@ -20,6 +20,8 @@ data class StartPoseGateConfig(
     val requireSetupMotion: Boolean = true,
     val minSetupMotionGyro: Double = 1.00,
     val minSetupMotionSamples: Int = 2,
+    val expectedGravity: StartWristGravityTarget? = null,
+    val maxAccelerationAgeMs: Long = 100L,
 ) {
     companion object {
         fun forProfile(profile: ExerciseTrackingProfile): StartPoseGateConfig = when (profile.signal) {
@@ -62,9 +64,9 @@ class StartPoseStabilityGate(
         setupMotionSamples = 0
     }
 
-    fun observe(sample: SensorSample): StartPoseGateObservation {
+    fun observe(sample: SensorSample, accelerationTimestampNs: Long? = sample.timestampNs): StartPoseGateObservation {
         val timestampNs = sample.timestampNs
-        if (timestampNs <= 0L) {
+        if (timestampNs <= 0L || (lastTimestampNs > 0L && timestampNs <= lastTimestampNs)) {
             reset()
             return observation(candidate = false, stable = false, stableDurationMs = 0L)
         }
@@ -72,6 +74,13 @@ class StartPoseStabilityGate(
             reset()
         }
         lastTimestampNs = timestampNs
+
+        if (accelerationTimestampNs == null || accelerationTimestampNs <= 0L ||
+            accelerationTimestampNs > timestampNs || timestampNs - accelerationTimestampNs > config.maxAccelerationAgeMs * 1_000_000L ||
+            sample.sensorAccuracy == 0) {
+            resetStability(timestampNs)
+            return observation(candidate = false, stable = false, stableDurationMs = 0L)
+        }
 
         val ax = sample.accelerationX.toDouble()
         val ay = sample.accelerationY.toDouble()
@@ -105,6 +114,10 @@ class StartPoseStabilityGate(
         val nx = ax / gravityMagnitude
         val ny = ay / gravityMagnitude
         val nz = az / gravityMagnitude
+        if (config.expectedGravity?.matches(nx, ny, nz) == false) {
+            resetStability(timestampNs)
+            return observation(candidate = false, stable = false, stableDurationMs = 0L)
+        }
         if (!hasReference) {
             referenceX = nx
             referenceY = ny
