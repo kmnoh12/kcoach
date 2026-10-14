@@ -118,7 +118,8 @@ internal interface ChatGptWorkHttp {
         onDelta: (String) -> Unit): ChatGptResponseResult
 }
 
-internal class ChatGptResponsesHttps : ChatGptWorkHttp {
+internal class ChatGptResponsesHttps(private val deadlineMs: Long = 600_000L) : ChatGptWorkHttp {
+    init { require(deadlineMs in 1..600_000) }
     override fun execute(accessToken: String, body: JSONObject, cancellation: ChatGptWorkCancellation,
         onDelta: (String) -> Unit): ChatGptResponseResult {
         require(accessToken.isNotBlank())
@@ -128,10 +129,10 @@ internal class ChatGptResponsesHttps : ChatGptWorkHttp {
         val deadline = java.util.Timer("kcoach-ai-deadline", true)
         deadline.schedule(object : java.util.TimerTask() {
             override fun run() { deadlineReached.set(true); connection.disconnect() }
-        }, 600_000L)
+        }, deadlineMs)
         fun check() {
             cancellation.check()
-            if (deadlineReached.get() || System.nanoTime() - started > 600_000_000_000L) throw ChatGptWorkError("응답 시간이 초과됐어요. 다시 시도해 주세요", "timeout")
+            if (deadlineReached.get() || System.nanoTime() - started > deadlineMs * 1_000_000L) throw ChatGptWorkError("응답 시간이 초과됐어요. 다시 시도해 주세요", "timeout")
         }
         try {
             cancellation.attach(connection)

@@ -68,6 +68,7 @@ class PatternCandidatesActivity : ComponentActivity() {
                         content.addView(button("워치 실측 기록 검증") { evaluateNative(candidate) })
                         content.addView(button("확인한 원본을 비교 자료로 고정") { regression(candidate, true) })
                         content.addView(button("고정 자료로 이전 보정값과 비교") { regression(candidate, false) })
+                        content.addView(button("GPT 보정 도움") { showAiCalibration(profile.id) })
                         if (state?.observedActive?.command?.runtime?.id != profile.id)
                             content.addView(button("검증 후 워치에 적용 요청") { transition(candidate, rollback = false) })
                         if (state?.observedActive?.command?.runtime?.id == profile.id && state.previousObserved != null)
@@ -96,6 +97,13 @@ class PatternCandidatesActivity : ComponentActivity() {
             PatternProfileStatus.WRONG_DEVICE -> "선택한 보정값과 워치 기기가 달라 적용되지 않았어요."
             else -> "변경 요청이 적용되지 않았어요. 현재 사용 확인 상태를 유지해요."
         }
+    }
+
+    private fun showAiCalibration(candidateId: String) {
+        root("개인 엔진 보정 도움")
+        content.addView(androidx.compose.ui.platform.ComposeView(this).apply {
+            setContent { dev.kyungmin.kcoach.phone.ui.AiCalibrationPanel(candidateId, back = { showCandidates() }) }
+        })
     }
 
     private fun transition(candidate: PatternCandidate, rollback: Boolean, disable: Boolean = false) {
