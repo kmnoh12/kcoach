@@ -95,8 +95,8 @@ data class RepEvent(
     val turnaroundTimestampNs: Long,
     val endTimestampNs: Long,
     val durationMs: Long,
-    val concentricMs: Long,
-    val eccentricMs: Long,
+    val concentricMs: Long?,
+    val eccentricMs: Long?,
     val amplitude: Double,
     val peakAngularVelocity: Double,
     val confidence: Double,
@@ -120,6 +120,7 @@ data class SensorCaptureManifest(
 data class SetAnalysisResult(
     val watchDetectedReps: Int?,
     val phoneReanalyzedReps: Int?,
+    /** Algorithm-selected estimate eligible for recording, not user confirmation or proven accuracy. */
     val confirmedReps: Int?,
     val repSource: RepSource,
     val averageRepDurationMs: Double?,
@@ -130,18 +131,22 @@ data class SetAnalysisResult(
     val lateSetDegradation: Double?,
     val averageHeartRate: Int?,
     val peakHeartRate: Int?,
+    /** Heuristic analysis score, not a calibrated probability of a correct count. */
     val analysisConfidence: Double,
     val algorithmVersion: String,
     val trackingMode: TrackingMode = TrackingMode.WRIST_IMU_CAUTION,
     val trackingProfileId: String = "generic-wrist-v2",
     val trackingStatus: String = "검증 세트 필요",
     val averageAngularSpeed: Double? = null,
+    /** Legacy threshold ratio. Retained for old-record decoding; new analysis leaves it null. */
     val relativeRom: Double? = null,
     /** Confidence of the wrist-observed repetition signal, not whole-body form. */
     val repConfidence: Double? = null,
     val capabilityTier: CapabilityTier = CapabilityTier.C_PERSONALIZED_AUTO_COUNT_BETA,
     val wristMotionSpeed: Double? = null,
+    /** Legacy threshold ratio, never a joint-ROM percentage. */
     val wristMotionRange: Double? = null,
     val tempoConsistency: Int? = null,
     val signalQuality: Double? = null,
+    val motionMetrics: ObservedMotionMetrics? = null,
 )

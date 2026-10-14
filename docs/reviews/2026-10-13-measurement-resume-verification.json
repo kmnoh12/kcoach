@@ -1,0 +1,49 @@
+{
+  "date": "2026-10-13",
+  "tests": {
+    "core": {
+      "tests": 136,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "phone": {
+      "tests": 142,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "wear": {
+      "tests": 42,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "replay": {
+    "sets": 616,
+    "auto_observable_sets": 303,
+    "watch_phone_count_mismatches": 0
+  },
+  "apks": {
+    "phone": {
+      "path": "phone/build/outputs/apk/ota/phone-ota.apk",
+      "bytes": 6316371,
+      "sha256": "ea848656a7bef888b8fb320f00603c81b1d6e8ecebc77edfcded53189d902f19"
+    },
+    "wear": {
+      "path": "wear/build/outputs/apk/ota/wear-ota.apk",
+      "bytes": 718244,
+      "sha256": "399e4fed3e9b230a89be5fc5be36adb93e0e48b580af5d80d55fff3a38b8ed2b"
+    }
+  },
+  "sources": {
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/ReturnToPoseRepDetector.kt": "5d703ab86423cce2a17a38b427af39d53af9db260472200faac28932499b5dc5",
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/ProfiledMotionRepDetector.kt": "b1e1e0f81a48f46ffac27aaeba990b556af59495420e530dc58881a4bdfa5740",
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/PhoneRepAnalyzer.kt": "88b7dcc25c3fc0a89c57e21d0e951e2d19578ae9f322eb1574a6d578866a4764",
+    "wear/src/main/kotlin/dev/kyungmin/kcoach/wear/WearWorkoutService.kt": "7149b4fcabd9688808b52d3864a943a33d3bf651f508c5b985b8d4dcbadbeaef"
+  },
+  "log": "work/measurement-final-current-tree.log",
+  "physical_device_tested": false,
+  "published": false
+}

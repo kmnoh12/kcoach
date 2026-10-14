@@ -226,21 +226,21 @@ class ProbeActivity : Activity() {
                 append("센서→폰 지연 %s".format(percentiles(ageMs)))
                 if (recorder != null) append("\n● 기록 중 ${recordedSamples}개")
             }
-            val lines = segments.reversed().take(6).mapIndexed { i, s ->
+            val lines = segments.toList().asReversed().take(6).mapIndexed { i, s ->
                 "${segments.size - i}. %.2f초 · 이동 %.0fcm · 경로 %.0fcm · 최고 %.2fm/s".format(
                     s.durationSec, s.displacementM * 100, s.pathLengthM * 100, s.peakSpeedMps,
                 )
             }
             Triple(stats, lines, segments.map { it.points })
         }
-        statusText.text = if (connected) "● 워치 연결됨" else "○ 워치 대기 중 · 워치에서 KCoach → 실측 모드 → 시작"
+        statusText.text = if (connected) "● 워치 연결됨" else "○ 워치 연결 대기 · 폰과 워치의 연결을 확인해 주세요"
         statusText.setTextColor(if (connected) Color.rgb(0, 230, 118) else Color.rgb(255, 177, 0))
         statsText.text = stats
         segmentText.text = if (segmentLines.isEmpty()) {
             "올리고 내릴 때마다 구간이 하나씩 잡혀요"
         } else {
-            // One rep = up stroke + down stroke (MM-Fit: about two segments per rep).
-            "구간 ${segmentCount}개 · 반복 약 ${(segmentCount + 1) / 2}회 (궤적 지우기로 0부터)\n" + segmentLines.joinToString("\n")
+            // Diagnostic motion segments are separate from workout repetition counting.
+            "동작 구간 ${segmentCount}개 (궤적 지우기로 초기화)\n" + segmentLines.joinToString("\n")
         }
         trajectoryView.setPaths(paths)
     }
@@ -297,7 +297,7 @@ class ProbeActivity : Activity() {
             setPadding((20 * dp).toInt(), (24 * dp).toInt(), (20 * dp).toInt(), (32 * dp).toInt())
         }
         column.addView(TextView(this).apply {
-            text = "실측 모드"
+            text = "센서·3D 보기"
             textSize = 22f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.WHITE)

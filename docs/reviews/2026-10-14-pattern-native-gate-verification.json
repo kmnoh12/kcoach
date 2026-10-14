@@ -1,0 +1,37 @@
+{
+  "date": "2026-10-14",
+  "scope": "Native approval policy and read-only validation UI; synthetic policy fixtures are not real Watch8 datasets.",
+  "tests": {
+    "core": {
+      "tests": 178,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "phone": {
+      "tests": 186,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "wear": {
+      "tests": 49,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "total": 413,
+  "log": "work/pattern-native-gate-full-check.log",
+  "bothDebugApksBuilt": true,
+  "bothLintPassed": true,
+  "sourceSha256": {
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/PatternNativeValidation.kt": "d1bf6a7f5c5fe640201e1bbea36d8da9b292a80d3ae4825c7612725fdd27bde1",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/PatternCandidateStore.kt": "b455d89a209b6ef29e036a0df8b15b7d00cc63135f4c40b77594926b6ea53d68",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/PatternCandidatesActivity.kt": "2935166ef1415ae2aaa384bce3e83dcdc05ea59aed09f6c77a68cc987c4829d2"
+  },
+  "hardwareVerified": false,
+  "feedbackTimestampsCollectedByApp": false,
+  "activationControllerLinked": false,
+  "githubReleaseCreated": false
+}

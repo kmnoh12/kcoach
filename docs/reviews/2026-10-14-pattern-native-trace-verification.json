@@ -1,0 +1,35 @@
+{
+  "date": "2026-10-14",
+  "scope": "Native-path instrumentation and serialization tested in JVM/Robolectric; not physical Watch8 timing/accuracy or active-profile promotion acceptance.",
+  "tests": {
+    "core": {
+      "tests": 176,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "phone": {
+      "tests": 186,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "wear": {
+      "tests": 49,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "total": 411,
+  "log": "work/pattern-native-trace-full-check.log",
+  "bothDebugApksBuilt": true,
+  "bothLintPassed": true,
+  "sourceSha256": {
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/PatternTrialTrace.kt": "39b4bd559c8fd5144c8232d416d4871595a2183a51bdb53f986a001b2b29428e",
+    "wear/src/main/kotlin/dev/kyungmin/kcoach/wear/WearWorkoutService.kt": "28ea5814e8d2b49a3c319e1e398c8040a2f02199956d83c8d35968c1d0844467"
+  },
+  "hardwareVerified": false,
+  "nativePromotionGateLinked": false,
+  "githubReleaseCreated": false
+}

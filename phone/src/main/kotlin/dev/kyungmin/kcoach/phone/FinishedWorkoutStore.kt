@@ -10,6 +10,20 @@ import java.time.ZoneId
 internal class FinishedWorkoutStore(private val context: Context) {
     private val prefs = context.getSharedPreferences("finished-workouts", Context.MODE_PRIVATE)
 
+    internal data class Evidence(val snapshot: WorkoutSnapshot, val title: String, val minutes: Int, val analysisRevision: Long)
+
+    /** Read current snapshots, rather than stale projected totals, for a bounded AI context. */
+    fun recentEvidence(limit: Int = 30): List<Evidence> = synchronized(lock) {
+        require(limit in 1..100)
+        prefs.all.filterKeys { it.startsWith("session:") }.values.mapNotNull { value ->
+            runCatching {
+                val record = JSONObject(value as String)
+                Evidence(WorkoutSnapshotCodec.decode(record.getString("snapshot")), record.getString("title"),
+                    record.getInt("minutes"), record.optLong("analysisRevision", 0L))
+            }.getOrNull()
+        }.sortedByDescending { it.snapshot.startedAtMs }.take(limit)
+    }
+
     fun finish(snapshot: WorkoutSnapshot, title: String, minutes: Int, usePounds: Boolean = false) = synchronized(lock) {
         if (snapshot.plannedSets.none { it.completed }) return@synchronized
         val key = "session:${snapshot.sessionId}"

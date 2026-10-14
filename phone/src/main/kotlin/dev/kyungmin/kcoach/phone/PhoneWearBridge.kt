@@ -22,7 +22,7 @@ class PhoneWearBridge(private val context: Context) {
     }
 
     fun sendHello() {
-        sendPath(WearSync.PATH_PAIR, WearSync.hello("phone"))
+        sendPath(WearSync.PATH_PAIR, WearSync.hello("phone") + "|WORKOUT_CONTROL_V1")
     }
 
     fun sendStart(
@@ -75,7 +75,12 @@ class PhoneWearBridge(private val context: Context) {
         retryPendingCommand()
     }
 
-    fun retryPendingCommand() { commandOutbox.pendingForDelivery()?.let { dispatch(WearSync.PATH_COMMAND, it) } }
+    fun retryPendingCommand() {
+        commandOutbox.pendingForDelivery()?.let { dispatch(WearSync.PATH_COMMAND, it) }
+        PatternTransferOutbox(context).pending().onSuccess { commands -> commands.forEach {
+            dispatch(WearSync.PATH_PATTERN_PROFILE, it.encode())
+        } }.onFailure { Log.w("KCoachEvent", "profile transfers retained until recovery", it) }
+    }
 
     fun hasPendingDelivery(): Boolean = synchronized(queueLock) { draining || pendingMessages.isNotEmpty() }
 
@@ -92,14 +97,22 @@ class PhoneWearBridge(private val context: Context) {
     }
 
     private fun sendPath(path: String, payload: String) {
-        val durable = if (path == WearSync.PATH_COMMAND) commandOutbox.enqueue(payload) else payload
+        val durable = if (path == WearSync.PATH_COMMAND) commandOutbox.enqueue(WorkoutWearingStore(context).bind(payload).getOrThrow()) else payload
         dispatch(path, durable)
     }
 
     private fun dispatch(path: String, payload: String) {
         synchronized(queueLock) {
             if (closed) return
-            val key = if (path == WearSync.PATH_COMMAND && WearSync.parse(payload).getOrNull(1) == "QUERY") "$path:query" else path
+            val key = when {
+                path == WearSync.PATH_COMMAND && WearSync.parse(payload).getOrNull(1) == "QUERY" -> "$path:query"
+                path == WearSync.PATH_PATTERN_PROFILE -> {
+                    val profile = dev.kyungmin.kcoach.core.PatternProfileCommand.decode(payload)
+                    val channel = if (profile.operation == dev.kyungmin.kcoach.core.PatternProfileOperation.SHADOW) "shadow" else "active"
+                    "$path:$channel:${profile.runtime.compatibility}"
+                }
+                else -> path
+            }
             pendingMessages[key] = path to payload
             if (draining) return
             draining = true
@@ -121,6 +134,12 @@ class PhoneWearBridge(private val context: Context) {
             val path = message.first
             val payload = if (path == WearSync.PATH_COMMAND && WearSync.parse(message.second).getOrNull(1) != "QUERY") {
                 commandOutbox.pendingForDelivery() ?: continue
+            } else if (path == WearSync.PATH_PATTERN_PROFILE) {
+                val requested = dev.kyungmin.kcoach.core.PatternProfileCommand.decode(message.second)
+                val current = PatternTransferOutbox(context).pending().getOrNull()
+                    ?.singleOrNull { it.commandId == requested.commandId } ?: continue
+                if (current != requested) continue
+                current.encode()
             } else message.second
             runCatching {
                 val nodes = Tasks.await(Wearable.getNodeClient(context).connectedNodes, 2, TimeUnit.SECONDS)

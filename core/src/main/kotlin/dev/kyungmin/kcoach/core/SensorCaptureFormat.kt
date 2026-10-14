@@ -11,6 +11,11 @@ import java.security.MessageDigest
 data class SensorCaptureRecord(
     val sample: SensorSample,
     val heartRateBpm: Int? = null,
+    val accelerationTimestampNs: Long? = null,
+    val gyroscopeTimestampNs: Long? = null,
+    val receivedElapsedNs: Long? = null,
+    val accelerationAccuracy: Int? = null,
+    val heartRateTimestampNs: Long? = null,
 )
 
 data class SensorCaptureDocument(
@@ -31,6 +36,11 @@ data class SensorCaptureDocument(
         }
         records.forEachIndexed { index, record ->
             val sample = record.sample
+            if (sample.timestampNs < 0 || listOfNotNull(record.accelerationTimestampNs, record.gyroscopeTimestampNs,
+                    record.receivedElapsedNs, record.heartRateTimestampNs).any { it < 0 } ||
+                record.gyroscopeTimestampNs != null && record.gyroscopeTimestampNs != sample.timestampNs) {
+                errors += "clock[$index] contains an invalid original timestamp"
+            }
             if (
                 !sample.accelerationX.isFinite() ||
                 !sample.accelerationY.isFinite() ||
@@ -58,31 +68,42 @@ data class SensorCaptureDocument(
  *   recordCount: int
  *   requestedSampleRateHz: double
  *
- * Record (fixed 40 bytes):
+ * Version 1 record (40 bytes):
  *   timestampNs: long
  *   acceleration x/y/z: float x 3
  *   gyroscope x/y/z: float x 3
  *   sensorAccuracy: int (-1 means unavailable)
  *   heartRateBpm: int (-1 means unavailable)
+ * Version 2 appends (36 bytes): accelerometer time, gyroscope time,
+ * callback elapsed time (long x 3), accelerometer accuracy (int), HR time (long).
+ * Missing original times remain -1 when reading older captures.
  */
 object SensorCaptureFormat {
     private val MAGIC = byteArrayOf('K'.code.toByte(), 'C'.code.toByte(), 'S'.code.toByte(), '1'.code.toByte())
-    const val FORMAT_VERSION = 1
-    private const val RECORD_BYTES = 40
+    const val FORMAT_VERSION = 2
+    val SUPPORTED_VERSIONS = setOf(1, 2)
+    fun recordBytes(version: Int = FORMAT_VERSION): Int {
+        require(version in SUPPORTED_VERSIONS)
+        return if (version == 1) 40 else 76
+    }
 
     fun write(
         output: OutputStream,
         records: List<SensorCaptureRecord>,
         sampleRateRequestedHz: Double,
+        formatVersion: Int = FORMAT_VERSION,
     ) {
-        require(sampleRateRequestedHz > 0.0) { "Requested sample rate must be positive" }
+        require(sampleRateRequestedHz.isFinite() && sampleRateRequestedHz > 0.0) { "Requested sample rate must be positive" }
+        require(formatVersion in SUPPORTED_VERSIONS)
+        require(formatVersion != 1 || records.all { it.accelerationTimestampNs == null && it.gyroscopeTimestampNs == null &&
+            it.receivedElapsedNs == null && it.accelerationAccuracy == null && it.heartRateTimestampNs == null }) { "V1 cannot preserve original sensor clocks" }
         require(records.size <= Int.MAX_VALUE) { "Too many capture records" }
-        val errors = SensorCaptureDocument(FORMAT_VERSION, sampleRateRequestedHz, records).validateTimestamps()
+        val errors = SensorCaptureDocument(formatVersion, sampleRateRequestedHz, records).validateTimestamps()
         require(errors.isEmpty()) { errors.joinToString("; ") }
 
         DataOutputStream(output).use { data ->
             data.write(MAGIC)
-            data.writeInt(FORMAT_VERSION)
+            data.writeInt(formatVersion)
             data.writeInt(records.size)
             data.writeDouble(sampleRateRequestedHz)
             records.forEach { record ->
@@ -96,6 +117,13 @@ object SensorCaptureFormat {
                 data.writeFloat(sample.gyroscopeZ)
                 data.writeInt(sample.sensorAccuracy ?: -1)
                 data.writeInt(record.heartRateBpm ?: -1)
+                if (formatVersion >= 2) {
+                    data.writeLong(record.accelerationTimestampNs ?: -1)
+                    data.writeLong(record.gyroscopeTimestampNs ?: -1)
+                    data.writeLong(record.receivedElapsedNs ?: -1)
+                    data.writeInt(record.accelerationAccuracy ?: -1)
+                    data.writeLong(record.heartRateTimestampNs ?: -1)
+                }
             }
         }
     }
@@ -106,12 +134,12 @@ object SensorCaptureFormat {
             data.readFully(magic)
             require(magic.contentEquals(MAGIC)) { "Invalid KCS capture magic" }
             val version = data.readInt()
-            require(version == FORMAT_VERSION) { "Unsupported KCS format version: $version" }
+            require(version in SUPPORTED_VERSIONS) { "Unsupported KCS format version: $version" }
             val recordCount = data.readInt()
             require(recordCount >= 0) { "Negative KCS record count" }
             val sampleRate = data.readDouble()
-            require(sampleRate > 0.0) { "Invalid KCS sample rate" }
-            require(recordCount.toLong() * RECORD_BYTES <= Int.MAX_VALUE) { "KCS capture is too large" }
+            require(sampleRate.isFinite() && sampleRate > 0.0) { "Invalid KCS sample rate" }
+            require(recordCount.toLong() * recordBytes(version) <= Int.MAX_VALUE) { "KCS capture is too large" }
 
             val records = ArrayList<SensorCaptureRecord>(recordCount)
             repeat(recordCount) {
@@ -127,7 +155,9 @@ object SensorCaptureFormat {
                         sensorAccuracy = data.readInt().takeUnless { it < 0 },
                     )
                     val heartRate = data.readInt().takeUnless { it < 0 }
-                    records += SensorCaptureRecord(sample, heartRate)
+                    records += if (version == 1) SensorCaptureRecord(sample, heartRate) else SensorCaptureRecord(sample, heartRate,
+                        data.readLong().takeUnless { it == -1L }, data.readLong().takeUnless { it == -1L },
+                        data.readLong().takeUnless { it == -1L }, data.readInt().takeUnless { it < 0 }, data.readLong().takeUnless { it == -1L })
                 } catch (error: EOFException) {
                     throw IllegalArgumentException("Truncated KCS capture at record $it", error)
                 }

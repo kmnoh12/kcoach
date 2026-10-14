@@ -5,6 +5,19 @@ import dev.kyungmin.kcoach.core.*
 
 /** Session transitions depend on persisted state, never on whether a screen is open. */
 class PhoneSessionController(private val store: SessionStore, private val send: (String, String) -> Unit) {
+    fun receiveManual(payload: String, nowMs: Long): Result<ManualSetApplication> = runCatching {
+        val command = ManualSetCommand.fromEnvelope(WireCodec.decode(payload))
+        val applied = store.applyManualSet(command, nowMs).getOrThrow()
+        send(WearSync.PATH_MANUAL_ACK, applied.ack.encode(android.os.SystemClock.elapsedRealtime(), nowMs))
+        if (applied.restStarted) {
+            val snapshot = requireNotNull(applied.snapshot)
+            val set = SetIdentity.resolve(snapshot, command.exerciseId, command.setIndex, command.setId, command.attemptId)!!
+            if (snapshot.paused) resync().getOrThrow()
+            else send(WearSync.PATH_COMMAND, command(snapshot, "REST", set.restSeconds))
+        }
+        applied
+    }
+
     fun receiveCompletion(payload: String, nowMs: Long): Result<SetCompletionResult?> = runCatching {
         val fields = WearSync.parse(payload)
         require(fields.size >= 12 && fields[0] == "2" && fields[9] == "SET_COMPLETE") { "Invalid set completion payload" }

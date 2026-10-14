@@ -47,7 +47,7 @@ class PhoneCommandOutbox(context: Context) {
             "WRONG_SESSION" -> CommandAckResult.RESYNC
             "STALE" -> if (peerRevision != null && peerRevision >= ack[2].toLong()) CommandAckResult.RESYNC else CommandAckResult.BLOCKED
             "CLOSED_SESSION" -> if (pending[1] in setOf("STOP", "END", "COMPLETE")) CommandAckResult.ALREADY_CLOSED else CommandAckResult.BLOCKED
-            "INVALID" -> CommandAckResult.BLOCKED
+            "INVALID", "PATTERN_NOT_READY", "PATTERN_BINDING_CHANGED" -> CommandAckResult.BLOCKED
             else -> return@synchronized CommandAckResult.IGNORED
         }
         val edit = prefs.edit().putString("ackStatus", ack[3])

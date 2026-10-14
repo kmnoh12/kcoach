@@ -48,13 +48,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.kyungmin.kcoach.phone.WorkoutRoutine
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.WindowInsets
@@ -62,18 +57,12 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.util.lerp
-import kotlin.math.abs
 import kotlin.math.roundToInt
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 
 /** Tab order matches MainActivity.RootTab. */
@@ -96,9 +85,6 @@ fun Modifier.pressable(onClick: () -> Unit): Modifier {
     return this.scale(scale).clickable(interactionSource = source, indication = null, onClick = onClick)
 }
 
-/** Extra width the chosen tab takes, in units of one plain tab. */
-private const val TabExpand = 1.1f
-
 /**
  * Tab bar that floats above the screen. Only the chosen tab shows its label and widens; press and slide to move
  * the highlight along with the finger, release to switch. The bar stays alive across tab changes, so it can animate.
@@ -117,14 +103,9 @@ fun FloatingTabBar(selected: Int, visible: Boolean, onSelect: (Int) -> Unit) {
 @Composable
 private fun TabBarBody(selected: Int, onSelect: (Int) -> Unit) {
     val count = NavItems.size
-    val scope = rememberCoroutineScope()
-    val haptic = LocalHapticFeedback.current
     val density = LocalDensity.current
-    val position = remember { Animatable(selected.toFloat()) }
-    var dragging by remember { mutableStateOf(false) }
-    LaunchedEffect(selected, dragging) {
-        if (!dragging) position.animateTo(selected.toFloat(), spring(dampingRatio = 1f, stiffness = Spring.StiffnessMediumLow))
-    }
+    var preview by remember { mutableStateOf<Int?>(null) }
+    val target = preview ?: selected
     val shape = RoundedCornerShape(12.dp)
     Box(
         Modifier
@@ -139,15 +120,22 @@ private fun TabBarBody(selected: Int, onSelect: (Int) -> Unit) {
     ) {
         BoxWithConstraints(Modifier.fillMaxWidth().height(48.dp)) {
             val innerPx = constraints.maxWidth.toFloat()
-            val unit = innerPx / (count + TabExpand)
-            val pos = position.value
-            fun weight(i: Int) = 1f + TabExpand * (1f - abs(pos - i)).coerceAtLeast(0f)
-            fun start(i: Int) = (0 until i).sumOf { weight(it).toDouble() }.toFloat() * unit
-            val i0 = pos.toInt().coerceIn(0, count - 1)
-            val i1 = (i0 + 1).coerceAtMost(count - 1)
-            val f = (pos - i0).coerceIn(0f, 1f)
-            val thumbLeft = lerp(start(i0), start(i1), f)
-            val thumbWidth = lerp(weight(i0), weight(i1), f) * unit
+            // Selected button is 96 x 48 dp (2:1), independent of the phone's width.
+            val thumbWidth = with(density) { 96.dp.toPx() }
+            val unit = (innerPx - thumbWidth) / (count - 1)
+            val expansion = thumbWidth / unit - 1f
+            // Animate only endpoint widths; skipped tabs never expand.
+            val weights = NavItems.indices.map { index ->
+                val weight by animateFloatAsState(
+                    if (index == target) 1f + expansion else 1f, Motion.ui(), label = "tabWeight$index",
+                )
+                weight
+            }
+            fun weight(i: Int) = weights[i]
+            fun start(i: Int) = weights.take(i).sum() * unit
+            val thumbLeft by animateFloatAsState(
+                unit * target, Motion.ui(), label = "tabThumb",
+            )
 
             Box(
                 Modifier
@@ -160,14 +148,20 @@ private fun TabBarBody(selected: Int, onSelect: (Int) -> Unit) {
             )
             Row(Modifier.fillMaxSize()) {
                 NavItems.forEachIndexed { index, (icon, title) ->
-                    val chosen = (1f - abs(pos - index)).coerceAtLeast(0f)
+                    val chosen = if (expansion != 0f) ((weight(index) - 1f) / expansion).coerceIn(0f, 1f) else if (index == target) 1f else 0f
                     val tint = lerp(KColors.Muted, KColors.Accent, chosen)
                     Row(
-                        Modifier.weight(weight(index)).fillMaxHeight(),
+                        Modifier.weight(weight(index)).fillMaxHeight().testTag("nav-item-$index"),
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        KIcon(icon, tint, size = 22.dp)
+                        // Center the drawn paths, not just their 24-unit canvas bounds.
+                        val iconCenterCorrection = when (icon) {
+                            KIcon.Stats -> (-22f / 24f).dp // path midpoint y=13
+                            KIcon.Records -> (22f / 96f).dp // path midpoint y=11.75
+                            else -> 0.dp
+                        }
+                        KIcon(icon, tint, modifier = Modifier.offset(y = iconCenterCorrection), size = 22.dp)
                         if (chosen > 0.7f) {
                             Spacer(Modifier.width(6.dp))
                             Text(title, color = tint, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
@@ -178,31 +172,15 @@ private fun TabBarBody(selected: Int, onSelect: (Int) -> Unit) {
             Box(
                 Modifier
                     .fillMaxSize()
-                    .pointerInput(count, innerPx) {
-                        awaitEachGesture {
-                            val down = awaitFirstDown()
-                            dragging = true
-                            fun target(x: Float) = (x / innerPx * count - 0.5f).coerceIn(0f, (count - 1).toFloat())
-                            var lastIndex = target(down.position.x).roundToInt()
-                            scope.launch { position.animateTo(target(down.position.x), tween(110)) }
-                            var cancelled = false
-                            while (true) {
-                                val event = awaitPointerEvent()
-                                val change = event.changes.first()
-                                if (change.isConsumed) { cancelled = true; break }
-                                val t = target(change.position.x)
-                                val index = t.roundToInt()
-                                if (index != lastIndex) {
-                                    lastIndex = index
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                }
-                                scope.launch { position.snapTo(t) }
-                                if (!change.pressed) break
-                            }
-                            dragging = false
-                            if (!cancelled && lastIndex != selected) onSelect(lastIndex)
-                        }
-                    },
+                    .testTag("nav-gesture")
+                    .slidingSelection(
+                        selected = selected,
+                        indexAt = { x ->
+                            NavItems.indices.firstOrNull { x < start(it) + weight(it) * unit } ?: count - 1
+                        },
+                        preview = { preview = it },
+                        onSelect = onSelect,
+                    ),
             )
         }
     }

@@ -1,0 +1,54 @@
+{
+  "date": "2026-10-14",
+  "scope": "Software transport/storage/selection/first-sample acknowledgement; not physical Watch8, native camera, latency/accuracy, activation or release acceptance.",
+  "tests": {
+    "core": {
+      "tests": 175,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "phone": {
+      "tests": 186,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "wear": {
+      "tests": 49,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "total": 410,
+  "log": "work/pattern-shadow-capture-regression.log",
+  "bothDebugApksBuilt": true,
+  "sourceSha256": {
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/PatternRuntimeProfile.kt": "118b938e9fd0306909f4e0e600eb55e4a2557ef877e5707de2a577db65739f3f",
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/PatternProfileProtocol.kt": "3166d407f6f0d7b5b08c125f8c20d358b13b75c59901027e283ac6f9f4415915",
+    "wear/src/main/kotlin/dev/kyungmin/kcoach/wear/PatternProfileStore.kt": "f95eb8e38864c8a3d60f46cb259970eed2e67e019ebe4c3cee06b9404a02e20b",
+    "wear/src/main/kotlin/dev/kyungmin/kcoach/wear/WearWorkoutService.kt": "f96222fa3b991eccdf63c75f9aae8d63c5b0607d0af792f75324b3c5ee0ec7bd",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/PatternTransferOutbox.kt": "c8e4dcd13ba85f2bcd192c3123c25a0a4638c9205e4ae095e8cc8def3eb28deb",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/CalibrationCameraActivity.kt": "0516c381fe0e2d87560befc1b6d2a7cd90c6a119a4e0282bcb92c07624b0ebb9"
+  },
+  "runtimeSnapshotMaxBytes": 4096,
+  "supportedUserFlow": "SHADOW_COMPARISON_ONLY",
+  "watchFirstSampleAckLinked": true,
+  "nativeActivePromotionControllerLinked": false,
+  "nativePerRepLatencyRecorded": false,
+  "physicalDeviceVerified": false,
+  "independentDataAvailable": false,
+  "githubReleaseCreated": false,
+  "lint": {
+    "log": "work/pattern-transfer-final-lint.log",
+    "phone": {
+      "errors": 0,
+      "warnings": 146
+    },
+    "wear": {
+      "errors": 0,
+      "warnings": 33
+    }
+  }
+}

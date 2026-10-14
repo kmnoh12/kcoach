@@ -1,0 +1,64 @@
+{
+  "date": "2026-10-13",
+  "scope": "ChatGPT sign-in in phone menu; no model inference",
+  "tests": [
+    {
+      "name": "dev.kyungmin.kcoach.phone.ChatGptAuthTest",
+      "tests": "8",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0"
+    },
+    {
+      "name": "dev.kyungmin.kcoach.phone.ui.ChatGptAccountUiTest",
+      "tests": "4",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0"
+    }
+  ],
+  "status": {
+    "login_tests_passed": true,
+    "ota_build_passed": true,
+    "lint_ota_passed": true,
+    "rendered_ui_inspected": true,
+    "real_openai_sign_in_verified": false,
+    "android_keystore_on_device_verified": false,
+    "installed_on_device": false,
+    "published": false
+  },
+  "limitations": [
+    "OpenAI HTTP token/discovery/JWKS calls are fake endpoints in the end-to-end test; the loopback socket and JWT signatures are real.",
+    "Android Keystore key generation and browser login require target-device verification; storage tests inject a test AES key.",
+    "Model inference, token refresh and GPT calibration are not connected.",
+    "Process death during browser sign-in requires a fresh sign-in."
+  ],
+  "artifact": {
+    "path": "phone/build/outputs/apk/ota/phone-ota.apk",
+    "size": 59104128,
+    "sha256": "dde5febdc1df6ca52d37f86283948e127da19dce679f13176fac076d98103475",
+    "version_code": 33,
+    "version_name": "0.7.3"
+  },
+  "source_sha256": {
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/ChatGptOAuth.kt": "7402bc3a796e160e451751f85d44d6680dda951440e35013af4e377ced672fcc",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/ChatGptAccountActivity.kt": "e1390def5cbf47f7247fbc04cb01286ca1227a0c6712f0a0720f7e1faaaff90a",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/ChatGptAccountStore.kt": "9b5a07e5dcdfce30c40a3dcb1a20d9b286ba7806ec58c4afd57e966c07ebd1c7",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/ChatGptAuth.kt": "3e2089c6eded9fc383bfc4541cd048fa4049e7003487e92aeaee358523c8ede6",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/ui/ChatGptAccountScreen.kt": "3ab48981d091de3c4e29776484de2ddc1a53da363b3796261e7dfb3092d6bc7d",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/ui/TabScreens.kt": "cc5f47c8596cd42eb0ff1f97cf2d5c26306fff0f2089ff760d6ec3c9f5665613",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/MainActivity.kt": "76cbff4caa2c1d473019d82df9cfc1d513f2be35ba6d90d46f541f1ba11b8989",
+    "phone/src/main/AndroidManifest.xml": "f0dad3e5f8f7e2c1fc939d402e04b67e980a224c5299f0981dc9e44a297a59b8",
+    "phone/build.gradle.kts": "5c81faba0554eb9c4042c0032398e7342b847810ca0fd7bb249f465999b45461",
+    "phone/src/main/res/drawable/ic_chatgpt.xml": "49c389c36118367e3be38554ec3027c01f94d08da3c39e4ac9c16a2c954b03bc"
+  },
+  "logs": [
+    "work/chatgpt-login-final.log",
+    "work/chatgpt-login-screens.log"
+  ],
+  "screenshots": [
+    "phone/build/outputs/roborazzi/menu_chatgpt.png",
+    "phone/build/outputs/roborazzi/chatgpt_signed_out.png",
+    "phone/build/outputs/roborazzi/chatgpt_identity_only.png"
+  ]
+}

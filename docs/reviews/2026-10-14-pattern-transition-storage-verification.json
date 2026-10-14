@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "scope": "SOFTWARE_STORAGE_AND_TRANSPORT_CONTRACTS_ONLY",
+  "tests": {
+    "core": {
+      "tests": 178,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "phone": {
+      "tests": 188,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "wear": {
+      "tests": 51,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "debugApkBuilds": {
+    "phone": "passed",
+    "wear": "passed"
+  },
+  "lintDebug": {
+    "phone": "passed",
+    "wear": "passed"
+  },
+  "testedBehaviors": [
+    "an initially absent active profile stays absent throughout the same attempt including restart",
+    "rollback restores the exact previous runtime only on a new set",
+    "activation conflict is terminal until a new validated transition is issued",
+    "shadow and active pending transfers coexist",
+    "current and previous observed profiles survive 260 shadow transfers",
+    "staged acknowledgements do not change observed active history"
+  ],
+  "sourceSha256": {
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/PatternTransferOutbox.kt": "7920c2711d3a9b448dd2fa05577a1a8f2d7ab0db0ca912af8f33f6914807ff50",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/PhoneWearBridge.kt": "6f6c5408be4f7f5f880dc2efea4833782f341f4fa6ef163262384dbb73644656",
+    "wear/src/main/kotlin/dev/kyungmin/kcoach/wear/PatternProfileStore.kt": "a3b68abb7c75d887b87d74172195453eaf75c5f5318ba552e3e99970a9ab732e",
+    "phone/src/test/kotlin/dev/kyungmin/kcoach/phone/PatternTransferOutboxTest.kt": "ed74c542db9a38ce898e37b896393b70eacb2bb4c7231d63f9808704dc9df5f9",
+    "wear/src/test/kotlin/dev/kyungmin/kcoach/wear/PatternProfileStoreTest.kt": "e59a5afa9ec9e4b02a5229734af258685272c594c8799644b6054af1e650caf2"
+  },
+  "redGreenLogs": [
+    "work/pattern-empty-freeze-red.log",
+    "work/pattern-empty-freeze-green.log",
+    "work/pattern-transition-red.log",
+    "work/pattern-transition-green.log",
+    "work/pattern-rollback-red.log",
+    "work/pattern-rollback-green.log",
+    "work/pattern-active-history-red.log",
+    "work/pattern-active-history-green.log"
+  ],
+  "fullCheckLog": "work/pattern-transition-full-check.log",
+  "hardwareVerified": false,
+  "accuracyImprovementVerified": false,
+  "adoptionControllerConnected": false,
+  "livePrimaryEngineSwitchConnected": false,
+  "released": false
+}

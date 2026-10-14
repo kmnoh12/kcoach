@@ -109,6 +109,15 @@ class CaptureInbox(
             CaptureState.entries.firstOrNull { it.name == name }
         }
 
+    fun readCapture(captureId: String): Result<ReceivedCapture> = synchronized(lock) {
+        runCatching {
+            require(captureId.matches(Regex("[A-Za-z0-9._-]{1,160}")))
+            val manifest = WireCodec.decode(prefs.getString(manifestKey(captureId), null) ?: error("Missing capture manifest"))
+            val file = captureFile(captureId)
+            ReceivedCapture(manifest, CaptureValidator.validate(manifest, readCaptureBytes(file)), file)
+        }
+    }
+
     private fun captureFile(id: String): File {
         val file = File(prefs.getString(pathKey(id), null) ?: error("missing capture path")).canonicalFile
         require(file.parentFile == File(context.filesDir, "captures").canonicalFile) { "capture path outside inbox" }

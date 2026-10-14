@@ -6,9 +6,9 @@ import kotlin.test.assertTrue
 
 class CapabilityMetadataTest {
     @Test
-    fun standardMatrixCoversAllThirtyThreeCatalogExercises() {
-        assertEquals(33, ExerciseCapabilityMatrix.standardExerciseIds().size)
-        assertEquals(33, ExerciseCapabilityMatrix.all.count { it.variantId == "standard" })
+    fun standardMatrixCoversAllFortyThreeCatalogExercises() {
+        assertEquals(43, ExerciseCapabilityMatrix.standardExerciseIds().size)
+        assertEquals(43, ExerciseCapabilityMatrix.all.count { it.variantId == "standard" })
     }
 
     @Test
@@ -23,20 +23,20 @@ class CapabilityMetadataTest {
     }
 
     @Test
-    fun pullUpCalibrationIsBetaAndStillExcludesWholeBodyClaims() {
+    fun oldPullUpCalibrationCannotPromoteFixedGripMovementToAutomatic() {
         val metadata = ExerciseCapabilityMatrix.resolve("pull_up", "calibrated_same_grip")
-        assertEquals(CapabilityTier.C_PERSONALIZED_AUTO_COUNT_BETA, metadata.capabilityTier)
-        assertEquals(CountMode.PERSONALIZED_AUTO_BETA, metadata.countMode)
+        assertEquals(CapabilityTier.D_MANUAL_REQUIRED, metadata.capabilityTier)
+        assertEquals(CountMode.MANUAL_REQUIRED, metadata.countMode)
         assertTrue("chin_over_bar" in metadata.unsupportedMetrics)
-        assertEquals(CapabilityTier.C_PERSONALIZED_AUTO_COUNT_BETA, ExerciseTrackingProfiles.resolveVariant("pull_up", variantId = "calibrated_same_grip").capabilityTier)
-        assertEquals(TrackingMode.WRIST_IMU_CAUTION, ExerciseTrackingProfiles.resolveVariant("pull_up", variantId = "calibrated_same_grip").mode)
+        assertEquals(CapabilityTier.D_MANUAL_REQUIRED, ExerciseTrackingProfiles.resolveVariant("pull_up", variantId = "calibrated_same_grip").capabilityTier)
+        assertEquals(TrackingMode.MANUAL_REQUIRED, ExerciseTrackingProfiles.resolveVariant("pull_up", variantId = "calibrated_same_grip").mode)
     }
 
     @Test
-    fun handOnKneeLegPressIsConditionalProxyOnly() {
+    fun oldContactProxyCannotPromoteLegPressToAutomatic() {
         val metadata = ExerciseCapabilityMatrix.resolve("leg_press", "hand_on_knee_proxy")
-        assertEquals(CapabilityTier.C_PERSONALIZED_AUTO_COUNT_BETA, metadata.capabilityTier)
-        assertEquals(CountMode.PERSONALIZED_AUTO_BETA, metadata.countMode)
+        assertEquals(CapabilityTier.D_MANUAL_REQUIRED, metadata.capabilityTier)
+        assertEquals(CountMode.MANUAL_REQUIRED, metadata.countMode)
         assertTrue("contact_validity" !in metadata.supportedMetrics)
         assertTrue("joint_rom" in metadata.unsupportedMetrics)
         assertEquals("manual-required-v3", ExerciseTrackingProfiles.resolveVariant("leg_press", variantId = "hand_on_knee_proxy").id)
@@ -47,7 +47,7 @@ class CapabilityMetadataTest {
     fun exerciseProfilesExposeTheirMotionSpecificCapabilityTier() {
         assertEquals(CapabilityTier.A_WRIST_DIRECT_AUTO, ExerciseTrackingProfiles.resolve("ez_biceps_curl").capabilityTier)
         assertEquals(CapabilityTier.B_AUTO_COUNT_LIMITED_METRICS, ExerciseTrackingProfiles.resolve("flat_bench").capabilityTier)
-        assertEquals(CapabilityTier.C_PERSONALIZED_AUTO_COUNT_BETA, ExerciseTrackingProfiles.resolve("pull_up").capabilityTier)
+        assertEquals(CapabilityTier.D_MANUAL_REQUIRED, ExerciseTrackingProfiles.resolve("pull_up").capabilityTier)
         assertEquals(CapabilityTier.C_PERSONALIZED_AUTO_COUNT_BETA, ExerciseTrackingProfiles.resolve("external_rotation").capabilityTier)
         assertEquals(CapabilityTier.D_MANUAL_REQUIRED, ExerciseTrackingProfiles.resolve("leg_extension").capabilityTier)
         assertEquals(TrackingMode.WRIST_IMU_CAUTION, ExerciseTrackingProfiles.resolve("dumbbell_lateral_raise").mode)

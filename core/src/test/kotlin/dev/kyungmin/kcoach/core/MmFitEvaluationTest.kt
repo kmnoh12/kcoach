@@ -6,7 +6,8 @@ import kotlin.math.roundToInt
 import kotlin.test.Test
 
 /**
- * Offline evaluation of [WristTrajectoryTracker] on MM-Fit (left-wrist watch).
+ * Legacy probe-only evaluation of [WristTrajectoryTracker] on MM-Fit.
+ * This does not evaluate the current workout detector or PhoneRepAnalyzer.
  * Runs only when KCOACH_MMFIT_DIR points at tools/mmfit_convert.py output;
  * writes a per-exercise report to core/build/mmfit-report.txt.
  */
@@ -48,7 +49,7 @@ class MmFitEvaluationTest {
         }
 
         val report = buildString {
-            appendLine("MM-Fit left wrist · ${results.size} sets")
+            appendLine("LEGACY probe tracker — not current workout-app accuracy · MM-Fit left wrist · ${results.size} sets")
             appendLine("exercise                  sets  reps  segs  |err| 1seg/rep  |err| 2seg/rep  ±1(best)  path(cm)  peak(m/s)")
             results.groupBy { it.exercise }.toSortedMap().forEach { (exercise, sets) ->
                 val errOne = sets.map { abs(it.segments.size - it.reps) }

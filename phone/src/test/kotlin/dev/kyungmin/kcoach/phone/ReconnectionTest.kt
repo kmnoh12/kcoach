@@ -24,6 +24,16 @@ class ReconnectionTest {
         5.0, 100, "SET_COMPLETE", false, completionId = token)
     private fun controller(commands: MutableList<Pair<String, String>>) = PhoneSessionController(SessionStore(app)) { path, payload -> commands += path to payload }
 
+    @Test fun aMidSetWearingChangeIsRetainedForReviewInsteadOfBeingRetriedForever() {
+        val outbox = PhoneCommandOutbox(app)
+        val pending = outbox.enqueue(WearSync.richCommand("START", "reconnect-session", "external_rotation", "외회전", 0, 10, 5.0, 45))
+        val revision = WearSync.parse(pending)[10]
+        assertEquals(CommandAckResult.BLOCKED, outbox.receiveAck("1|reconnect-session|$revision|PATTERN_BINDING_CHANGED|0"))
+        val restored = PhoneCommandOutbox(app)
+        assertEquals(pending, restored.pending())
+        assertNull(restored.pendingForDelivery())
+    }
+
     @Test fun commandRevisionAndPendingCommandSurviveRestartAndOnlyMatchingAckRemovesIt() {
         val first = PhoneCommandOutbox(app)
         val start = first.enqueue(WearSync.command("START", "reconnect-session", "external_rotation", 0, 10))

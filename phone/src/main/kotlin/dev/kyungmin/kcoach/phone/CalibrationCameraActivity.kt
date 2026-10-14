@@ -1,0 +1,350 @@
+package dev.kyungmin.kcoach.phone
+
+import android.Manifest
+import android.content.Intent
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.IntentFilter
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Matrix
+import android.graphics.Paint
+import android.hardware.camera2.CameraCharacteristics
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
+import android.view.View
+import android.view.WindowManager
+import android.widget.*
+import androidx.activity.ComponentActivity
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.camera2.interop.Camera2CameraInfo
+import androidx.camera.camera2.interop.ExperimentalCamera2Interop
+import androidx.camera.core.*
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
+import androidx.core.content.ContextCompat
+import com.google.android.gms.wearable.Wearable
+import com.google.mediapipe.framework.image.BitmapImageBuilder
+import com.google.mediapipe.tasks.core.BaseOptions
+import com.google.mediapipe.tasks.vision.core.RunningMode
+import com.google.mediapipe.tasks.vision.poselandmarker.PoseLandmarker
+import dev.kyungmin.kcoach.core.*
+import java.util.concurrent.Executors
+
+/** A reference clip and its exact analyzed frame timestamps stay on this phone. */
+class CalibrationCameraActivity : ComponentActivity() {
+    private val worker = Executors.newSingleThreadExecutor()
+    private val main = Handler(Looper.getMainLooper())
+    private val store by lazy { CalibrationCaptureStore(this) }
+    private val clocks by lazy { CaptureClockStore(this) }
+    private lateinit var preview: PreviewView
+    private lateinit var overlay: PoseOverlay
+    private lateinit var status: TextView
+    private lateinit var start: Button
+    private lateinit var stop: Button
+    private lateinit var hand: CheckBox
+    private lateinit var orientation: Spinner
+    private var provider: ProcessCameraProvider? = null
+    private var analysis: ImageAnalysis? = null
+    private var pose: PoseLandmarker? = null
+    @Volatile private var cameraReady = false
+    @Volatile private var stopping = false
+    @Volatile private var capture: CalibrationCapture? = null
+    @Volatile private var preparedCapture: CalibrationCapture? = null
+    private var starting = false
+    private var watchStartScheduled = false
+    @Volatile private var selectedShadow: PatternProfileCommand? = null
+    private var encoder: ReferenceVideoEncoder? = null
+    private var firstCameraNs: Long? = null
+    private var lastModelMs = -1L
+    private var frameIndex = 0L
+    private var timestampSource = CameraTimestampSource.UNKNOWN
+    private var counter: UpperBodyPoseCounter? = null
+    private var lastClockWindowAtMs = 0L
+    private val clockReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val prepared = preparedCapture ?: return
+            if (intent.getStringExtra("captureId") == prepared.id || intent.getStringExtra("commandId") == selectedShadow?.commandId)
+                startWhenReady(prepared)
+        }
+    }
+    private val exerciseId get() = intent.getStringExtra("exerciseId").orEmpty()
+    private val exerciseName get() = intent.getStringExtra("exerciseName").orEmpty()
+    private val permission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) bindCamera() else { status.text = "촬영하려면 카메라 권한이 필요해요."; start.text = "카메라 권한 허용"; start.isEnabled = true }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        setContentView(buildUi())
+        ContextCompat.registerReceiver(this, clockReceiver, IntentFilter(PhoneWearListenerService.ACTION_CAPTURE_CLOCK).apply {
+            addAction(PhoneWearListenerService.ACTION_PATTERN_PROFILE)
+        }, ContextCompat.RECEIVER_NOT_EXPORTED)
+        store.recoverInterrupted().onFailure { status.text = "이전 촬영 자료를 확인해야 해요." }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) bindCamera()
+        else permission.launch(Manifest.permission.CAMERA)
+    }
+
+    private fun buildUi(): View = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(24, 16, 24, 20); setBackgroundColor(Color.rgb(9, 12, 11))
+        addView(TextView(this@CalibrationCameraActivity).apply { text = "${exerciseName}\n영상으로 동작 확인"; textSize = 22f; setTextColor(Color.WHITE) })
+        addView(TextView(this@CalibrationCameraActivity).apply {
+            val contract = ExerciseMeasurementContracts.resolve(exerciseId)
+            text = if (contract.recipe == MeasurementRecipe.SQUAT) "폰을 고정하고 머리부터 발까지 보이게 해 주세요."
+                else "폰을 고정하고 어깨·팔꿈치·손목과 몸통이 보이게 해 주세요. 평소 동작으로 6~8회부터 촬영해요."
+            setTextColor(Color.LTGRAY); textSize = 14f; setPadding(0, 10, 0, 10)
+        })
+        hand = CheckBox(this@CalibrationCameraActivity).apply { text = "워치를 왼손에 착용"; isChecked = intent.getBooleanExtra("watchOnLeft", true); setTextColor(Color.WHITE) }
+        addView(hand)
+        this@CalibrationCameraActivity.orientation = Spinner(this@CalibrationCameraActivity).apply {
+            adapter = ArrayAdapter(this@CalibrationCameraActivity, android.R.layout.simple_spinner_dropdown_item,
+                arrayOf("워치 화면 방향 선택", "손등 쪽", "손바닥 쪽"))
+        }
+        addView(this@CalibrationCameraActivity.orientation)
+        this@CalibrationCameraActivity.orientation.setSelection(when (intent.getStringExtra("watchOrientation")) { "OUTSIDE" -> 1; "INSIDE" -> 2; else -> 0 })
+        val frame = FrameLayout(this@CalibrationCameraActivity)
+        preview = PreviewView(this@CalibrationCameraActivity).apply { scaleType = PreviewView.ScaleType.FIT_CENTER }
+        this@CalibrationCameraActivity.overlay = PoseOverlay()
+        frame.addView(preview, FrameLayout.LayoutParams(-1, -1)); frame.addView(this@CalibrationCameraActivity.overlay, FrameLayout.LayoutParams(-1, -1))
+        addView(frame, LinearLayout.LayoutParams(-1, 0, 1f))
+        status = TextView(this@CalibrationCameraActivity).apply { text = "카메라 준비 중…"; textSize = 14f; setTextColor(Color.rgb(30, 210, 190)); setPadding(0, 12, 0, 8) }
+        addView(status)
+        addView(LinearLayout(this@CalibrationCameraActivity).apply {
+            start = Button(this@CalibrationCameraActivity).apply { text = "워치와 함께 촬영 시작"; isEnabled = false; setOnClickListener { beginCapture() } }
+            stop = Button(this@CalibrationCameraActivity).apply { text = "촬영 종료 · 저장"; isEnabled = false; setOnClickListener { stopCapture(null) } }
+            addView(start, LinearLayout.LayoutParams(0, -2, 1f)); addView(stop, LinearLayout.LayoutParams(0, -2, 1f))
+        })
+        addView(Button(this@CalibrationCameraActivity).apply { text = "저장한 촬영 확인"; setOnClickListener {
+            if (capture == null) startActivity(Intent(this@CalibrationCameraActivity, CalibrationReviewActivity::class.java))
+        } })
+    }
+
+    @androidx.annotation.OptIn(ExperimentalCamera2Interop::class)
+    private fun bindCamera() {
+        val future = ProcessCameraProvider.getInstance(this)
+        future.addListener({
+            runCatching {
+                provider = future.get()
+                val cameraPreview = Preview.Builder().build().also { it.setSurfaceProvider(preview.surfaceProvider) }
+                val imageAnalysis = ImageAnalysis.Builder().setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    .setResolutionSelector(ResolutionSelector.Builder().setResolutionStrategy(ResolutionStrategy(android.util.Size(640, 480),
+                        ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER)).build()).build()
+                analysis = imageAnalysis
+                val camera = provider!!.bindToLifecycle(this, CameraSelector.DEFAULT_FRONT_CAMERA, cameraPreview, imageAnalysis)
+                val source = Camera2CameraInfo.from(camera.cameraInfo).getCameraCharacteristic(CameraCharacteristics.SENSOR_INFO_TIMESTAMP_SOURCE)
+                timestampSource = if (source == CameraCharacteristics.SENSOR_INFO_TIMESTAMP_SOURCE_REALTIME)
+                    CameraTimestampSource.PHONE_ELAPSED_REALTIME else CameraTimestampSource.UNKNOWN
+                worker.execute {
+                    runCatching {
+                        pose = PoseLandmarker.createFromOptions(this, PoseLandmarker.PoseLandmarkerOptions.builder()
+                            .setBaseOptions(BaseOptions.builder().setModelAssetPath("pose_landmarker_lite.task").build())
+                            .setRunningMode(RunningMode.VIDEO).setNumPoses(2).setMinPoseDetectionConfidence(0.6f)
+                            .setMinPosePresenceConfidence(0.6f).setMinTrackingConfidence(0.6f).build())
+                        imageAnalysis.setAnalyzer(worker, ::analyze)
+                        cameraReady = true
+                        main.post { start.isEnabled = true; status.text = "몸이 보이면 촬영을 시작해 주세요. 영상은 폰 안에 저장돼요." }
+                    }.onFailure { main.post { status.text = "관절 인식을 시작하지 못했어요. 촬영 자료는 삭제하지 않아요." } }
+                }
+            }.onFailure { status.text = "전면 카메라를 시작하지 못했어요." }
+        }, ContextCompat.getMainExecutor(this))
+    }
+
+    private fun beginCapture() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) { permission.launch(Manifest.permission.CAMERA); return }
+        if (!cameraReady || capture != null || starting) return
+        if (orientation.selectedItemPosition == 0) { status.text = "워치 화면이 손등 쪽인지 손바닥 쪽인지 선택해 주세요."; return }
+        starting = true; start.isEnabled = false
+        Wearable.getNodeClient(this).connectedNodes.addOnSuccessListener { nodes ->
+            if (nodes.isEmpty()) { starting = false; start.isEnabled = true; status.text = "워치를 연결한 뒤 함께 촬영해 주세요."; return@addOnSuccessListener }
+            val onLeft = hand.isChecked
+            val wearing = when (orientation.selectedItemPosition) { 1 -> "OUTSIDE"; 2 -> "INSIDE"; else -> "UNKNOWN" }
+            worker.execute {
+                runCatching {
+                    selectedShadow = null
+                    intent.getStringExtra("candidateId")?.let { id ->
+                        val candidates = PatternCandidateStore(this)
+                        val candidate = candidates.load(id).getOrThrow()
+                        candidates.checkCurrentSources(candidate.profile)
+                        val key = candidate.profile.compatibility
+                        require(key.recipe == ExerciseMeasurementContracts.resolve(exerciseId).recipe &&
+                            key.side == if (onLeft) "LEFT" else "RIGHT")
+                        require(key.placement == wearing)
+                        selectedShadow = PatternTransferOutbox(this).enqueueShadow(PatternRuntimeProfile.from(candidate.profile)).getOrThrow().command
+                        PhoneWorkoutService.send(this, WearSync.PATH_PATTERN_PROFILE, selectedShadow!!.encode())
+                    }
+                    val epoch = PhoneClockEpoch.current(this)
+                    val next = store.begin(exerciseId, exerciseName, onLeft, epoch.id, wearing).getOrThrow()
+                    frameIndex = 0; firstCameraNs = null; stopping = false; watchStartScheduled = false; encoder = null
+                    val motion = cameraMotion(exerciseId)
+                    counter = motion?.let(::UpperBodyPoseCounter)
+                    preparedCapture = next
+                    lastClockWindowAtMs = SystemClock.elapsedRealtime()
+                    probe(next.id, "START")
+                    main.post {
+                        stop.isEnabled = true; hand.isEnabled = false; orientation.isEnabled = false; status.text = "워치의 동시 촬영 지원과 응답을 확인하는 중…"
+                        main.postDelayed({ if (preparedCapture?.id == next.id) stopCapture("Watch reference capture support not confirmed") }, 5_000)
+                        startWhenReady(next)
+                    }
+                }.onFailure { main.post { starting = false; start.isEnabled = true; status.text = "다른 운동이 진행 중이거나 저장을 시작하지 못했어요." } }
+            }
+        }.addOnFailureListener { starting = false; start.isEnabled = true; status.text = "워치 연결을 확인하지 못했어요." }
+    }
+
+    private fun startWhenReady(prepared: CalibrationCapture) {
+        if (!clocks.pairedCaptureSupported(prepared.id)) return
+        val shadow = selectedShadow
+        if (shadow != null) {
+            if (!clocks.patternActiveSupported(prepared.id)) return
+            val transfer = PatternTransferOutbox(this).latest(shadow.runtime.compatibility).getOrNull() ?: return
+            if (transfer.command.commandId != shadow.commandId || transfer.ack?.status !in setOf(PatternProfileStatus.STAGED, PatternProfileStatus.APPLIED)) return
+        }
+        startPreparedCapture(prepared)
+    }
+
+    @Synchronized private fun startPreparedCapture(prepared: CalibrationCapture) {
+        if (stopping || watchStartScheduled || preparedCapture?.id != prepared.id) return
+        watchStartScheduled = true
+        worker.execute {
+            synchronized(this) {
+                if (stopping) return@execute
+                capture = prepared
+                preparedCapture = null
+                val startCommand = WearSync.withPatternShadow(WearSync.richCommand("START", prepared.id, exerciseId,
+                    exerciseName, 0, 8, null, 0, setId = prepared.setId, attemptId = prepared.attemptId), selectedShadow?.commandId.orEmpty())
+                val boundCommand = selectedShadow?.runtime?.compatibility?.let { WearSync.withPatternBinding(startCommand, it) } ?: startCommand
+                PhoneWorkoutService.send(this, WearSync.PATH_COMMAND, boundCommand)
+            }
+            main.post { starting = false; status.text = "촬영 시작 · 워치 준비 자세를 잡고 평소 동작으로 움직여 주세요." }
+        }
+    }
+
+    private fun analyze(image: ImageProxy) {
+        val receivedNs = SystemClock.elapsedRealtimeNanos()
+        var bitmap: Bitmap? = null
+        try {
+            if (stopping) return
+            val cameraNs = image.imageInfo.timestamp
+            val modelMs = cameraNs / 1_000_000L
+            if (modelMs <= lastModelMs) {
+                if (capture != null) stopCapture("Camera timestamp order changed")
+                return
+            }
+            lastModelMs = modelMs
+            val original = image.toBitmap()
+            val rotation = image.imageInfo.rotationDegrees
+            bitmap = if (rotation == 0) original else Bitmap.createBitmap(original, 0, 0, original.width, original.height,
+                Matrix().apply { postRotate(rotation.toFloat()) }, true).also { original.recycle() }
+            val result = BitmapImageBuilder(bitmap).build().use { mp -> requireNotNull(pose).detectForVideo(mp, modelMs) }
+            val completedNs = SystemClock.elapsedRealtimeNanos()
+            val normalized = result.landmarks().map { points -> points.map {
+                CameraLandmark(it.x().toDouble(), it.y().toDouble(), it.z().toDouble(), it.visibility().orElse(null)?.toDouble(), it.presence().orElse(null)?.toDouble())
+            } }
+            val world = result.worldLandmarks().map { points -> points.map {
+                CameraLandmark(it.x().toDouble(), it.y().toDouble(), it.z().toDouble(), it.visibility().orElse(null)?.toDouble(), it.presence().orElse(null)?.toDouble())
+            } }
+            val active = capture
+            if (active != null) {
+                val first = firstCameraNs ?: cameraNs.also { firstCameraNs = it }
+                val videoUs = (cameraNs - first) / 1_000L
+                val writer = encoder ?: ReferenceVideoEncoder(store.videoFile(active.id), bitmap.width, bitmap.height).also { encoder = it }
+                val written = writer.write(bitmap, videoUs)
+                store.appendFrame(active.id, CameraPoseFrame(frameIndex, cameraNs, receivedNs, modelMs, completedNs, videoUs,
+                    bitmap.width, bitmap.height, rotation, true, timestampSource, active.phoneClockId, normalized, world, written)).getOrThrow()
+                frameIndex++
+                val now = SystemClock.elapsedRealtime()
+                if (now - lastClockWindowAtMs >= 20_000) { lastClockWindowAtMs = now; probe(active.id, "MIDDLE") }
+                val metric = if (world.size == 1 && normalized.size == 1) cameraMotion(exerciseId)?.let { motion ->
+                    UpperBodyPoseGeometry.metric(world.single().mapIndexed { index, point ->
+                        val confidence = normalized.single()[index]
+                        PosePoint(point.x, point.y, point.z, minOf(confidence.visibility ?: 0.0, confidence.presence ?: 0.0))
+                    }, motion, active.watchOnLeft)
+                } else null
+                counter?.observe(modelMs, metric)
+                val message = when {
+                    normalized.size > 1 -> "여러 사람이 보여요. 혼자 화면에 들어와 주세요."
+                    normalized.isEmpty() || counter != null && metric == null -> "팔과 몸통이 가려지지 않게 해 주세요."
+                    counter != null -> "촬영 중 · 영상 추정 ${counter!!.reps}회 · 종료 후 확인이 필요해요."
+                    else -> "촬영 중 · 횟수와 동작 구간은 영상에서 확인해요."
+                }
+                main.post { status.text = message }
+                if (videoUs >= 120_000_000L) stopCapture(null)
+            }
+            val frameWidth = bitmap.width; val frameHeight = bitmap.height
+            main.post { overlay.points = normalized.singleOrNull().orEmpty(); overlay.frameWidth = frameWidth; overlay.frameHeight = frameHeight; overlay.invalidate() }
+        } catch (error: Throwable) {
+            if (capture != null) stopCapture("Camera frame processing failed: ${error.javaClass.simpleName}")
+            main.post { status.text = "촬영이 중단됐어요. 받은 영상과 관절 자료는 보관해요." }
+        } finally { bitmap?.recycle(); image.close() }
+    }
+
+    private fun probe(id: String, window: String) {
+        repeat(3) { index -> main.postDelayed({
+            clocks.prepareProbe(id, window).onSuccess { PhoneWorkoutService.send(this, WearSync.PATH_CLOCK_REQUEST, WireCodec.encode(it)) }
+        }, index * 150L) }
+    }
+
+    @Synchronized private fun stopCapture(reason: String?) {
+        val active = capture ?: preparedCapture ?: return
+        if (stopping) return
+        stopping = true
+        main.post { stop.isEnabled = false; status.text = "영상과 워치 원본을 저장하는 중…" }
+        if (capture != null) PhoneWorkoutService.send(this, WearSync.PATH_COMMAND, WearSync.command("STOP", active.id, "", 0, 0))
+        probe(active.id, "END")
+        worker.execute {
+            val videoFinished = runCatching { encoder?.finish() == true }.getOrDefault(false)
+            encoder = null
+            val saved = store.finish(active.id, videoFinished, reason)
+            capture = null; preparedCapture = null; counter = null; stopping = false
+            main.post {
+                starting = false; start.isEnabled = cameraReady; hand.isEnabled = true; orientation.isEnabled = true
+                status.text = if (saved.getOrNull()?.status == CalibrationCaptureStatus.REVIEW_PENDING)
+                    "영상 저장 완료 · 워치 원본 수신 후 동작을 확인해 주세요." else "중단 자료를 보관했어요. 새 촬영에서 이어갈 수 있어요."
+                if (reason == null && saved.isSuccess && !isFinishing && lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED))
+                    startActivity(Intent(this, CalibrationReviewActivity::class.java).putExtra("captureId", active.id))
+            }
+        }
+    }
+
+    override fun onStop() { stopCapture("Camera screen left foreground"); super.onStop() }
+    override fun onDestroy() {
+        runCatching { unregisterReceiver(clockReceiver) }
+        analysis?.clearAnalyzer()
+        worker.execute { pose?.close(); pose = null }
+        worker.shutdown()
+        super.onDestroy()
+    }
+
+    private fun cameraMotion(id: String): CameraMotion? = when (ExerciseMeasurementContracts.resolve(id).recipe) {
+        MeasurementRecipe.CURL -> CameraMotion.ELBOW_FOLD
+        MeasurementRecipe.LATERAL_RAISE -> CameraMotion.SHOULDER_RAISE
+        MeasurementRecipe.TRICEPS_EXTENSION, MeasurementRecipe.SHOULDER_PRESS -> CameraMotion.ELBOW_PRESS
+        else -> null
+    }
+
+    private inner class PoseOverlay : View(this@CalibrationCameraActivity) {
+        var points: List<CameraLandmark> = emptyList()
+        var frameWidth = 1
+        var frameHeight = 1
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(30, 210, 190); strokeWidth = 5f }
+        override fun onDraw(canvas: Canvas) {
+            super.onDraw(canvas)
+            val scale = minOf(width.toFloat() / frameWidth, height.toFloat() / frameHeight)
+            val dx = (width - frameWidth * scale) / 2; val dy = (height - frameHeight * scale) / 2
+            val edges = listOf(11 to 12, 11 to 13, 13 to 15, 12 to 14, 14 to 16, 11 to 23, 12 to 24, 23 to 24, 23 to 25, 25 to 27, 24 to 26, 26 to 28)
+            edges.forEach { (a, b) ->
+                val first = points.getOrNull(a) ?: return@forEach; val second = points.getOrNull(b) ?: return@forEach
+                if (minOf(first.visibility ?: 0.0, first.presence ?: 0.0, second.visibility ?: 0.0, second.presence ?: 0.0) < 0.6) return@forEach
+                canvas.drawLine(dx + (1 - first.x).toFloat() * frameWidth * scale, dy + first.y.toFloat() * frameHeight * scale,
+                    dx + (1 - second.x).toFloat() * frameWidth * scale, dy + second.y.toFloat() * frameHeight * scale, paint)
+            }
+        }
+    }
+}

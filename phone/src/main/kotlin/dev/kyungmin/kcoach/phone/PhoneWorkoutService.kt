@@ -31,6 +31,10 @@ class PhoneWorkoutService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        CalibrationCaptureStore(this).recoverAfterProcessRestart().onSuccess { previous ->
+            if (previous != null && sessionStore.loadActive().getOrNull() == null)
+                PhoneCommandOutbox(this).enqueue(WearSync.command("STOP", previous.id, "", 0, 0))
+        }.onFailure { Log.w("KCoachEvent", "interrupted camera owner recovery retained", it) }
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification())
         wearBridge.sendHello()
@@ -104,6 +108,7 @@ class PhoneWorkoutService : Service() {
     }
 
     private fun hasActiveRuntime(): Boolean {
+        if (CalibrationCaptureStore(this).active().getOrElse { return true } != null) return true
         val snapshot = sessionStore.loadActive().getOrElse { return true } ?: return false
         return WorkoutSessionReducer.nextPendingSet(snapshot) != null || snapshot.phase == WorkoutPhase.RESTING || snapshot.paused
     }
@@ -111,7 +116,8 @@ class PhoneWorkoutService : Service() {
     private fun stopIfIdle(nowMs: Long): Boolean {
         if (hasActiveRuntime()) { idleSinceMs = -1L; return false }
         if (idleSinceMs < 0) idleSinceMs = nowMs
-        val delivering = PhoneCommandOutbox(this).pendingForDelivery() != null || wearBridge.hasPendingDelivery()
+        val delivering = PhoneCommandOutbox(this).pendingForDelivery() != null || wearBridge.hasPendingDelivery() ||
+            PatternTransferOutbox(this).pending().getOrElse { emptyList() }.isNotEmpty()
         if (delivering && nowMs - idleSinceMs < IDLE_DELIVERY_GRACE_MS) return false
         heartbeatTicker?.let(handler::removeCallbacks)
         restTicker?.let(handler::removeCallbacks)
@@ -153,7 +159,8 @@ class PhoneWorkoutService : Service() {
         private const val IDLE_DELIVERY_GRACE_MS = 30_000L
 
         fun retryPending(context: android.content.Context) {
-            if (PhoneCommandOutbox(context).pendingForDelivery() == null || SessionStore(context).loadActive().getOrNull() != null) return
+            if ((PhoneCommandOutbox(context).pendingForDelivery() == null && PatternTransferOutbox(context).pending().getOrElse { emptyList() }.isEmpty()) ||
+                SessionStore(context).loadActive().getOrNull() != null) return
             runCatching {
                 androidx.core.content.ContextCompat.startForegroundService(context,
                     Intent(context, PhoneWorkoutService::class.java).putExtra(EXTRA_ACTION, ACTION_RETRY))
@@ -166,10 +173,11 @@ class PhoneWorkoutService : Service() {
 
         fun send(context: android.content.Context, path: String, payload: String) {
             val durable = path == WearSync.PATH_COMMAND && WearSync.parse(payload).getOrNull(1) != "QUERY"
-            if (durable) PhoneCommandOutbox(context).enqueue(payload)
+            val bound = if (durable) WorkoutWearingStore(context).bind(payload).getOrThrow() else payload
+            if (durable) PhoneCommandOutbox(context).enqueue(bound)
             val intent = Intent(context, PhoneWorkoutService::class.java).apply {
                 putExtra(EXTRA_PATH, path)
-                putExtra(EXTRA_PAYLOAD, payload)
+                putExtra(EXTRA_PAYLOAD, bound)
                 putExtra(EXTRA_DURABLE_COMMAND, durable)
             }
             runCatching { androidx.core.content.ContextCompat.startForegroundService(context, intent) }

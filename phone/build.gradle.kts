@@ -18,8 +18,8 @@ android {
         applicationId = "dev.kyungmin.kcoach"
         minSdk = 29
         targetSdk = 35
-        versionCode = 33
-        versionName = "0.7.3"
+        versionCode = 34
+        versionName = "0.7.4"
         buildConfigField(
             "String",
             "UPDATE_MANIFEST_URL",
@@ -31,6 +31,7 @@ android {
         buildConfig = true
         compose = true
     }
+    androidResources { noCompress += "task" }
     testOptions {
         unitTests.isIncludeAndroidResources = true
     }
@@ -58,6 +59,16 @@ dependencies {
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.activity:activity-compose:1.9.3")
+    implementation("com.nimbusds:nimbus-jose-jwt:10.10")
+    implementation("androidx.camera:camera-camera2:1.4.2")
+    implementation("androidx.camera:camera-lifecycle:1.4.2")
+    implementation("androidx.camera:camera-view:1.4.2")
+    constraints {
+        implementation("androidx.fragment:fragment:1.3.6") {
+            because("CameraX brings Fragment 1.1.0; ActivityResult camera permissions require Fragment 1.3.0 or newer")
+        }
+    }
+    implementation("com.google.mediapipe:tasks-vision:0.10.35")
     implementation("com.google.android.gms:play-services-wearable:20.0.1")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.14.1")

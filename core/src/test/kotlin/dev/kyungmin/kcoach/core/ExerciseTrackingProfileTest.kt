@@ -10,17 +10,18 @@ class ExerciseTrackingProfileTest {
     @Test
     fun everyCatalogExerciseResolvesToAnExplicitMotionContract() {
         val ids = ExerciseCapabilityMatrix.standardExerciseIds()
-        assertEquals(33, ids.size)
+        assertEquals(43, ids.size)
 
         val profiles = ids.map { exerciseId ->
             ExerciseTrackingProfiles.resolve(exerciseId)
         }
         assertEquals(ids.toSet(), profiles.map { it.exerciseId }.toSet())
-        assertEquals(28, profiles.count { it.mode != TrackingMode.MANUAL_REQUIRED })
-        assertEquals(5, profiles.count { it.mode == TrackingMode.MANUAL_REQUIRED })
+        assertEquals(36, profiles.count { it.mode != TrackingMode.MANUAL_REQUIRED })
+        assertEquals(7, profiles.count { it.mode == TrackingMode.MANUAL_REQUIRED })
         profiles.filter { it.mode != TrackingMode.MANUAL_REQUIRED }.forEach { profile ->
             assertNotEquals(MotionFamily.UNOBSERVABLE_MANUAL, profile.family)
-            assertTrue(profile.id.endsWith("-v3"))
+            assertEquals(profile.family.sharedAlgorithmId, profile.id,
+                "Stored algorithm version must describe the detector actually used for ${profile.exerciseId}")
         }
     }
 
@@ -39,10 +40,10 @@ class ExerciseTrackingProfileTest {
     }
 
     @Test
-    fun futureInclineDumbbellPressInheritsBenchPressFamilyWithoutNewAlgorithmEntry() {
+    fun knownBenchEquipmentSharesOneDetectorConfiguration() {
         val flat = ExerciseTrackingProfiles.resolve("flat_bench", "바벨 플랫 벤치 프레스")
         val incline = ExerciseTrackingProfiles.resolve("incline_bench", "바벨 인클라인 벤치 프레스")
-        val future = ExerciseTrackingProfiles.resolve("incline_dumbbell_press", "덤벨 인클라인 프레스")
+        val future = ExerciseTrackingProfiles.resolve("dumbbell_bench", "덤벨 벤치 프레스")
 
         assertEquals(MotionFamily.PRESS_RETURN, future.family)
         assertEquals(TrackingMode.WRIST_IMU_CAUTION, future.mode)
@@ -52,23 +53,12 @@ class ExerciseTrackingProfileTest {
     }
 
     @Test
-    fun inferredFamiliesCoverNewEquivalentExercisesButUnknownsStayManual() {
-        assertEquals(
-            MotionFamily.FLEXION_EXTENSION,
-            ExerciseTrackingProfiles.resolve("spider_curl", "덤벨 스파이더 컬").family,
-        )
-        assertEquals(
-            MotionFamily.PULL_RETURN,
-            ExerciseTrackingProfiles.resolve("one_arm_row", "원 암 덤벨 로우").family,
-        )
-        assertEquals(
-            MotionFamily.MULTI_AXIS_RETURN,
-            ExerciseTrackingProfiles.resolve("cable_lateral_raise", "케이블 레터럴 레이즈").family,
-        )
-        assertEquals(
-            TrackingMode.MANUAL_REQUIRED,
-            ExerciseTrackingProfiles.resolve("custom_exercise", "새 사용자 운동").mode,
-        )
+    fun unregisteredExerciseNamesNeverGrantAutomaticMeasurement() {
+        listOf("spider_curl" to "덤벨 스파이더 컬", "one_arm_row" to "원 암 로우",
+            "cable_lateral_raise" to "케이블 레터럴 레이즈", "custom_exercise" to "새 사용자 운동")
+            .forEach { (id, name) ->
+                assertEquals(TrackingMode.MANUAL_REQUIRED, ExerciseTrackingProfiles.resolve(id, name).mode)
+            }
     }
 
     @Test
@@ -112,7 +102,7 @@ class ExerciseTrackingProfileTest {
     }
 
     @Test
-    fun pullUpProfileCountsOnlyCompletedPullAndReturnCycles() {
+    fun pulldownProfileCountsOnlyCompletedPullAndReturnCycles() {
         val records = buildList {
             var timestamp = 0L
             repeat(3) { rep ->
@@ -136,14 +126,14 @@ class ExerciseTrackingProfileTest {
         }
         val output = PhoneRepAnalyzer.analyze(
             SensorCaptureDocument(SensorCaptureFormat.FORMAT_VERSION, 20.0, records),
-            "pull_up",
-            "풀업",
+            "lat_pull_down",
+            "랫 풀다운",
             watchDetectedReps = 3,
         )
         assertEquals(3, output.result.phoneReanalyzedReps)
         assertEquals(3, output.events.size)
         assertEquals("pull-return-family-v3", output.result.algorithmVersion)
-        assertEquals(CapabilityTier.C_PERSONALIZED_AUTO_COUNT_BETA, output.result.capabilityTier)
+        assertEquals(CapabilityTier.B_AUTO_COUNT_LIMITED_METRICS, output.result.capabilityTier)
         assertTrue(output.result.signalQuality != null)
     }
 

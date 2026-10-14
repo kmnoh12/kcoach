@@ -1,0 +1,50 @@
+{
+  "date": "2026-10-13",
+  "scope": "Stage 0 software contracts only; no physical sensor/camera/accuracy or release verification",
+  "catalogCount": 43,
+  "manualBuiltInCount": 7,
+  "tests": {
+    "core": {
+      "tests": 158,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "phone": {
+      "tests": 173,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "wear": {
+      "tests": 42,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "logs": [
+    "work/measurement-stage0-regression.log",
+    "work/measurement-stage0-phone-wear.log"
+  ],
+  "sources": {
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/ExerciseMotionCatalog.kt": "d455827118bb1ea14d4882636cd46903d9bb571f8d8d672a89183af6f4dafa64",
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/CapabilityMetadata.kt": "f3d0e056ccf9ceda5dac417cd26781a5d00e5659b48df043fbc67d4bb4b6985d",
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/MeasurementRecipe.kt": "8e4058541ec7ce03da93990ad6a9fc1238e097377c91ba3242c492149938ea6a",
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/ReviewedMeasurementContracts.kt": "b54a0d10f711fbc068ca1da8c6d0d77c7d5039c6d02717c061a6ad37f88793e3",
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/ClockAlignment.kt": "7fbacb2ea03d9784c1b63b9f9d34134efd52bf8bd54ef19882cdf948b86c2758",
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/RepReference.kt": "709aadc446f4723b27389266cb1a7846e49207919995f769abad73e56a04ce2f",
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/ManualSetProtocol.kt": "d8647ca6a24408590e93fc1918fb9f6adc2ab400bdf5b7be4f0f842e83a67a6c",
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/WireContract.kt": "f34d0d83ed05866102d088953791053fe4cb2a24cdfce94c635c5a97e2f6145a",
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/WearSync.kt": "85267f23661b0e2e8433cafec67092bc1599c7834e35fefa23eb7ad5108a4670",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/MainActivity.kt": "b1da26e040740995e109759d0d0b8c9a6e6c15265767700eadbba68b3815a73d",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/WorkoutData.kt": "9b94cf061b83f8e767aa9af7e3f9cab5339beead0b758a7abb96f9e5cfcfbf52"
+  },
+  "unverified": [
+    "Actual Watch8",
+    "Camera and watch paired capture",
+    "Personal accuracy improvement",
+    "ChatGPT account inference",
+    "GitHub release"
+  ]
+}

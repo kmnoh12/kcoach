@@ -10,6 +10,7 @@ import com.google.android.gms.wearable.Wearable
 import com.google.android.gms.wearable.WearableListenerService
 import dev.kyungmin.kcoach.core.EmulatorBridgeClient
 import dev.kyungmin.kcoach.core.CaptureState
+import dev.kyungmin.kcoach.core.ObservedMotionMetricsCodec
 import dev.kyungmin.kcoach.core.PhoneRepAnalyzer
 import dev.kyungmin.kcoach.core.WearSync
 import dev.kyungmin.kcoach.core.WireCodec
@@ -333,20 +334,44 @@ class PhoneWearListenerService : WearableListenerService() {
         val exerciseId = manifest.payload[WirePayloadKeys.EXERCISE_ID].orEmpty()
         val exerciseName = manifest.payload[WirePayloadKeys.EXERCISE_NAME].orEmpty()
         logEvent(KCoachEventMarker.ANALYSIS_STARTED, manifest)
+        if (manifest.payload["capturePurpose"] == dev.kyungmin.kcoach.core.CapturePurpose.PAIRED_REFERENCE.name) {
+            CalibrationCaptureStore(this).attachSensor(received).getOrThrow()
+            sendBroadcast(Intent(ACTION_PAIRED_RAW_SAVED).setPackage(packageName).putExtra("captureId", manifest.sessionId))
+            return // Paired raw data is reviewed before learning; the legacy builder never adopts it.
+        }
         if (manifest.sessionId.startsWith("calibration-")) {
             persistCalibrationResult(manifest, document, exerciseId, exerciseName)
         }
         val personal = prefs.getString("personalProfile:$exerciseId", null)
             ?.let { runCatching { PersonalCalibrationProfileCodec.decode(it) }.getOrNull() }
-        val trackingProfile = if (personal == null) {
-            ExerciseTrackingProfiles.resolve(exerciseId, exerciseName)
+        val generic = ExerciseTrackingProfiles.resolve(exerciseId, exerciseName)
+        val recordedSnapshot = manifest.payload[WirePayloadKeys.TRACKING_PROFILE_SNAPSHOT]
+        val recordedId = manifest.payload[WirePayloadKeys.TRACKING_PROFILE_ID]
+        val trackingProfile = if (recordedSnapshot != null) {
+            dev.kyungmin.kcoach.core.TrackingProfileSnapshot.decode(recordedSnapshot).also {
+                require(it.exerciseId == generic.exerciseId && it.id == recordedId) { "capture profile identity mismatch" }
+            }
+        } else if (recordedId == generic.id || personal == null) {
+            generic
         } else {
-            PersonalCalibrationBuilder.personalizedTrackingProfile(
-                personal,
-                ExerciseTrackingProfiles.resolve(exerciseId, exerciseName),
-            )
+            // Older captures have no frozen configuration; retain their legacy read path.
+            PersonalCalibrationBuilder.personalizedTrackingProfile(personal, generic)
         }
-        val analysis = PhoneRepAnalyzer.analyze(document, trackingProfile, watchReps).result
+        val activeSnapshot = manifest.payload["patternActiveSnapshot"]?.takeIf { it.isNotEmpty() }
+        val analysis = if (activeSnapshot != null) {
+            val runtime = dev.kyungmin.kcoach.core.PatternRuntimeCodec.decode(java.util.Base64.getDecoder().decode(activeSnapshot))
+            val binding = dev.kyungmin.kcoach.core.PatternCompatibilityCodec.decode(manifest.payload.getValue("patternBinding"))
+            require(runtime.compatibility == binding && runtime.candidateHash == manifest.payload["patternActiveCandidateHash"] &&
+                binding.deviceId == manifest.payload["watchDeviceId"]) { "capture personal pattern identity mismatch" }
+            PhoneRepAnalyzer.analyzePersonal(document, exerciseId, binding, runtime, watchReps,
+                used = manifest.payload["patternActiveUsed"] == "true", interrupted = manifest.payload["patternActiveInterrupted"] != "false",
+                wristMotionBaseline = ReviewedMotionBaselineStore(this).derive(runtime).getOrNull()).result
+        } else {
+            require(manifest.payload["patternActiveCandidateHash"].isNullOrEmpty() && manifest.payload["patternActiveUsed"] != "true") {
+                "capture active pattern snapshot missing"
+            }
+            PhoneRepAnalyzer.analyze(document, trackingProfile, watchReps).result
+        }
         logEvent(KCoachEventMarker.ANALYSIS_FINISHED, manifest)
         SetAnalysisStore(this).persistAnalysis(manifest, encodeAnalysis(analysis))
         FinishedWorkoutStore(this).reconcile(manifest.sessionId)
@@ -504,6 +529,7 @@ class PhoneWearListenerService : WearableListenerService() {
         analysis.signalQuality ?: "",
         analysis.averageAngularSpeed ?: "",
         analysis.relativeRom ?: "",
+        analysis.motionMetrics?.let(ObservedMotionMetricsCodec::encode) ?: "",
     ).joinToString("|")
 
     private fun sendCaptureAck(nodeId: String, sessionId: String, messageId: String, captureId: String) =
@@ -514,10 +540,34 @@ class PhoneWearListenerService : WearableListenerService() {
         )
 
     private fun handlePayload(path: String, payload: String) {
+        val receivedNs = android.os.SystemClock.elapsedRealtimeNanos()
         when (path) {
+            WearSync.PATH_WORKOUT_CONTROL -> WatchWorkoutController(this) { outPath, value ->
+                PhoneWorkoutService.send(this, outPath, value)
+            }.receive(payload, System.currentTimeMillis()).onSuccess { result ->
+                if (result.ack.status == dev.kyungmin.kcoach.core.WatchWorkoutControlStatus.APPLIED)
+                    PhoneWorkoutService.publishSessionChanged(this)
+            }.onFailure { Log.w(EVENT_TAG, "watch workout request retained without receipt", it) }
+            WearSync.PATH_PATTERN_PROFILE_ACK -> runCatching {
+                val ack = dev.kyungmin.kcoach.core.PatternProfileAck.decode(payload)
+                if (PatternTransferOutbox(this).acknowledge(ack).getOrThrow())
+                    sendBroadcast(Intent(ACTION_PATTERN_PROFILE).setPackage(packageName).putExtra("profileId", ack.profileId)
+                        .putExtra("commandId", ack.commandId).putExtra("status", ack.status.name))
+            }.onFailure { Log.w(EVENT_TAG, "profile acknowledgement rejected", it) }
+            WearSync.PATH_CLOCK_REPLY -> runCatching {
+                val reply = WireCodec.decode(payload)
+                CaptureClockStore(this).acceptReply(reply, receivedNs, PhoneClockEpoch.current(this).id).getOrThrow()
+                sendBroadcast(Intent(ACTION_CAPTURE_CLOCK).setPackage(packageName).putExtra("captureId", reply.sessionId))
+            }.onFailure { Log.w(EVENT_TAG, "clock reply rejected: ${it.message}") }
+            WearSync.PATH_MANUAL_SET -> sessionController.receiveManual(payload, System.currentTimeMillis())
+                .onSuccess { result ->
+                    if (result.ack.status == dev.kyungmin.kcoach.core.ManualSetStatus.APPLIED) PhoneWorkoutService.publishSessionChanged(this)
+                }
+                .onFailure { Log.e(EVENT_TAG, "manual set message retained without acknowledgement", it) }
             WearSync.PATH_RECONNECT -> {
                 recoverCachedAssets()
                 sessionController.resync().onFailure { Log.e(EVENT_TAG, "watch resync failed", it) }
+                WatchWorkoutController(this) { outPath, value -> PhoneWorkoutService.send(this, outPath, value) }.sendOffer(System.currentTimeMillis())
                 PhoneWorkoutService.retryPending(this)
                 syncPersonalProfiles()
             }
@@ -545,6 +595,7 @@ class PhoneWearListenerService : WearableListenerService() {
                 recoverCachedAssets()
                 prefs.edit().putLong("watchUiReadyAt", System.currentTimeMillis()).apply()
                 sessionController.resync().onFailure { Log.e(EVENT_TAG, "ready watch resync failed", it) }
+                WatchWorkoutController(this) { outPath, value -> PhoneWorkoutService.send(this, outPath, value) }.sendOffer(System.currentTimeMillis())
                 PhoneWorkoutService.retryPending(this)
                 sendBroadcast(Intent(ACTION_WATCH_UI_READY).setPackage(packageName).putExtra("payload", payload))
                 syncPersonalProfiles()
@@ -613,6 +664,9 @@ class PhoneWearListenerService : WearableListenerService() {
     }
 
     companion object {
+        const val ACTION_PATTERN_PROFILE = "dev.kyungmin.kcoach.phone.PATTERN_PROFILE"
+        const val ACTION_CAPTURE_CLOCK = "dev.kyungmin.kcoach.phone.CAPTURE_CLOCK"
+        const val ACTION_PAIRED_RAW_SAVED = "dev.kyungmin.kcoach.phone.PAIRED_RAW_SAVED"
         private const val TAG = "KCoachCapture"
         private const val CAPTURE_ASSET_TIMEOUT_MS = 15_000L
         private const val EVENT_TAG = "KCoachEvent"

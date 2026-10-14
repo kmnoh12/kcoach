@@ -1,0 +1,39 @@
+package dev.kyungmin.kcoach.core
+
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+
+class TrackingProfileSnapshotTest {
+    @Test fun `all configured detector settings survive serialization`() {
+        ExerciseCapabilityMatrix.standardExerciseIds().forEach { id ->
+            val profile = ExerciseTrackingProfiles.resolve(id)
+            assertEquals(profile, TrackingProfileSnapshot.decode(TrackingProfileSnapshot.encode(profile)))
+        }
+        val personal = ExerciseTrackingProfiles.resolve("barbell_biceps_curl").copy(
+            id = "flexion-extension-pose-v4+personal-123", minimumRepMs = 290, maximumRepMs = 8000,
+            preferredAxis = 2, preferredDirection = -1, gyroNoiseFloor = 0.12, calibrationProfileVersion = 7,
+        )
+        assertEquals(personal, TrackingProfileSnapshot.decode(TrackingProfileSnapshot.encode(personal)))
+    }
+
+    @Test fun `unsupported algorithm and invalid timing fail instead of silently using new settings`() {
+        val profile = ExerciseTrackingProfiles.resolve("barbell_biceps_curl")
+        assertFailsWith<IllegalArgumentException> {
+            TrackingProfileSnapshot.decode(TrackingProfileSnapshot.encode(profile.copy(id = "unknown-version")))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            TrackingProfileSnapshot.decode(TrackingProfileSnapshot.encode(profile.copy(minimumRepMs = -1)))
+        }
+    }
+    @Test fun `frozen settings cannot turn a wrist-unobservable exercise into automatic counting`() {
+        val manual = ExerciseTrackingProfiles.resolve("leg_press")
+        val forged = manual.copy(id = MotionFamily.FLEXION_EXTENSION.sharedAlgorithmId,
+            family = MotionFamily.FLEXION_EXTENSION, signal = TrackingSignal.ROTATION_ENERGY,
+            mode = TrackingMode.WRIST_IMU_CAUTION)
+        assertFailsWith<IllegalArgumentException> {
+            TrackingProfileSnapshot.decode(TrackingProfileSnapshot.encode(forged))
+        }
+    }
+
+}

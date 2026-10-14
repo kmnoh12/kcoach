@@ -18,6 +18,65 @@ object PhoneRepAnalyzer {
     fun analyze(document: SensorCaptureDocument, watchDetectedReps: Int? = null): Output =
         analyze(document, "", "", watchDetectedReps)
 
+    /** Replays the version frozen on the watch; these outputs never become human training labels. */
+    fun analyzePersonal(document: SensorCaptureDocument, exerciseId: String, compatibility: PatternCompatibility,
+        runtime: PatternRuntimeProfile, watchDetectedReps: Int?, used: Boolean, interrupted: Boolean,
+        wristMotionBaseline: ReviewedWristMotionBaseline? = null): Output {
+        val generic = ExerciseTrackingProfiles.resolve(exerciseId)
+        val empty = emptyOutput(watchDetectedReps, generic)
+        fun refused(reason: String) = sanitizeOutput(empty.copy(result = empty.result.copy(
+            algorithmVersion = runtime.engineId, trackingProfileId = runtime.id, trackingStatus = reason)))
+        if (generic.mode == TrackingMode.MANUAL_REQUIRED) return refused("수동 입력 필요")
+        if (runtime.compatibility != compatibility || compatibility.recipe != ExerciseMeasurementContracts.resolve(exerciseId).recipe)
+            return refused("원본의 개인 패턴 착용 조건 불일치 · 횟수 확인 필요")
+        val records = document.records
+        if (records.size !in 10..30_000 || !document.sampleRateRequestedHz.isFinite() || document.sampleRateRequestedHz <= 0 ||
+            document.validateTimestamps().isNotEmpty() || records.any { record -> SignalAxis.entries.any { !it.value(record.sample).isFinite() } })
+            return refused("센서 기록 부족/오류 · 횟수 확인 필요")
+        val detector = ReviewedPatternDetector(exerciseId, compatibility, runtime)
+        val detections = records.mapNotNull { detector.add(it.sample) }
+        var quality = calculateSignalQuality(records, document.sampleRateRequestedHz)
+        if (records.zipWithNext().any { (a, b) -> b.sample.timestampNs - a.sample.timestampNs > 60_000_000 } ||
+            records.any { it.sample.sensorAccuracy == 0 }) quality = quality.coerceAtMost(.70)
+        fun angularRate(sample: SensorSample) = sqrt(sample.gyroscopeX.toDouble() * sample.gyroscopeX +
+            sample.gyroscopeY.toDouble() * sample.gyroscopeY + sample.gyroscopeZ.toDouble() * sample.gyroscopeZ)
+        val events = detections.mapIndexed { index, detection ->
+            val cycle = detection.cycle
+            val window = records.filter { it.sample.timestampNs in cycle.startNs..cycle.endNs }
+            // Integrate observed wrist angular speed in radians; never call this a joint ROM or load path.
+            val angularTravel = window.zipWithNext().sumOf { (a, b) ->
+                angularRate(a.sample) * (b.sample.timestampNs - a.sample.timestampNs) / 1_000_000_000.0
+            }
+            RepEvent(index + 1, cycle.startNs, cycle.turnaroundNs, cycle.endNs, cycle.durationMs,
+                requireNotNull(cycle.concentricMs), requireNotNull(cycle.eccentricMs), angularTravel,
+                window.maxOfOrNull { angularRate(it.sample) } ?: 0.0, quality)
+        }
+        val measured = if (used && !interrupted && quality >= .85) ObservedMotionAnalyzer.analyze(document, detections.map { it.cycle }, "PERSONAL_WRIST_CANDIDATE") else null
+        val metrics = measured?.let { observed -> observed.copy(wristMotionComparison = wristMotionBaseline?.let {
+            ReviewedMotionBaseline.compare(observed, it, runtime)
+        }) }
+        val durations = events.map { it.durationMs.toDouble() }
+        val heartRates = records.mapNotNull { it.heartRateBpm }.filter { it in 20..240 }
+        val totalTimeSeconds = events.sumOf { it.durationMs } / 1_000.0
+        val speed = if (totalTimeSeconds > 0) events.sumOf { it.amplitude } / totalTimeSeconds else null
+        val countEligible = used && !interrupted && quality >= .85 && watchDetectedReps == events.size
+        val status = when {
+            !used -> "워치 개인 패턴 사용 확인 누락 · 횟수 확인 필요"
+            interrupted || quality < .85 -> "센서 기록 중단/품질 부족 · 횟수 확인 필요"
+            watchDetectedReps != events.size -> "워치와 원본 재분석 불일치 · 횟수 확인 필요"
+            else -> "세트에 고정한 개인 패턴 · 손목 관측 반복"
+        }
+        val result = empty.result.copy(phoneReanalyzedReps = events.size, confirmedReps = events.size.takeIf { countEligible },
+            algorithmVersion = "${runtime.engineId}:${runtime.id}:${runtime.version}", trackingProfileId = runtime.id,
+            trackingStatus = status, averageRepDurationMs = durations.takeIf { it.isNotEmpty() }?.average(),
+            tempoVariance = variance(durations), stabilityScore = null, consistencyScore = null,
+            lateSetDegradation = lateSetDegradation(durations), averageHeartRate = heartRates.takeIf { it.isNotEmpty() }?.average()?.toInt(),
+            peakHeartRate = heartRates.maxOrNull(), analysisConfidence = quality, repConfidence = null,
+            averageAngularSpeed = speed, wristMotionSpeed = speed, wristMotionRange = null, relativeRom = null,
+            tempoConsistency = metrics?.tempoConsistency, signalQuality = quality, capabilityTier = CapabilityTier.C_PERSONALIZED_AUTO_COUNT_BETA, motionMetrics = metrics)
+        return Output(events, CapabilityOutputPolicy.sanitize(result))
+    }
+
     fun analyze(
         document: SensorCaptureDocument,
         exerciseId: String,
@@ -54,14 +113,15 @@ object PhoneRepAnalyzer {
                 turnaroundTimestampNs = event.turnaroundTimestampNs,
                 endTimestampNs = event.endTimestampNs,
                 durationMs = event.durationMs,
-                concentricMs = event.durationMs / 2L,
-                eccentricMs = event.durationMs - event.durationMs / 2L,
+                concentricMs = null,
+                eccentricMs = null,
                 amplitude = event.motionDisplacement,
                 peakAngularVelocity = event.peakMotionRate,
                 confidence = event.confidence,
             )
         }
 
+        val metrics = observedGenericMetrics(document, events)
         val durations = events.map { it.durationMs.toDouble() }
         val amplitudes = events.map { it.amplitude }
         val heartRates = records.mapNotNull { it.heartRateBpm }.filter { it in 20..240 }
@@ -75,12 +135,12 @@ object PhoneRepAnalyzer {
             .coerceIn(0.0, 1.0)
         val consistency = scoreConsistency(durations, amplitudes)
         val stability = (confidence * 100.0).toInt().coerceIn(0, 100)
-        val angularSpeeds = events.map { it.peakAngularVelocity }
+        // Mixed acceleration/gyro features have no rad/s unit. Only pure gyro
+        // detector rates can be presented as wrist angular speed.
+        val angularSpeeds = if (profile.signal == TrackingSignal.ROTATION_ENERGY) {
+            events.map { it.peakAngularVelocity }
+        } else emptyList()
         val averageAngularSpeed = angularSpeeds.average().takeUnless { it.isNaN() }
-        val relativeRom = if (amplitudes.isEmpty()) null else {
-            (amplitudes.average() / (profile.minimumLobeDisplacement * 2.0).coerceAtLeast(0.001))
-                .coerceIn(0.0, 1.0)
-        }
         val trackingStatus = if (signalQuality < 0.85) "센서 기록 품질 부족 · 반복 수 확인 필요" else when (profile.mode) {
             TrackingMode.WRIST_IMU -> "손목 IMU 자동 추정"
             TrackingMode.WRIST_IMU_CAUTION -> "손목 기반 추정 · 실제 기준 세트 검증 필요"
@@ -105,15 +165,24 @@ object PhoneRepAnalyzer {
             trackingProfileId = profile.id,
             trackingStatus = trackingStatus,
             averageAngularSpeed = averageAngularSpeed,
-            relativeRom = relativeRom,
+            relativeRom = null,
             repConfidence = confidence,
             capabilityTier = profile.capabilityTier,
             wristMotionSpeed = averageAngularSpeed,
-            wristMotionRange = relativeRom,
-            tempoConsistency = consistency,
+            wristMotionRange = null,
+            tempoConsistency = metrics?.tempoConsistency,
             signalQuality = signalQuality,
+            motionMetrics = metrics,
         )
         return Output(events, CapabilityOutputPolicy.sanitize(result))
+    }
+
+    private fun observedGenericMetrics(document: SensorCaptureDocument, events: List<RepEvent>): ObservedMotionMetrics? {
+        val cycles = events.map { event ->
+            if (event.startTimestampNs >= event.turnaroundTimestampNs || event.turnaroundTimestampNs >= event.endTimestampNs) return null
+            RepCycle(event.startTimestampNs, event.turnaroundTimestampNs, event.endTimestampNs, MusclePhase.UNKNOWN)
+        }
+        return ObservedMotionAnalyzer.analyze(document, cycles, "GENERIC_WRIST_CANDIDATE")
     }
 
     private fun sanitizeOutput(output: Output): Output =
@@ -138,13 +207,14 @@ object PhoneRepAnalyzer {
                 turnaroundTimestampNs = event.turnaroundTimestampNs,
                 endTimestampNs = event.endTimestampNs,
                 durationMs = event.durationMs,
-                concentricMs = event.durationMs / 2L,
-                eccentricMs = event.durationMs - event.durationMs / 2L,
+                concentricMs = null,
+                eccentricMs = null,
                 amplitude = event.angularDisplacement,
                 peakAngularVelocity = event.peakAngularVelocity,
                 confidence = event.confidence,
             )
         }
+        val metrics = observedGenericMetrics(document, events)
         val durations = events.map { it.durationMs.toDouble() }
         val amplitudes = events.map { it.amplitude }
         val heartRates = document.records.mapNotNull { it.heartRateBpm }.filter { it in 20..240 }
@@ -176,8 +246,9 @@ object PhoneRepAnalyzer {
             capabilityTier = profile.capabilityTier,
             wristMotionSpeed = events.map { it.peakAngularVelocity }.average().takeUnless { it.isNaN() },
             wristMotionRange = null,
-            tempoConsistency = scoreConsistency(durations, amplitudes),
+            tempoConsistency = metrics?.tempoConsistency,
             signalQuality = signalQuality,
+            motionMetrics = metrics,
         )
         return Output(events, CapabilityOutputPolicy.sanitize(result))
     }

@@ -15,6 +15,8 @@ data class WorkoutUiModel(
     val restEndAtMs: Long,
     val pausedRestRemainingMs: Long,
     val nextSetText: String?,
+    /** The just-completed set whose rest is running (the execution cursor may already point ahead). */
+    val restingSet: Pair<Int, Int>? = null,
 )
 
 data class ExerciseUi(

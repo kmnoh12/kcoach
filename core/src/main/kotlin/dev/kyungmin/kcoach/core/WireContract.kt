@@ -20,6 +20,7 @@ enum class WireMessageType {
     SESSION_COMPLETE,
     LIVE_STATE,
     REP_EVENT,
+    MANUAL_SET,
     CAPTURE_MANIFEST,
     CAPTURE_ASSET,
     ACK,
@@ -157,6 +158,8 @@ object WirePayloadKeys {
     const val REST_SECONDS = "restSeconds"
     const val REST_END_AT_MS = "restEndAtMs"
     const val PHASE = "phase"
+    const val TRACKING_PROFILE_ID = "trackingProfileId"
+    const val TRACKING_PROFILE_SNAPSHOT = "trackingProfileSnapshot"
     const val WATCH_REPS = "watchReps"
     const val HEART_RATE = "heartRate"
     const val RECORDING = "recording"

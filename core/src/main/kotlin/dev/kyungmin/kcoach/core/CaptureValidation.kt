@@ -25,7 +25,7 @@ object CaptureValidator {
         require(bytes.size.toLong() == expectedSize) { "capture size mismatch" }
         val expectedVersion = manifest.payload[WirePayloadKeys.FORMAT_VERSION]?.toIntOrNull()
             ?: error("missing capture format version")
-        require(expectedVersion == SensorCaptureFormat.FORMAT_VERSION) {
+        require(expectedVersion in SensorCaptureFormat.SUPPORTED_VERSIONS) {
             "capture format version mismatch"
         }
         require(manifest.payload[WirePayloadKeys.COMPRESSION] == "NONE") {
@@ -38,6 +38,7 @@ object CaptureValidator {
         }
 
         val document = SensorCaptureFormat.read(ByteArrayInputStream(bytes))
+        require(document.formatVersion == expectedVersion) { "capture format version mismatch" }
         val expectedSamples = manifest.payload[WirePayloadKeys.SAMPLE_COUNT]?.toIntOrNull()
             ?: error("missing sample count")
         require(expectedSamples >= 0 && document.sampleCount == expectedSamples) {

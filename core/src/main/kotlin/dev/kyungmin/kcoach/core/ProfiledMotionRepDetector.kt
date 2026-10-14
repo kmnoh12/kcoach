@@ -15,7 +15,7 @@ enum class MotionFamily {
 
     val sharedAlgorithmId: String
         get() = when (this) {
-            FLEXION_EXTENSION -> "flexion-extension-family-v3"
+            FLEXION_EXTENSION -> "flexion-extension-pose-v4"
             PRESS_RETURN -> "press-return-family-v3"
             PULL_RETURN -> "pull-return-family-v3"
             MULTI_AXIS_RETURN -> "multi-axis-return-family-v3"
@@ -48,6 +48,8 @@ data class ProfiledMotionRepEvent(
 /**
  * Deterministic, profile-driven repetition detector for non-rotation exercises.
  *
+ * Flexion/extension uses departure from and return to the starting wrist tilt.
+ * Other families retain their existing signed-signal cycle detector below.
  * Each exercise supplies a motion family; that family supplies shared thresholds. The detector only
  * claims a rep after two valid, opposite-direction lobes (out and back) and can
  * require multi-axis trajectory spread for arc/fly movements. It does not claim
@@ -60,6 +62,8 @@ class ProfiledMotionRepDetector(
         private const val GRAVITY_FILTER_ALPHA = 0.10
         private const val MAX_SAMPLE_GAP_MS = 450L
     }
+
+    private val poseCounter = if (profile.family == MotionFamily.FLEXION_EXTENSION) ReturnToPoseRepDetector(profile.minimumRepMs) else null
 
     private var lastTimestampNs = 0L
     private var gravityInitialized = false
@@ -80,6 +84,7 @@ class ProfiledMotionRepDetector(
     private var refractoryUntilNs = 0L
 
     fun add(sample: SensorSample): ProfiledMotionRepEvent? {
+        poseCounter?.let { return it.add(sample) }
         val timestampNs = sample.timestampNs
         if (lastTimestampNs > 0L && timestampNs <= lastTimestampNs) return null
         val dtMs = if (lastTimestampNs > 0L) {
@@ -128,6 +133,7 @@ class ProfiledMotionRepDetector(
     }
 
     fun finish(): ProfiledMotionRepEvent? {
+        if (poseCounter != null) return null // A partial return never becomes a rep when the set ends.
         if (direction == 0 || lastTimestampNs == 0L) return null
         val result = closeLobe(lastTimestampNs)
         resetActiveLobe()
@@ -139,6 +145,7 @@ class ProfiledMotionRepDetector(
      * estimate learned from the user's real starting pose.
      */
     fun beginCounting() {
+        poseCounter?.reset()
         resetActiveLobe()
         pendingStartNs = 0L
         pendingTurnaroundNs = 0L

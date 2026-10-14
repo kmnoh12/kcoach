@@ -7,6 +7,13 @@ import kotlin.test.assertTrue
 class ProfiledMotionRepDetectorTest {
     @Test
     fun countsOnlyCompletedFlexionExtensionCycles() {
+        val detector = ProfiledMotionRepDetector(testProfile(MotionFamily.FLEXION_EXTENSION, TrackingSignal.ROTATION_ENERGY))
+        val count = CurlCycleRegressionTest.curlSamples(3, 1.0, 1.0).count { detector.add(it) != null }
+        assertEquals(3, count)
+    }
+
+    @Test
+    fun gyroPolarityAlternationWithoutLeavingStartingTiltIsNotACurl() {
         val profile = testProfile(MotionFamily.FLEXION_EXTENSION, TrackingSignal.ROTATION_ENERGY)
         val detector = ProfiledMotionRepDetector(profile)
         var timestamp = 1_000_000_000L
@@ -30,7 +37,7 @@ class ProfiledMotionRepDetectorTest {
             }
         }
         if (detector.finish() != null) events += 1
-        assertEquals(3, events)
+        assertEquals(0, events)
     }
 
     @Test
@@ -74,12 +81,14 @@ class ProfiledMotionRepDetectorTest {
     @Test
     fun profileCatalogHasOneExplicitAlgorithmForEveryExerciseAndManualLowerBody() {
         val ids = ExerciseCapabilityMatrix.standardExerciseIds()
-        assertEquals(33, ids.size)
+        assertEquals(43, ids.size)
         val profiles = ids.map { ExerciseTrackingProfiles.resolve(it) }
-        assertEquals(33, profiles.map { it.exerciseId }.toSet().size)
-        assertEquals(28, profiles.count { it.family != MotionFamily.UNOBSERVABLE_MANUAL })
-        assertEquals(5, profiles.count { it.mode == TrackingMode.MANUAL_REQUIRED })
-        assertTrue(profiles.filter { it.mode != TrackingMode.MANUAL_REQUIRED }.all { it.id.endsWith("-v3") })
+        assertEquals(43, profiles.map { it.exerciseId }.toSet().size)
+        assertEquals(36, profiles.count { it.family != MotionFamily.UNOBSERVABLE_MANUAL })
+        assertEquals(7, profiles.count { it.mode == TrackingMode.MANUAL_REQUIRED })
+        assertTrue(profiles.filter { it.mode != TrackingMode.MANUAL_REQUIRED }.all {
+            it.id.endsWith(if (it.family == MotionFamily.FLEXION_EXTENSION) "-v4" else "-v3")
+        })
     }
 
     private fun testProfile(family: MotionFamily, signal: TrackingSignal) = ExerciseTrackingProfile(

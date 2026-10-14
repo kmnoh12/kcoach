@@ -105,11 +105,13 @@ class WearWorkoutService : Service(), SensorEventListener {
     private var uiBroadcastCount = 0
     private var liveStateCount = 0
     private var maxObservedOutboundQueue = 0
-    private var lastSampleAtMs = 0L
     private var lastCaptureTimestampNs = 0L
     private var lastSensorAccuracy = -1
     private var lastAccel = FloatArray(3)
     private var lastGyro = FloatArray(3)
+    private var lastAccelerometerNs: Long? = null
+    private var lastAccelerometerAccuracy: Int? = null
+    private var lastHeartRateNs: Long? = null
     private val captureRecords = ArrayList<SensorCaptureRecord>(CAPTURE_CHUNK_SAMPLES)
     private val captureChunkFiles = mutableListOf<File>()
     private var captureSegmentId = ""
@@ -153,6 +155,29 @@ class WearWorkoutService : Service(), SensorEventListener {
     private var lastAppliedCommand = ""
     private var lastCommandRevision = 0L
     private val completionRetry = Runnable { replayCompletion() }
+    private val manualOutbox by lazy { ManualSetOutbox(this) }
+    private val patternProfiles by lazy { PatternProfileStore(this) }
+    private var patternShadowCommandId = ""
+    private var frozenShadow: FrozenPatternProfile? = null
+    private var shadowDetector: dev.kyungmin.kcoach.core.ReviewedPatternDetector? = null
+    private var shadowUseConfirmed = false
+    private var shadowCount = 0
+    private var shadowInterrupted = false
+    private var shadowSampleCalls = 0L
+    private val shadowProcessingHistogram = LongArray(64)
+    private val shadowEvents = mutableListOf<dev.kyungmin.kcoach.core.PatternTrialEvent>()
+    private var patternBinding = ""
+    private var patternWearing = ""
+    private var patternSelectionMode = ""
+    private var frozenActive: FrozenPatternProfile? = null
+    private var activeDetector: dev.kyungmin.kcoach.core.ReviewedPatternDetector? = null
+    private var disableUseConfirmed = false
+    private var activeSampleCalls = 0
+    private var activeUseConfirmed = false
+    private var activeInterrupted = false
+    private val manualRetry = Runnable { replayManualSets() }
+    private val workoutControls by lazy { WatchWorkoutOutbox(this) }
+    private val workoutControlRetry = Runnable { replayWorkoutControls() }
     private val pendingCaptureRetry = Runnable { retryPendingCaptures() }
 
     override fun onCreate() {
@@ -184,6 +209,8 @@ class WearWorkoutService : Service(), SensorEventListener {
         schedulePendingCaptureRetry(1_500L)
         broadcastState(force = true)
         if (pendingCompletion != null) replayCompletion()
+        replayManualSets()
+        replayWorkoutControls()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -193,7 +220,7 @@ class WearWorkoutService : Service(), SensorEventListener {
             if (rejected != null) {
                 if (rejected == "DUPLICATE") markPhoneAlive()
                 acknowledgeCommand(intent, rejected)
-                if (rejected == "WAITING_COMPLETION") replayCompletion()
+                if (rejected == "WAITING_COMPLETION") { replayCompletion(); replayManualSets() }
                 val mode = restartMode()
                 if (mode == START_NOT_STICKY) stopRuntimeService(startId)
                 return mode
@@ -227,8 +254,48 @@ class WearWorkoutService : Service(), SensorEventListener {
         }
         val applied = runCatching {
         when (type) {
+            "WORKOUT_CONTROL_SUBMIT" -> {
+                val request = dev.kyungmin.kcoach.core.WatchWorkoutControl.decode(requireNotNull(intent?.getStringExtra("payload")))
+                check(checkpoint()) { "Preserve raw before requesting a workout transition" }
+                check(workoutControls.enqueue(request)) { "A workout request is already waiting" }
+                replayWorkoutControls()
+                sendBroadcast(Intent(ACTION_WORKOUT_CONTROL).setPackage(packageName))
+            }
+            "WORKOUT_CONTROL_ACK" -> {
+                val ack = dev.kyungmin.kcoach.core.WatchWorkoutControlAck.decode(requireNotNull(intent?.getStringExtra("payload")))
+                if (workoutControls.acknowledge(ack)) {
+                    replayWorkoutControls()
+                    sendBroadcast(Intent(ACTION_WORKOUT_CONTROL).setPackage(packageName).putExtra("status", ack.status.name))
+                }
+            }
+            "PATTERN_FRAME_COMMIT" -> {
+                val frozen = frozenShadow
+                val index = intent?.getIntExtra("eventIndex", -1) ?: -1
+                val at = intent?.getLongExtra("feedbackAtNs", -1L) ?: -1L
+                if (frozen != null && intent?.getStringExtra("patternCommandId") == frozen.commandId &&
+                    intent.getStringExtra("session") == sessionId && intent.getStringExtra("setId") == setId &&
+                    intent.getStringExtra("attemptId") == attemptId && index in shadowEvents.indices) {
+                    val event = shadowEvents[index]
+                    if (at >= event.processedAtNs && at <= android.os.SystemClock.elapsedRealtimeNanos() &&
+                        intent.getLongExtra("sourceEmissionNs", -1L) == event.sourceEmissionNs && event.feedbackAtNs == null) {
+                        shadowEvents[index] = event.copy(feedbackAtNs = at)
+                        persistRuntime()
+                    }
+                }
+            }
             "SYNC" -> applySync(intent!!)
             "SET_ACK" -> acknowledgeCompletion(intent?.getStringExtra("payload").orEmpty())
+            "MANUAL_SUBMIT" -> submitManualSet(intent?.getStringExtra("payload").orEmpty())
+            "MANUAL_ACK" -> {
+                val ack = dev.kyungmin.kcoach.core.ManualSetAck.decode(intent?.getStringExtra("payload").orEmpty())
+                if (manualOutbox.acknowledge(ack)) {
+                    markPhoneAlive()
+                    replayManualSets()
+                    broadcastState(force = true)
+                    if (ack.status in setOf(dev.kyungmin.kcoach.core.ManualSetStatus.APPLIED, dev.kyungmin.kcoach.core.ManualSetStatus.DUPLICATE))
+                        sendToPhone(WearSync.PATH_RECONNECT, WearSync.watchUiReady(sessionId), coalescible = false)
+                }
+            }
             "QUERY" -> {
                 broadcastState(force = true)
                 sendLiveState(currentPhase(), running, force = true)
@@ -238,7 +305,7 @@ class WearWorkoutService : Service(), SensorEventListener {
                 // Phone heartbeat messages can arrive after COMPLETE and would
                 // otherwise recreate the foreground workout service forever.
                 // Keep the service alive only while a session is still owned.
-                if (sessionId.isBlank() && pendingCompletion == null && capturePrefs.getStringSet(KEY_PENDING_CAPTURE_IDS, emptySet()).orEmpty().isEmpty()) {
+                if (sessionId.isBlank() && pendingCompletion == null && manualOutbox.pending().isEmpty() && workoutControls.pending().isEmpty() && capturePrefs.getStringSet(KEY_PENDING_CAPTURE_IDS, emptySet()).orEmpty().isEmpty()) {
                     stopRuntimeService(startId)
                 }
             }
@@ -280,6 +347,8 @@ class WearWorkoutService : Service(), SensorEventListener {
         phoneWatchdog = null
         handler.removeCallbacks(pendingCaptureRetry)
         handler.removeCallbacks(completionRetry)
+        handler.removeCallbacks(manualRetry)
+        handler.removeCallbacks(workoutControlRetry)
         sensorManager.unregisterListener(this)
         emulatorBridge.stop()
         outboundExecutor.shutdown()
@@ -301,7 +370,27 @@ class WearWorkoutService : Service(), SensorEventListener {
         if (incoming != sessionId && type !in setOf("START", "SYNC") && !(sessionId.isBlank() && type == "SET")) return "WRONG_SESSION"
         if (incoming != sessionId && sessionId.isNotBlank() && revision == 0L && lastCommandRevision > 0) return "STALE"
         if (type == "SYNC" && intent.getStringExtra("syncPhase") !in setOf("WORKING", "RESTING", "PAUSED")) return "INVALID"
+        val requestedShadow = intent.getStringExtra("patternShadowCommandId").orEmpty()
+        if (intent.getStringExtra("patternSelectionMode").orEmpty() !in setOf("", "VERIFIED_PATTERN")) return "INVALID"
+        val binding = if (type in setOf("START", "SET", "SYNC")) runCatching { incomingPatternBinding(intent) }.getOrElse { return "INVALID" }
+            else intent.getStringExtra("patternBinding").orEmpty()
+        if (binding.isNotEmpty() && type in setOf("START", "SET", "SYNC")) {
+            val key = runCatching { dev.kyungmin.kcoach.core.PatternCompatibilityCodec.decode(binding) }.getOrNull() ?: return "INVALID"
+            if (key.deviceId != WearClockEpoch.current(this).deviceId ||
+                key.recipe != dev.kyungmin.kcoach.core.ExerciseMeasurementContracts.resolve(intent.getStringExtra("exerciseId").orEmpty()).recipe)
+                return "INVALID"
+        }
+        if (running && incoming == sessionId && sameSet(intent) && type in setOf("START", "SET", "SYNC") && binding != patternBinding)
+            return "PATTERN_BINDING_CHANGED"
+        if (requestedShadow.isNotEmpty() && type in setOf("START", "SET", "SYNC")) {
+            val profile = patternProfiles.requestedShadow(requestedShadow).getOrNull()?.runtime ?: return "PATTERN_NOT_READY"
+            if (profile.compatibility.recipe != dev.kyungmin.kcoach.core.ExerciseMeasurementContracts.resolve(intent.getStringExtra("exerciseId").orEmpty()).recipe)
+                return "PATTERN_NOT_READY"
+        }
         if (pendingCompletion != null && incoming == sessionId && (type in setOf("START", "SET") || (type == "SYNC" && intent.getStringExtra("syncPhase") == "WORKING"))) return "WAITING_COMPLETION"
+        if (manualOutbox.latest(sessionId, setId, attemptId)?.ack == null &&
+            manualOutbox.latest(sessionId, setId, attemptId) != null && incoming == sessionId && sameSet(intent) &&
+            (type in setOf("START", "SET", "RESUME") || (type == "SYNC" && intent.getStringExtra("syncPhase") == "WORKING"))) return "WAITING_COMPLETION"
         return null
     }
 
@@ -314,8 +403,12 @@ class WearWorkoutService : Service(), SensorEventListener {
             intent.getDoubleExtra("weightKg", Double.NaN).toString(), intent.getIntExtra("restSeconds", 60).toString(),
             intent.getLongExtra("restEndAtMs", 0L).toString(), intent.getStringExtra("syncPhase").orEmpty(),
             intent.getLongExtra("pausedRestRemainingMs", 0L).toString(),
+            intent.getStringExtra("patternShadowCommandId").orEmpty(),
         )
-        return SensorCaptureFormat.sha256(JSONArray(fields).toString().toByteArray(Charsets.UTF_8))
+        var boundFields = intent.getStringExtra("patternBinding")?.takeIf { it.isNotEmpty() }?.let { fields + it } ?: fields
+        intent.getStringExtra("patternWearing")?.takeIf { it.isNotEmpty() }?.let { boundFields = boundFields + it }
+        intent.getStringExtra("patternSelectionMode")?.takeIf { it.isNotEmpty() }?.let { boundFields = boundFields + it }
+        return SensorCaptureFormat.sha256(JSONArray(boundFields).toString().toByteArray(Charsets.UTF_8))
     }
 
     private fun acknowledgeCommand(intent: Intent, status: String) {
@@ -354,6 +447,36 @@ class WearWorkoutService : Service(), SensorEventListener {
         if (!serviceDestroyed) handler.postDelayed(completionRetry, 3_000L)
     }
 
+    private fun submitManualSet(payload: String) {
+        val command = dev.kyungmin.kcoach.core.ManualSetCommand.fromEnvelope(WireCodec.decode(payload))
+        require(command.sessionId == sessionId && command.exerciseId == exerciseId && command.setIndex == setIndex &&
+            command.setId == setId && command.attemptId == attemptId && calibrationStage == null && !resting && pausedRestRemainingMs == 0L)
+        check(checkpoint()) { "Raw capture must be preserved before manual completion" }
+        check(manualOutbox.enqueue(command)) { "Manual count is already pending or belongs to an older revision" }
+        running = false
+        reps = command.performedReps
+        unregisterMotionSensors()
+        cancelMeasurementPreparation()
+        check(checkpoint())
+        replayManualSets()
+        broadcastState(force = true)
+    }
+
+    private fun replayManualSets() {
+        handler.removeCallbacks(manualRetry)
+        val pending = manualOutbox.pending()
+        pending.forEach { command -> sendToPhone(WearSync.PATH_MANUAL_SET,
+            WireCodec.encode(command.toEnvelope(android.os.SystemClock.elapsedRealtime(), System.currentTimeMillis())), coalescible = false) }
+        if (!serviceDestroyed && pending.isNotEmpty()) handler.postDelayed(manualRetry, 3_000L)
+    }
+
+    private fun replayWorkoutControls() {
+        handler.removeCallbacks(workoutControlRetry)
+        val pending = workoutControls.pending()
+        pending.forEach { sendToPhone(WearSync.PATH_WORKOUT_CONTROL, it.encode(), coalescible = false) }
+        if (!serviceDestroyed && pending.isNotEmpty()) handler.postDelayed(workoutControlRetry, 3_000L)
+    }
+
     private fun acknowledgeCompletion(payload: String) {
         val ack = WearSync.parse(payload)
         val pending = pendingCompletion?.let(WearSync::parse) ?: return
@@ -376,7 +499,7 @@ class WearWorkoutService : Service(), SensorEventListener {
         check(runtimePrefs.edit().putString("closedSessions", closed.joinToString("\n")).commit()) { "Failed to close watch session" }
     }
 
-    private fun restartMode(): Int = if (sessionId.isNotBlank() || pendingCompletion != null || capturePrefs.getStringSet(KEY_PENDING_CAPTURE_IDS, emptySet()).orEmpty().isNotEmpty()) START_STICKY else START_NOT_STICKY
+    private fun restartMode(): Int = if (sessionId.isNotBlank() || pendingCompletion != null || manualOutbox.pending().isNotEmpty() || workoutControls.pending().isNotEmpty() || capturePrefs.getStringSet(KEY_PENDING_CAPTURE_IDS, emptySet()).orEmpty().isNotEmpty()) START_STICKY else START_NOT_STICKY
 
     private fun checkpoint(): Boolean = flushCaptureChunk() && persistRuntime()
 
@@ -385,6 +508,7 @@ class WearWorkoutService : Service(), SensorEventListener {
             .put("setIndex", setIndex).put("setId", setId).put("attemptId", attemptId).put("targetReps", targetReps).put("weightKg", weightKg ?: JSONObject.NULL)
             .put("restSeconds", restSeconds).put("restEndAtMs", restEndAtMs).put("pausedRestRemainingMs", pausedRestRemainingMs)
             .put("running", running).put("resting", resting).put("paused", paused).put("reps", reps).put("heartRate", heartRate)
+            .put("trackingProfileSnapshot", dev.kyungmin.kcoach.core.TrackingProfileSnapshot.encode(trackingProfile))
             .put("calibrationStage", calibrationStage?.name ?: JSONObject.NULL).put("pendingCompletion", pendingCompletion ?: JSONObject.NULL)
             .put("chunks", JSONArray(captureChunkFiles.map { it.name })).put("captureSampleCount", captureSampleCount)
             .put("captureRecoveryError", captureRecoveryError ?: JSONObject.NULL).put("lastCaptureTimestampNs", lastCaptureTimestampNs)
@@ -392,6 +516,14 @@ class WearWorkoutService : Service(), SensorEventListener {
             .put("sensorClockNeedsCheck", sensorClockNeedsCheck)
             .put("bootCount", captureBootCount ?: currentBootCount() ?: JSONObject.NULL)
             .put("runtimeElapsedMs", android.os.SystemClock.elapsedRealtime())
+            .put("patternShadowCommandId", patternShadowCommandId).put("shadowUseConfirmed", shadowUseConfirmed)
+            .put("shadowCount", shadowCount).put("shadowInterrupted", shadowInterrupted)
+            .put("patternShadowTrace", shadowTraceSnapshot().orEmpty())
+            .put("patternBinding", patternBinding).put("activeUseConfirmed", activeUseConfirmed)
+            .put("patternWearing", patternWearing)
+            .put("patternSelectionMode", patternSelectionMode)
+            .put("activeInterrupted", activeInterrupted)
+            .put("activeSampleCalls", activeSampleCalls)
         runtimePrefs.edit().putString("state", state.toString()).putLong("commandRevision", lastCommandRevision).putString("lastAppliedCommand", lastAppliedCommand).commit()
     }.onFailure { Log.e(TAG, "watch runtime persistence failed", it) }.getOrDefault(false)
 
@@ -432,11 +564,41 @@ class WearWorkoutService : Service(), SensorEventListener {
             } else if (!recoverCaptureChunks(expectedCount)) return@runCatching
             captureChunkIndex = (captureChunkFiles.mapNotNull { it.name.removeSuffix(".kcs.part").substringAfterLast('-').toIntOrNull() }.maxOrNull() ?: -1) + 1
             paired = false; lastPhoneHeartbeatAtMs = 0
-            configureTracking()
+            val ownsWorkingSet = running || (paused && pausedRestRemainingMs == 0L)
+            patternSelectionMode = state.optString("patternSelectionMode")
+            configureTracking(state.optString("trackingProfileSnapshot").takeIf { it.isNotBlank() && ownsWorkingSet })
+            patternBinding = state.optString("patternBinding")
+            patternWearing = state.optString("patternWearing")
+            configureActive()
+            activeUseConfirmed = state.optBoolean("activeUseConfirmed")
+            activeInterrupted = state.optBoolean("activeInterrupted")
+            activeSampleCalls = state.optInt("activeSampleCalls")
+            if (activeDetector != null && captureSampleCount > 0)
+                readCaptureChunks(captureSampleCount).forEach { chunk -> chunk.records.forEach { activeDetector!!.add(it.sample) } }
+            patternShadowCommandId = state.optString("patternShadowCommandId")
+            shadowCount = state.optInt("shadowCount")
+            shadowInterrupted = state.optBoolean("shadowInterrupted") || patternShadowCommandId.isNotEmpty()
+            configureShadow()
+            state.optString("patternShadowTrace").takeIf { it.isNotEmpty() }?.let { encoded ->
+                val trace = dev.kyungmin.kcoach.core.PatternTrialTraceCodec.decode(encoded)
+                require(trace.runtime == frozenShadow?.runtime && trace.sessionId == sessionId && trace.setId == setId && trace.attemptId == attemptId)
+                shadowSampleCalls = trace.sampleCalls
+                trace.processingHistogram.forEachIndexed { index, count -> shadowProcessingHistogram[index] = count }
+                shadowEvents.addAll(trace.events)
+            }
+            shadowUseConfirmed = state.optBoolean("shadowUseConfirmed")
+            if (shadowDetector != null && captureSampleCount > 0)
+                readCaptureChunks(captureSampleCount).forEach { chunk -> chunk.records.forEach { shadowDetector!!.add(it.sample) } }
             if (pendingCompletion != null && captureSampleCount > 0) {
                 saveCapture()?.let { sendCaptureToPhone(it); resetCaptureBuffer(deleteChunks = true); persistRuntime() }
             }
-            if (running && reps >= targetReps) completeSet() else if (running) registerSensors()
+            val manual = manualOutbox.latest(sessionId, setId, attemptId)
+            if (manual != null && !resting) {
+                running = false
+                reps = manual.command.performedReps
+            }
+            if (running && reps >= targetReps && trackingProfile.mode != TrackingMode.MANUAL_REQUIRED &&
+                dev.kyungmin.kcoach.core.CapturePurpose.forSession(sessionId).stopAtTarget) completeSet() else if (running) registerSensors()
             // The phone resynchronizes an unfinished rest when the heartbeat reconnects.
         }.onFailure {
             running = false; resting = false; paused = true
@@ -472,11 +634,12 @@ class WearWorkoutService : Service(), SensorEventListener {
         val documents = captureChunkFiles.map { file ->
             require(file.canonicalFile.parentFile == filesDir.canonicalFile && file.name.startsWith(".capture-")) { "Invalid capture chunk path" }
             require(file.isFile) { "Missing capture chunk: ${file.name}" }
-            require(file.length() in 20L..(20L + MAX_CAPTURE_SAMPLES * 40L)) { "Invalid capture chunk size: ${file.name}" }
+            require(file.length() in 20L..(20L + MAX_CAPTURE_SAMPLES.toLong() * SensorCaptureFormat.recordBytes())) { "Invalid capture chunk size: ${file.name}" }
             java.io.DataInputStream(file.inputStream()).use { header ->
-                header.skipBytes(8)
+                header.skipBytes(4)
+                val version = header.readInt()
                 val count = header.readInt()
-                require(count in 0..MAX_CAPTURE_SAMPLES && file.length() == 20L + count * 40L) { "Invalid capture chunk header: ${file.name}" }
+                require(count in 0..MAX_CAPTURE_SAMPLES && file.length() == 20L + count.toLong() * SensorCaptureFormat.recordBytes(version)) { "Invalid capture chunk header: ${file.name}" }
             }
             SensorCaptureFormat.read(file.inputStream())
         }
@@ -554,6 +717,7 @@ class WearWorkoutService : Service(), SensorEventListener {
         if (reconnected) {
             retryDataCleanup()
             replayCompletion()
+            replayManualSets()
             retryPendingCaptures()
             sendToPhone(WearSync.PATH_RECONNECT, WearSync.watchUiReady(sessionId), coalescible = false)
         }
@@ -630,11 +794,21 @@ class WearWorkoutService : Service(), SensorEventListener {
         restSeconds = intent.getIntExtra("restSeconds", 60).coerceAtLeast(0)
         running = true
         reps = 0
+        lastAccel = FloatArray(3); lastGyro = FloatArray(3)
+        lastAccelerometerNs = null; lastAccelerometerAccuracy = null; lastHeartRateNs = null
         calibrationStage = if (sessionId.startsWith("calibration-")) CalibrationStage.BASELINE else null
+        patternSelectionMode = intent.getStringExtra("patternSelectionMode").orEmpty()
         configureTracking()
         // Any unresolved previous chunks stay on disk instead of being erased
         // when a replacement set starts.
         resetCaptureBuffer(deleteChunks = false)
+        patternWearing = intent.getStringExtra("patternWearing").orEmpty()
+        patternBinding = incomingPatternBinding(intent)
+        configureActive()
+        patternShadowCommandId = intent.getStringExtra("patternShadowCommandId").orEmpty()
+        shadowCount = 0; shadowInterrupted = false
+        shadowSampleCalls = 0L; shadowProcessingHistogram.fill(0); shadowEvents.clear()
+        configureShadow()
         sensorEventCount = 0
         uiBroadcastCount = 0
         liveStateCount = 0
@@ -651,12 +825,121 @@ class WearWorkoutService : Service(), SensorEventListener {
         broadcastState(force = true)
     }
 
-    private fun configureTracking() {
+    private fun configureShadow() {
+        frozenShadow = null; shadowDetector = null; shadowUseConfirmed = false
+        if (patternShadowCommandId.isBlank()) return
+        val selected = patternProfiles.beginRequestedShadow(patternShadowCommandId, sessionId, setId, attemptId,
+            WearClockEpoch.current(this).id).getOrThrow()
+        require(selected.runtime.compatibility.recipe == dev.kyungmin.kcoach.core.ExerciseMeasurementContracts.resolve(exerciseId).recipe)
+        shadowDetector = dev.kyungmin.kcoach.core.ReviewedPatternDetector(exerciseId, selected.runtime.compatibility, selected.runtime)
+        frozenShadow = selected
+    }
+
+    private fun incomingPatternBinding(intent: Intent): String {
+        val explicit = intent.getStringExtra("patternBinding").orEmpty()
+        val context = intent.getStringExtra("patternWearing").orEmpty()
+        if (context.isEmpty()) return explicit
+        val wearing = dev.kyungmin.kcoach.core.PatternWearingContext.decode(context)
+        val recipe = dev.kyungmin.kcoach.core.ExerciseMeasurementContracts.resolve(intent.getStringExtra("exerciseId").orEmpty()).recipe
+        if (recipe in setOf(dev.kyungmin.kcoach.core.MeasurementRecipe.MANUAL, dev.kyungmin.kcoach.core.MeasurementRecipe.SQUAT)) {
+            require(explicit.isEmpty())
+            return ""
+        }
+        val actual = dev.kyungmin.kcoach.core.PatternCompatibilityCodec.encode(wearing.compatibility(recipe, WearClockEpoch.current(this).deviceId))
+        require(explicit.isEmpty() || explicit == actual) { "Explicit binding disagrees with actual device and wearing" }
+        return actual
+    }
+
+    private fun configureActive() {
+        disableUseConfirmed = false
+        activeSampleCalls = 0
+        frozenActive = null; activeDetector = null; activeUseConfirmed = false; activeInterrupted = false
+        if (patternBinding.isBlank() || calibrationStage != null || trackingProfile.mode == TrackingMode.MANUAL_REQUIRED ||
+            (!running && !(paused && pausedRestRemainingMs == 0L))) return
+        val key = dev.kyungmin.kcoach.core.PatternCompatibilityCodec.decode(patternBinding)
+        require(key.recipe == dev.kyungmin.kcoach.core.ExerciseMeasurementContracts.resolve(exerciseId).recipe)
+        val selected = patternProfiles.beginSet(key, sessionId, setId, attemptId, WearClockEpoch.current(this).id, active = true)
+            .getOrThrow() ?: return
+        activeDetector = dev.kyungmin.kcoach.core.ReviewedPatternDetector(exerciseId, key, selected.runtime)
+        frozenActive = selected
+        // A complete learned return supplies its own start/turn/end evidence. Do not run the legacy counter in parallel as primary.
+        forearmRotationDetector = null; profiledMotionDetector = null; startPoseGate = null
+        measurementReady = true; measurementArmed = true
+    }
+
+    private fun observeActive(sample: SensorSample): dev.kyungmin.kcoach.core.ReviewedPatternDetection? {
+        val detector = activeDetector ?: return null
+        return runCatching {
+            if (activeSampleCalls < 30_000) activeSampleCalls++ else activeInterrupted = true
+            val detection = detector.add(sample)
+            if (dev.kyungmin.kcoach.core.SignalAxis.entries.any { !it.value(sample).isFinite() } || sample.sensorAccuracy == 0) {
+                activeInterrupted = true
+                return@runCatching null
+            }
+            if (!activeUseConfirmed) {
+                val ack = patternProfiles.confirmUsed(requireNotNull(frozenActive), sample.timestampNs,
+                    android.os.SystemClock.elapsedRealtimeNanos()).getOrThrow()
+                activeUseConfirmed = true
+                sendToPhone(WearSync.PATH_PATTERN_PROFILE_ACK, ack.encode(), coalescible = false)
+                persistRuntime()
+            }
+            detection
+        }.onFailure { activeInterrupted = true; Log.w(TAG, "Active profile processing failed; snapshot retained", it) }.getOrNull()
+    }
+
+    private fun observeShadow(sample: SensorSample) {
+        val detector = shadowDetector ?: return
+        if (dev.kyungmin.kcoach.core.SignalAxis.entries.any { !it.value(sample).isFinite() } || sample.sensorAccuracy == 0) {
+            shadowInterrupted = true; return
+        }
+        runCatching {
+            val startNs = android.os.SystemClock.elapsedRealtimeNanos()
+            val detection = detector.add(sample)
+            val processedNs = android.os.SystemClock.elapsedRealtimeNanos()
+            require(processedNs >= sample.timestampNs && processedNs >= startNs)
+            if (shadowSampleCalls < 30_000) {
+                shadowSampleCalls++
+                val duration = processedNs - startNs
+                val bucket = if (duration == 0L) 0 else 64 - java.lang.Long.numberOfLeadingZeros(duration)
+                shadowProcessingHistogram[bucket.coerceAtMost(63)]++
+            } else shadowInterrupted = true
+            if (detection != null) {
+                shadowCount++
+                if (shadowEvents.size < 600) shadowEvents += dev.kyungmin.kcoach.core.PatternTrialEvent(
+                    detection.cycle, detection.emittedAtNs, processedNs, detection.distance)
+                else shadowInterrupted = true
+            }
+            if (!shadowUseConfirmed) {
+                val ack = patternProfiles.confirmUsed(requireNotNull(frozenShadow), sample.timestampNs,
+                    android.os.SystemClock.elapsedRealtimeNanos()).getOrThrow()
+                shadowUseConfirmed = true
+                sendToPhone(WearSync.PATH_PATTERN_PROFILE_ACK, ack.encode(), coalescible = false)
+                persistRuntime()
+            }
+        }.onFailure { shadowInterrupted = true; Log.w(TAG, "Comparison profile use retained without confirmation", it) }
+    }
+
+    private fun shadowTraceSnapshot(): String? {
+        val frozen = frozenShadow ?: return null
+        val epoch = WearClockEpoch.current(this)
+        return dev.kyungmin.kcoach.core.PatternTrialTraceCodec.encode(dev.kyungmin.kcoach.core.PatternTrialTrace(
+            frozen.runtime, frozen.sessionId, frozen.setId, frozen.attemptId, frozen.watchClockId,
+            epoch.verified && epoch.id == frozen.watchClockId,
+            if (isEmulator || Build.FINGERPRINT.contains("robolectric", true)) dev.kyungmin.kcoach.core.PatternTrialSource.EMULATED
+            else dev.kyungmin.kcoach.core.PatternTrialSource.WATCH_SENSOR_EVENT,
+            shadowSampleCalls, shadowProcessingHistogram.toList(), shadowEvents.toList(), shadowInterrupted))
+    }
+
+    private fun configureTracking(savedSnapshot: String? = null) {
         val genericProfile = ExerciseTrackingProfiles.resolve(exerciseId, exerciseName)
-        val personalProfile = getSharedPreferences("personal-profiles", MODE_PRIVATE)
+        val personalProfile = if (calibrationStage != null || patternSelectionMode == "VERIFIED_PATTERN") null else getSharedPreferences("personal-profiles", MODE_PRIVATE)
             .getString(exerciseId, null)
             ?.let { runCatching { PersonalCalibrationProfileCodec.decode(it) }.getOrNull() }
-        trackingProfile = if (personalProfile == null) {
+        trackingProfile = if (savedSnapshot != null) {
+            dev.kyungmin.kcoach.core.TrackingProfileSnapshot.decode(savedSnapshot).also {
+                require(it.exerciseId == genericProfile.exerciseId) { "recorded profile belongs to another exercise" }
+            }
+        } else if (personalProfile == null) {
             genericProfile
         } else {
             PersonalCalibrationBuilder.personalizedTrackingProfile(personalProfile, genericProfile)
@@ -825,10 +1108,11 @@ class WearWorkoutService : Service(), SensorEventListener {
 
     override fun onSensorChanged(event: SensorEvent) {
         sensorEventCount += 1
-        val nowMs = System.currentTimeMillis()
         when (event.sensor.type) {
             Sensor.TYPE_ACCELEROMETER -> {
                 lastAccel = event.values.copyOf()
+                lastAccelerometerNs = event.timestamp
+                lastAccelerometerAccuracy = event.accuracy.takeIf { it >= 0 }
             }
             Sensor.TYPE_GYROSCOPE -> {
                 if (sensorClockNeedsCheck && running) {
@@ -836,6 +1120,12 @@ class WearWorkoutService : Service(), SensorEventListener {
                     sensorClockNeedsCheck = false
                 }
                 lastGyro = event.values.copyOf()
+                if (running) observeShadow(SensorSample(event.timestamp, lastAccel[0], lastAccel[1], lastAccel[2],
+                    lastGyro[0], lastGyro[1], lastGyro[2], sensorAccuracy = event.accuracy))
+                if (running && dev.kyungmin.kcoach.core.CapturePurpose.forSession(sessionId).preservePreparation) {
+                    captureSensorSample(SensorSample(event.timestamp, lastAccel[0], lastAccel[1], lastAccel[2],
+                        lastGyro[0], lastGyro[1], lastGyro[2], sensorAccuracy = event.accuracy))
+                }
                 if (running && trackingProfile.mode != TrackingMode.MANUAL_REQUIRED) {
                     val sensorSample = SensorSample(
                         timestampNs = event.timestamp,
@@ -860,8 +1150,23 @@ class WearWorkoutService : Service(), SensorEventListener {
                             broadcastState(force = true)
                         }
                     } else {
-                        val marker = forearmRotationDetector?.add(sensorSample)
-                            ?: profiledMotionDetector?.add(sensorSample)
+                        // Persist the same sample used by the live detector before it can
+                        // complete the set. Callback delivery time must not discard a batch.
+                        captureSensorSample(sensorSample)
+                        val marker = if (activeDetector != null) observeActive(sensorSample)
+                            else forearmRotationDetector?.add(sensorSample) ?: profiledMotionDetector?.add(sensorSample)
+                        if (activeDetector == null && patternBinding.isNotBlank() && !disableUseConfirmed &&
+                            (forearmRotationDetector != null || profiledMotionDetector != null) && sensorSample.sensorAccuracy != 0 &&
+                            dev.kyungmin.kcoach.core.SignalAxis.entries.all { it.value(sensorSample).isFinite() }) {
+                            patternProfiles.confirmDisabled(dev.kyungmin.kcoach.core.PatternCompatibilityCodec.decode(patternBinding),
+                                sessionId, setId, attemptId, WearClockEpoch.current(this).id, sensorSample.timestampNs,
+                                android.os.SystemClock.elapsedRealtimeNanos()).onSuccess { ack ->
+                                if (ack != null) {
+                                    disableUseConfirmed = true
+                                    sendToPhone(WearSync.PATH_PATTERN_PROFILE_ACK, ack.encode(), coalescible = false)
+                                }
+                            }.onFailure { Log.w(TAG, "Basic detector receipt failed", it) }
+                        }
                         if (marker != null) {
                             recordDetectedRep()
                             if (!running) return
@@ -872,26 +1177,28 @@ class WearWorkoutService : Service(), SensorEventListener {
             Sensor.TYPE_HEART_RATE -> {
                 val reading = event.values.firstOrNull()
                 heartRate = reading?.takeIf { it.isFinite() && it in 20f..240f }?.toInt() ?: 0
+                lastHeartRateNs = event.timestamp.takeIf { heartRate > 0 }
             }
         }
         lastSensorAccuracy = event.accuracy
-        if (running && measurementReady && event.sensor.type == Sensor.TYPE_GYROSCOPE && nowMs - lastSampleAtMs >= 20L) {
-            val timestampNs = event.timestamp
-            if (timestampNs <= lastCaptureTimestampNs) return
-            lastSampleAtMs = nowMs
-            lastCaptureTimestampNs = timestampNs
-            appendCaptureRecord(SensorCaptureRecord(
-                sample = SensorSample(
-                    timestampNs = timestampNs,
-                    accelerationX = lastAccel[0], accelerationY = lastAccel[1], accelerationZ = lastAccel[2],
-                    gyroscopeX = lastGyro[0], gyroscopeY = lastGyro[1], gyroscopeZ = lastGyro[2],
-                    sensorAccuracy = lastSensorAccuracy.takeIf { it >= 0 },
-                ),
-                heartRateBpm = heartRate.takeIf { it in 20..240 },
+        if (running && measurementReady && event.sensor.type == Sensor.TYPE_GYROSCOPE) {
+            captureSensorSample(SensorSample(
+                timestampNs = event.timestamp,
+                accelerationX = lastAccel[0], accelerationY = lastAccel[1], accelerationZ = lastAccel[2],
+                gyroscopeX = lastGyro[0], gyroscopeY = lastGyro[1], gyroscopeZ = lastGyro[2],
+                sensorAccuracy = lastSensorAccuracy.takeIf { it >= 0 },
             ))
         }
         if (running) sendLiveState(currentWorkingPhase(), true)
         broadcastState()
+    }
+
+    private fun captureSensorSample(sample: SensorSample) {
+        if (sample.timestampNs <= lastCaptureTimestampNs) return
+        lastCaptureTimestampNs = sample.timestampNs
+        appendCaptureRecord(SensorCaptureRecord(sample, heartRate.takeIf { it in 20..240 && lastHeartRateNs != null },
+            lastAccelerometerNs, sample.timestampNs, android.os.SystemClock.elapsedRealtimeNanos(), lastAccelerometerAccuracy,
+            lastHeartRateNs))
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
@@ -961,7 +1268,7 @@ class WearWorkoutService : Service(), SensorEventListener {
         reps += 1
         checkpoint()
         vibrateShort()
-        if (reps >= targetReps) completeSet()
+        if (reps >= targetReps && dev.kyungmin.kcoach.core.CapturePurpose.forSession(sessionId).stopAtTarget) completeSet()
     }
 
     private fun currentWorkingPhase(): String = when (calibrationStage) {
@@ -1107,7 +1414,34 @@ class WearWorkoutService : Service(), SensorEventListener {
                 exerciseName = exerciseName,
                 setIndex = setIndex,
                 attemptId = attemptId,
-            ).let(WireCodec::encode)
+            ).let { manifest ->
+                val epoch = WearClockEpoch.current(this)
+                manifest.copy(payload = manifest.payload + mapOf(
+                    "capturePurpose" to dev.kyungmin.kcoach.core.CapturePurpose.forSession(sessionId).name,
+                    "watchClockId" to epoch.id,
+                    "watchDeviceId" to epoch.deviceId,
+                    "watchEpochVerified" to epoch.verified.toString(),
+                    "patternShadowCommandId" to patternShadowCommandId,
+                    "patternShadowSnapshot" to frozenShadow?.runtime?.let { Base64.getEncoder().encodeToString(dev.kyungmin.kcoach.core.PatternRuntimeCodec.encode(it)) }.orEmpty(),
+                    "patternShadowUsed" to shadowUseConfirmed.toString(),
+                    "patternShadowCount" to shadowCount.toString(),
+                    "patternShadowInterrupted" to shadowInterrupted.toString(),
+                    "patternShadowTrace" to shadowTraceSnapshot().orEmpty(),
+                    "patternBinding" to patternBinding,
+                    "patternWearing" to patternWearing,
+                    "patternSelectionMode" to patternSelectionMode,
+                    "patternActiveCommandId" to frozenActive?.commandId.orEmpty(),
+                    "patternBaselineCount" to reps.toString(),
+                    "patternBaselineSampleCalls" to activeSampleCalls.toString(),
+                    "patternActiveCandidateHash" to frozenActive?.runtime?.candidateHash.orEmpty(),
+                    "patternActiveSnapshot" to frozenActive?.runtime?.let { Base64.getEncoder().encodeToString(dev.kyungmin.kcoach.core.PatternRuntimeCodec.encode(it)) }.orEmpty(),
+                    "patternActiveUsed" to activeUseConfirmed.toString(),
+                    "patternActiveInterrupted" to activeInterrupted.toString(),
+                    dev.kyungmin.kcoach.core.WirePayloadKeys.TRACKING_PROFILE_ID to trackingProfile.id,
+                    dev.kyungmin.kcoach.core.WirePayloadKeys.TRACKING_PROFILE_SNAPSHOT to
+                        dev.kyungmin.kcoach.core.TrackingProfileSnapshot.encode(trackingProfile),
+                ))
+            }.let(WireCodec::encode)
             atomicWrite(File(filesDir, "$captureId.manifest"), manifest.toByteArray(Charsets.UTF_8))
             rememberPendingCapture(captureId)
             writeStorageReport()
@@ -1180,7 +1514,6 @@ class WearWorkoutService : Service(), SensorEventListener {
         captureChunkIndex = 0
         captureLimitLogged = false
         lastCaptureTimestampNs = 0L
-        lastSampleAtMs = 0L
     }
 
     private fun sendCaptureToPhone(capture: SavedCapture) {
@@ -1347,6 +1680,9 @@ class WearWorkoutService : Service(), SensorEventListener {
     }
 
     private fun resetSessionFields() {
+        shadowSampleCalls = 0L; shadowProcessingHistogram.fill(0); shadowEvents.clear()
+        patternShadowCommandId = ""; frozenShadow = null; shadowDetector = null; shadowUseConfirmed = false; shadowCount = 0; shadowInterrupted = false
+        patternBinding = ""; patternWearing = ""; patternSelectionMode = ""; frozenActive = null; activeDetector = null; activeUseConfirmed = false; activeInterrupted = false
         sessionId = ""
         setId = ""; attemptId = ""
         exerciseId = ""
@@ -1394,6 +1730,10 @@ class WearWorkoutService : Service(), SensorEventListener {
             putExtra("exerciseId", exerciseId)
             putExtra("exerciseName", exerciseName)
             putExtra("setIndex", setIndex)
+            putExtra("setId", setId)
+            putExtra("attemptId", attemptId)
+            putExtra("manualRequired", trackingProfile.mode == TrackingMode.MANUAL_REQUIRED)
+            putExtra("manualStatus", manualOutbox.latest(sessionId, setId, attemptId)?.let { it.ack?.status?.name ?: "PENDING" }.orEmpty())
             putExtra("targetReps", targetReps)
             putExtra("weightKg", weightKg ?: Double.NaN)
             putExtra("restSeconds", restSeconds)
@@ -1404,11 +1744,17 @@ class WearWorkoutService : Service(), SensorEventListener {
             putExtra("phase", currentPhase())
             putExtra("trackingProfileId", trackingProfile.id)
             putExtra("personalized", trackingProfile.calibrationProfileVersion != null)
+            putExtra("patternShadowCommandId", patternShadowCommandId)
+            putExtra("patternShadowCount", shadowCount)
+            putExtra("patternShadowEventIndex", shadowEvents.lastIndex)
+            putExtra("patternShadowEmissionNs", shadowEvents.lastOrNull()?.sourceEmissionNs ?: -1L)
         })
     }
 
     private fun currentPhase(): String = when {
         captureRecoveryError != null -> "CAPTURE_RECOVERY_REQUIRED"
+        !resting && manualOutbox.latest(sessionId, setId, attemptId)?.ack?.status == dev.kyungmin.kcoach.core.ManualSetStatus.CONFLICT -> "MANUAL_CONFLICT"
+        !resting && manualOutbox.latest(sessionId, setId, attemptId)?.let { it.ack == null } == true -> "MANUAL_PENDING"
         paused -> "PAUSED"
         resting -> "RESTING"
         running -> currentWorkingPhase()
@@ -1473,6 +1819,7 @@ class WearWorkoutService : Service(), SensorEventListener {
         private const val EVENT_TAG = "KCoachEvent"
         private const val CALIBRATION_TAG = "KCoachCalibration"
         const val ACTION_STATE = "dev.kyungmin.kcoach.wear.RUNTIME_STATE"
+        const val ACTION_WORKOUT_CONTROL = "dev.kyungmin.kcoach.wear.WORKOUT_CONTROL"
         const val EXTRA_COMMAND = "command"
         private const val CHANNEL_ID = "kcoach_wear_workout"
         private const val NOTIFICATION_ID = 4102

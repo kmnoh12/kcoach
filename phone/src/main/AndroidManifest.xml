@@ -1,5 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.front" android:required="false" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -31,6 +34,18 @@
         <activity
             android:name=".ProbeActivity"
             android:exported="false" />
+        <activity android:name=".CalibrationCameraActivity" android:exported="false" android:screenOrientation="portrait" />
+        <activity android:name=".CalibrationReviewActivity" android:exported="false" android:screenOrientation="portrait" />
+        <activity android:name=".PatternCandidatesActivity" android:exported="false" android:screenOrientation="portrait" />
+        <activity android:name=".SettingsActivity" android:exported="false" />
+        <activity android:name=".ChatGptAccountActivity" android:exported="true" android:launchMode="singleTop">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="kcoach" android:host="chatgpt" android:path="/return" />
+            </intent-filter>
+        </activity>
         <service
             android:name=".PhoneWearListenerService"
             android:exported="true">

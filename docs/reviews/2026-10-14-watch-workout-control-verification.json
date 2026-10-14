@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 1,
+  "createdAtUtc": "2026-10-14T06:44:30.169001+00:00",
+  "scope": "SOFTWARE_PHONE_PREPARED_ROUTINE_WATCH_START_AND_NEXT_SET_WITH_DURABLE_RECEIPTS",
+  "tests": {
+    "core": {
+      "tests": 203,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "phone": {
+      "tests": 207,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "wear": {
+      "tests": 63,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "totalTests": 473,
+  "checkLog": "work/watch-workout-control-full-check.log",
+  "checkLogSha256": "f5dd75e5c631d3e44539ce56d15655d1348604f99295f6028870570023d064a2",
+  "debugApkBuilds": {
+    "phone": {
+      "path": "phone/build/outputs/apk/debug/phone-debug.apk",
+      "sha256": "13efc59b14b1a8d6a2798b007ca27e759bc3d54d86bf3420ee67430477b2182e"
+    },
+    "wear": {
+      "path": "wear/build/outputs/apk/debug/wear-debug.apk",
+      "sha256": "17a7b99a5c8b0c2d0ea9dbd81f159ad9c4f90786a2a9557825028b7310ec0bf2"
+    }
+  },
+  "lintDebug": {
+    "phone": {
+      "errors": 0,
+      "warnings": 150
+    },
+    "wear": {
+      "errors": 0,
+      "warnings": 37
+    }
+  },
+  "sourceSha256": {
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/WatchWorkoutControl.kt": "6aa432615cb384d4932e18be9d6a1d893e38e4e6d85f373d4fc42a6b3b0aaa69",
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/WearSync.kt": "d4211bb6e4a6cf4a8f3229873ba36b7aa417ba1f0d60735952935f907a35763b",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/SessionStore.kt": "1c13afbae05bd29ae4066703d7665d0454e0997990d507c6fbbd8a8139710b3a",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/WatchWorkoutController.kt": "dd9ddb6f1b4095592bc9dbcd115a7bc1d9fde976d0e01b80df62d3e06af3d40a",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/MainActivity.kt": "f93dfadfcbc18d8e713e1e526e85fa66886945336b5feaeb5ed8704654c5e6ed",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/PhoneWearBridge.kt": "cd68203a90d898c2b2e6b94f0528d7c9ed11d88448d0fe7b63073811ed416e87",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/PhoneWearListenerService.kt": "a359309eb67eef13720d73bb4bf2314897ea1c3487b3c02a9ada00535cd4626f",
+    "wear/src/main/kotlin/dev/kyungmin/kcoach/wear/WatchWorkoutOutbox.kt": "a32cedb075bf61093fbc9dfe17a61593df075ee4c62d4b28fb0dbc4b63dae92a",
+    "wear/src/main/kotlin/dev/kyungmin/kcoach/wear/MainActivity.kt": "80c14b13b2259d597374a4b4e8a1aaa0c92517f778864c4c086e9da2e4a2c9d9",
+    "wear/src/main/kotlin/dev/kyungmin/kcoach/wear/WearWorkoutService.kt": "fac18f8dab40560ebd7bd748e82d64541cd57fd54020e319aeca30bb382afb52",
+    "wear/src/main/kotlin/dev/kyungmin/kcoach/wear/WearCommandService.kt": "71da1c4e7d4ee5a1cd7e196e8102daa27ebec74b3c088df74930ef4ba1b3052a",
+    "phone/src/test/kotlin/dev/kyungmin/kcoach/phone/WatchWorkoutControlTest.kt": "b866ff0a33bab9693817ae0c5df28b5e585ae11d3bd84954399058f8e27d5536",
+    "wear/src/test/kotlin/dev/kyungmin/kcoach/wear/WatchWorkoutOutboxTest.kt": "5c5caa82c15617e7a215843dc99a5d996978565e92ab8965ffa5947cc202e823",
+    "wear/src/test/kotlin/dev/kyungmin/kcoach/wear/WatchWorkoutUiTest.kt": "64b509f0f10369160c25a4ccee7371a53167f6a7b822b0cd20d88ffc7a1362b0"
+  },
+  "verifiedBehaviors": [
+    "Preparing a phone-selected routine does not create an active workout or start elapsed time.",
+    "Explicit watch confirmation starts the frozen plan once and confirms wearing or basic mode.",
+    "Stale, expired, camera-owned or concurrent active sessions cannot be started by an old request.",
+    "Actual zero-rep manual completion remains zero when proceeding to the next set.",
+    "Durable request receipts prevent old NEXT retries from skipping a subsequent rest.",
+    "Offline watch requests survive service recreation and heartbeat until a matching receipt.",
+    "Visible watch buttons dispatch the exact plan and next-set identity.",
+    "Legacy phone greeting clears capability and hides unsupported remote controls.",
+    "The already-open phone loads a workout started by the watch from persisted state."
+  ],
+  "phonePreparedRoutineRequired": true,
+  "watchStandaloneRoutineCatalogImplemented": false,
+  "hardwareVerified": false,
+  "installedBuildIdentityVerified": false,
+  "accuracyImprovementVerified": false,
+  "aiModelExecutionVerified": false,
+  "released": false,
+  "limits": [
+    "Tests use Android simulation, not actual Bluetooth, Watch8, installation or screen timeout.",
+    "Watch start uses a routine prepared on the phone within 30 minutes; it does not create a plan without phone preparation.",
+    "An offline start remains queued until the phone can validate it; sensor recording starts after phone confirmation.",
+    "Physical sensor/camera acceptance, actual AI execution and final GitHub release remain outstanding."
+  ]
+}

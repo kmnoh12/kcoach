@@ -62,7 +62,7 @@ object ExerciseCapabilityMatrix {
         tier: CapabilityTier,
         grip: String = "exercise_default_recorded",
         setup: Set<String> = setOf("same_watch_side", "same_wear_position", "same_grip_or_attachment"),
-        fallback: String = "manual_phone_input",
+        fallback: String = "manual_phone_or_watch_input",
     ) = ExerciseVariantMetadata(
         exerciseId = exerciseId,
         variantId = "standard",
@@ -93,28 +93,28 @@ object ExerciseCapabilityMatrix {
     private val conditionalRows = listOf(
         standard(
             exerciseId = "pull_up",
-            tier = CapabilityTier.C_PERSONALIZED_AUTO_COUNT_BETA,
+            tier = CapabilityTier.D_MANUAL_REQUIRED,
             grip = "same_bar_grip",
             setup = setOf("same_watch_side", "same_wear_position", "same_bar_grip", "calibration_5_to_8_reps"),
         ).copy(
             variantId = "calibrated_same_grip",
             protocolId = "pull_up_a_b_a_calibration",
             contactCondition = "bar_grip_unchanged",
-            fallback = "manual_phone_input",
+            fallback = "manual_phone_or_watch_input",
             requiredSetup = setOf("same_watch_side", "same_wear_position", "same_bar_grip", "5_to_8_controlled_reps", "2s_baseline_before_after"),
             validationMethod = "Watch8 raw IMU + manual/video count; slow/normal/fast cadence, top hold, partial, kipping, rest, and grip-change cases",
         ),
         standard(
             exerciseId = "leg_press",
-            tier = CapabilityTier.C_PERSONALIZED_AUTO_COUNT_BETA,
+            tier = CapabilityTier.D_MANUAL_REQUIRED,
             setup = setOf("same_watch_side", "same_wear_position", "hand_on_knee_contact", "calibration_5_to_10_reps"),
-            fallback = "manual_phone_input",
+            fallback = "manual_phone_or_watch_input",
         ).copy(
             variantId = "hand_on_knee_proxy",
             protocolId = "leg_press_contact_proxy",
             contactCondition = "light_hand_on_same_knee_throughout_set",
             supportedMetrics = setOf("signal_quality"),
-            fallback = "manual_phone_input",
+            fallback = "manual_phone_or_watch_input",
             requiredSetup = setOf("same_machine_setup", "same_watch_side", "same_wear_position", "hand_on_knee_contact", "5_to_10_controlled_reps", "contact_loss_detection"),
             validationMethod = "Watch8 raw IMU proxy + manual/video count; hands-free control must remain MANUAL_REQUIRED",
         ),
@@ -143,7 +143,7 @@ object ExerciseCapabilityMatrix {
             }
             ?: standard("unknown", CapabilityTier.D_MANUAL_REQUIRED).copy(
                 exerciseId = normalizedExerciseId.ifBlank { "unknown" },
-                fallback = "manual_phone_input",
+                fallback = "manual_phone_or_watch_input",
                 validationMethod = "No motion-family match; manual input required",
             )
     }
@@ -166,6 +166,7 @@ object CapabilityOutputPolicy {
             wristMotionSpeed = null,
             wristMotionRange = null,
             tempoConsistency = null,
+            motionMetrics = null,
         )
     }
 }

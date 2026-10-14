@@ -119,10 +119,11 @@ object PersonalCalibrationBuilder {
         generic: ExerciseTrackingProfile,
     ): ExerciseTrackingProfile = generic.copy(
         id = "${generic.id}+${personal.profileId}",
-        minimumRepMs = blend(personal.medianRepDurationMs * 0.35, generic.minimumRepMs.toDouble()).toLong()
-            .coerceAtLeast(200L),
-        maximumRepMs = blend(personal.medianRepDurationMs * 2.2, generic.maximumRepMs.toDouble()).toLong()
-            .coerceAtMost(10_000L),
+        // A slow/fast calibration is an example, not a requirement to keep that tempo.
+        minimumRepMs = minOf(generic.minimumRepMs,
+            blend(personal.medianRepDurationMs * 0.35, generic.minimumRepMs.toDouble()).toLong().coerceAtLeast(200L)),
+        maximumRepMs = maxOf(generic.maximumRepMs,
+            blend(personal.medianRepDurationMs * 2.2, generic.maximumRepMs.toDouble()).toLong().coerceAtMost(10_000L)),
         minimumFeatureRate = blend(
             maxOf(personal.gyroNoiseFloor * 2.5, personal.peakAngularVelocity * 0.12),
             generic.minimumFeatureRate,

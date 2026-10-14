@@ -1,0 +1,80 @@
+{
+  "date": "2026-10-13",
+  "scope": "Menu upper-right settings, account-specific model and reasoning selection",
+  "supersedes_artifact": "docs/reviews/2026-10-13-chatgpt-login-verification.json",
+  "tests": [
+    {
+      "name": "dev.kyungmin.kcoach.phone.ChatGptAuthTest",
+      "tests": "8",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0"
+    },
+    {
+      "name": "dev.kyungmin.kcoach.phone.ChatGptModelSettingsTest",
+      "tests": "8",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0"
+    },
+    {
+      "name": "dev.kyungmin.kcoach.phone.ui.ChatGptAccountUiTest",
+      "tests": "4",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0"
+    },
+    {
+      "name": "dev.kyungmin.kcoach.phone.ui.SettingsUiTest",
+      "tests": "5",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0"
+    }
+  ],
+  "checks": {
+    "ota_build": true,
+    "lint_ota": true,
+    "rendered_ui_inspected": true,
+    "real_account_model_catalog_verified": false,
+    "real_inference_verified": false,
+    "device_installed": false,
+    "published": false
+  },
+  "limitations": [
+    "Models and token HTTP responses are fake fixtures in tests; no real account credentials or inference requests were used.",
+    "Reasoning choices depend on returned metadata; absent metadata permits only the model default.",
+    "The work request option builder is implemented, but the GPT workout/calibration runner is not connected."
+  ],
+  "logs": [
+    "work/chatgpt-settings-final.log"
+  ],
+  "screenshots": [
+    "phone/build/outputs/roborazzi/menu_settings.png",
+    "phone/build/outputs/roborazzi/settings_ai.png",
+    "phone/build/outputs/roborazzi/settings_models.png",
+    "phone/build/outputs/roborazzi/settings_reasoning.png"
+  ],
+  "source_sha256": {
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/ChatGptOAuth.kt": "2bafab7bf6f7e04cedcf02d4066857a38554a5846b68c2f7f90760282035455d",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/ChatGptModels.kt": "821b38449718390143f053804169753a92cbc36a22cbb21edb9d5e19e26a65df",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/ChatGptAccountActivity.kt": "e1390def5cbf47f7247fbc04cb01286ca1227a0c6712f0a0720f7e1faaaff90a",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/ChatGptAccountStore.kt": "3d9c070714c8083accc5348ed8b3cf4786f7a0e6e751b468f77cb753e8a2250f",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/ChatGptAuth.kt": "c6bdcd5f8e913a95bb0d38652cbf64c69a8a81b9b1bd31f9472b6451ad073f7f",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/SettingsActivity.kt": "f9f0862a75b2ea3e2682df7cbe1d800c04482ae9b95314ae0cc5481936151f36",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/MainActivity.kt": "a8a22b79d4facf29d48f16e409883c1023624c8c4a592d7d9f76479486f39926",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/ui/SettingsScreen.kt": "be7c384a0c95d7fbf3de1ac1e9c46a6218409aa4668c2d700cd5e6b5a6bc505a",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/ui/ChatGptAccountScreen.kt": "3ab48981d091de3c4e29776484de2ddc1a53da363b3796261e7dfb3092d6bc7d",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/ui/TabScreens.kt": "f69f297a35eae25d4eb08942ce7f80f7ef67cc17dbe0531f50f9a7d6753582c0",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/ui/Icons.kt": "c9c2bae0c9499203469bcb1fbdd8c40329c061b30713e4261a4d636b2f181db0",
+    "phone/src/main/AndroidManifest.xml": "862413fb0cad6af73c2970a664b80c300653084c7486b8095e27a34e5b1e88b7",
+    "phone/build.gradle.kts": "5c81faba0554eb9c4042c0032398e7342b847810ca0fd7bb249f465999b45461"
+  },
+  "artifact": {
+    "path": "phone/build/outputs/apk/ota/phone-ota.apk",
+    "size": 59137180,
+    "sha256": "1cce47d9730494d3bfe57602b47b30d7a95d22c49828c461e701e1d492cfa364",
+    "version_code": 33,
+    "version_name": "0.7.3"
+  }
+}

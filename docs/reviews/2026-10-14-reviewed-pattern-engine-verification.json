@@ -1,0 +1,64 @@
+{
+  "date": "2026-10-14",
+  "scope": "Software regression, synthetic causal replay, frozen local candidates and debug builds. Not Watch8/native camera/physical accuracy/account/release acceptance.",
+  "fullRegression": {
+    "log": "work/pattern-stage2-comparison-final.log",
+    "tests": {
+      "core": 172,
+      "phone": 185,
+      "wear": 46
+    },
+    "total": 403,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "debugApksBuilt": true,
+    "lint": {
+      "phone": {
+        "errors": 0,
+        "warnings": 145
+      },
+      "wear": {
+        "errors": 0,
+        "warnings": 32
+      }
+    }
+  },
+  "followUp": {
+    "reason": "Also invalidate a candidate if source exercise condition or source day changes",
+    "log": "work/pattern-source-guard-final.log",
+    "scope": "PatternCandidateStoreTest, phone assembleDebug and lintDebug",
+    "fullRegressionRepeated": false
+  },
+  "workingTreeSha256": {
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/CapturePurpose.kt": "2ec3a64b72b21332c8a15d82ab712ed63bf60c3448c0c80fed7701bba4c34765",
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/ReviewedPattern.kt": "d899881fcf48afd8f6921a49dc5d9989776d4d1619f0acd0162e0c2fe5aa764e",
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/ReviewedPatternAnalyzer.kt": "009a9d337cb8f0e83e45614fe924af3b2017aa14a631255566a37f3e49dc8f6a",
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/ReviewedPatternDetector.kt": "67a67730ecb5580bc3f5cb71be3a01b229f350c03533f38caea156656fa616e9",
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/PatternWindowMatcher.kt": "801177d7df52dd4a294fb997598f42031510210c0dbbd03c88809848663b63ca",
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/ReviewedPatternCodec.kt": "08b5e9651ac578cb62c563db6bd53a8adc4b67c5a72c615179db31485d0361d5",
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/ReviewedPatternValidation.kt": "b7886db3ba762be23ffd050429085046ffe6c5efa6514dd1ed777bacb1fb92de",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/PatternCandidateStore.kt": "ea74612b36a4fa7d3900d98d110d821794ec71399365a56a0939a1ea5fa5ecf6",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/PatternCandidatesActivity.kt": "4a0d9a1bc828647f782cac215abb35d75c64146f9587148c62914e95f361d718",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/CalibrationReviewActivity.kt": "7c4a69856966c649ee4aa1af461edb0b64f0cb459cefb3e02099d18c70747e0f",
+    "wear/src/main/kotlin/dev/kyungmin/kcoach/wear/WearClockEpoch.kt": "a4e2569b2a13a531ae868813d88f46290f14a52d36644e8da4ffe3d53b48febc"
+  },
+  "notes": [
+    "WORKOUT no longer stops at target; explicit stop preserves last sensor timestamp.",
+    "Reviewed patterns learn only eligible human-reviewed aligned cycles, not detector outputs.",
+    "Training sources and post-freeze held-out clips are separate; missing inputs stay in overall denominators.",
+    "Causal unit/replay emissions use sensor time only and do not prove device CPU or UI response latency.",
+    "No synthetic post-set padding is appended to validation inputs.",
+    "Camera/watch physical paired capture and independent labels are not available yet."
+  ],
+  "watchRuntimeIntegrated": false,
+  "watchProfileAckImplemented": false,
+  "watchAdoptionReady": false,
+  "hardwareVerified": false,
+  "githubReleaseCreated": false,
+  "primaryReferences": [
+    "https://pmc.ncbi.nlm.nih.gov/articles/PMC7795271/",
+    "https://www.mdpi.com/1424-8220/20/17/4791",
+    "https://developer.android.com/jetpack/androidx/releases/fragment#1.3.6"
+  ]
+}

@@ -8,6 +8,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,6 +34,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -43,7 +46,7 @@ import java.time.LocalDate
 import java.time.YearMonth
 
 @Composable
-private fun TabPage(title: String, right: String, rightIcon: KIcon? = null, content: @Composable () -> Unit) {
+private fun TabPage(title: String, right: String, rightIcon: KIcon? = null, rightAction: (() -> Unit)? = null, content: @Composable () -> Unit) {
     Column(
         Modifier
             .fillMaxSize()
@@ -54,7 +57,11 @@ private fun TabPage(title: String, right: String, rightIcon: KIcon? = null, cont
         Row(Modifier.fillMaxWidth().heightIn(min = 52.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(title, color = KColors.White, fontSize = 32.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
             if (right.isNotEmpty()) Text(right, color = KColors.Muted, fontSize = 14.sp)
-            if (rightIcon != null) KIcon(rightIcon, KColors.Muted, Modifier.padding(start = 4.dp), 22.dp)
+            if (rightIcon != null) {
+                if (rightAction == null) KIcon(rightIcon, KColors.Muted, Modifier.padding(start = 4.dp), 22.dp)
+                else Box(Modifier.size(48.dp).clip(KShape.Control).semantics { contentDescription = "설정" }
+                    .clickable(onClick = rightAction), contentAlignment = Alignment.Center) { KIcon(rightIcon, KColors.White, size = 24.dp) }
+            }
         }
         content()
     }
@@ -277,16 +284,20 @@ class UpdateUi(val message: String, val readyToInstall: Boolean)
 class MenuActions(
     val checkUpdate: ((UpdateUi) -> Unit) -> Unit,
     val install: () -> String?,
-    val openProbe: () -> Unit,
+    val openCalibration: () -> Unit,
+    val openSettings: () -> Unit = {},
 )
 
 @Composable
-fun MenuScreen(version: String, actions: MenuActions) {
+fun MenuScreen(version: String, actions: MenuActions, wearing: dev.kyungmin.kcoach.phone.WorkoutWearingSelection? = null) {
     var state by remember { mutableStateOf(UpdateUi("업데이트를 확인할 수 있어요", false)) }
     var busy by remember { mutableStateOf(false) }
-    TabPage("메뉴", "") {
+    TabPage("메뉴", "", KIcon.Settings, actions.openSettings) {
         Spacer(Modifier.height(28.dp))
-        SectionCard("기기", listOf("Galaxy Watch8" to "연결 대기", "착용 손" to "왼손", "센서 기록" to "세트 중에만"))
+        SectionCard("기기", listOf("워치 연결" to "운동 화면에서 확인",
+            "확인한 착용 손" to when (wearing?.side) { "LEFT" -> "왼손"; "RIGHT" -> "오른손"; else -> "미확인" },
+            "확인한 화면 방향" to when (wearing?.placement) { "OUTSIDE" -> "손등 쪽"; "INSIDE" -> "손바닥 쪽"; else -> "미확인" },
+            "센서 기록" to "운동·보정 중"))
         Spacer(Modifier.height(28.dp))
         SectionCard("앱", listOf("현재 버전" to version, "데이터 저장" to "이 기기에만"))
         Spacer(Modifier.height(24.dp))
@@ -305,7 +316,7 @@ fun MenuScreen(version: String, actions: MenuActions) {
             }
         }
         Spacer(Modifier.height(10.dp))
-        MenuButton("실측 모드", filled = false, onClick = actions.openProbe)
+        MenuButton("측정·보정", filled = false, onClick = actions.openCalibration)
     }
 }
 

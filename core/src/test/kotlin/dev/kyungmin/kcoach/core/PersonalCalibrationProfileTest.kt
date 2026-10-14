@@ -59,6 +59,23 @@ class PersonalCalibrationProfileTest {
         assertEquals("exercise_unobservable_from_wrist", assertIs<CalibrationBuildResult.Failed>(result).reason)
     }
 
+    @Test
+    fun `slow calibration must not reject a faster valid curl`() {
+        val generic = ExerciseTrackingProfiles.resolve("barbell_biceps_curl")
+        val calibration = assertIs<CalibrationBuildResult.Success>(PersonalCalibrationBuilder.build(
+            SensorCaptureDocument(1, 50.0, CurlCycleRegressionTest.curlSamples(5, 3.0, 3.0, topHoldSeconds = 2.0).map(::SensorCaptureRecord)),
+            "barbell_biceps_curl", "바벨 컬", nowMs = 123L,
+        ))
+        val personal = PersonalCalibrationBuilder.personalizedTrackingProfile(calibration.profile, generic)
+        val samples = CurlCycleRegressionTest.curlSamples(10, 0.6, 0.6)
+        fun count(profile: ExerciseTrackingProfile): Int {
+            val detector = ProfiledMotionRepDetector(profile)
+            return samples.count { detector.add(it) != null }
+        }
+        assertEquals(10, count(generic))
+        assertEquals(10, count(personal), "Personal minimum duration ${personal.minimumRepMs} must not discard valid curls")
+    }
+
     private fun record(timestampNs: Long, gyroY: Float) = SensorCaptureRecord(
         SensorSample(timestampNs, 0f, 9.80665f, 0f, 0f, gyroY, 0f, 3),
         110,

@@ -80,7 +80,12 @@ fun ActiveWorkoutScreen(
     var applyAll by remember { mutableStateOf(false) }
     var restExpanded by remember { mutableStateOf(false) }
 
-    val now by produceState(System.currentTimeMillis(), model.restEndAtMs, model.paused) {
+    val now by produceState(System.currentTimeMillis(), model.restEndAtMs, model.paused, model.isPreview) {
+        // Browsing a routine is not a running workout. No clock ticks until it starts.
+        if (model.isPreview) {
+            value = model.startedAtMs
+            return@produceState
+        }
         while (true) {
             value = System.currentTimeMillis()
             delay(if (model.restEndAtMs > 0L) 50L else 500L)
@@ -259,7 +264,8 @@ fun ActiveWorkoutScreen(
 @Composable
 private fun TopBar(model: WorkoutUiModel, now: Long, actions: WorkoutActions) {
     val pausedNow = if (model.paused && model.pausedSinceMs > 0L) now - model.pausedSinceMs else 0L
-    val elapsed = ((now - model.startedAtMs - model.totalPausedMs - pausedNow) / 1000L).coerceAtLeast(0L)
+    val elapsed = if (model.isPreview) 0L else
+        ((now - model.startedAtMs - model.totalPausedMs - pausedNow) / 1000L).coerceAtLeast(0L)
     Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(44.dp).clickable { actions.onBack() }, contentAlignment = Alignment.Center) { KIcon(KIcon.Back, KColors.White, size = 26.dp) }
         Column(Modifier.weight(1f)) {
@@ -267,7 +273,7 @@ private fun TopBar(model: WorkoutUiModel, now: Long, actions: WorkoutActions) {
             PageDots(model.exercises.size, model.exerciseIndex, Modifier.padding(top = 5.dp))
         }
         // Long-press the clock to pause; the timer dims while paused.
-        val clockColor by animateColorAsState(if (model.paused) KColors.Muted else KColors.White, Motion.ui(), label = "clock")
+        val clockColor by animateColorAsState(if (model.isPreview || model.paused) KColors.Muted else KColors.White, Motion.ui(), label = "clock")
         Text(
             String.format("%02d:%02d", elapsed / 60, elapsed % 60),
             color = clockColor,
@@ -347,7 +353,8 @@ private fun ExercisePage(
                     SetRow(
                         set = set,
                         weighted = exercise.weighted,
-                        isCurrent = setIndex == exercise.currentSetIndex,
+                        isCurrent = if (model.restingSet != null) model.restingSet == (exerciseIndex to setIndex)
+                            else exerciseIndex == model.exerciseIndex && setIndex == exercise.currentSetIndex && !set.completed,
                         editingField = editing?.takeIf { it.setIndex == setIndex }?.field,
                         onLabel = { actions.onSetMenu(exerciseIndex, setIndex) },
                         onWeight = { onOpenEditor(EditTarget(exerciseIndex, setIndex, SetField.WEIGHT)) },
@@ -410,24 +417,21 @@ private fun SetRow(
     onCheck: () -> Unit,
     onMore: () -> Unit,
 ) {
-    val rowColor by animateColorAsState(
-        when {
-            set.completed -> KColors.AccentWash
-            isCurrent -> KColors.Selected
-            else -> KColors.Bg
-        },
-        Motion.ui(),
-        label = "row",
-    )
-    Row(
-        Modifier.fillMaxWidth().background(rowColor).height(46.dp).padding(vertical = 3.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Cell(set.label, Modifier.weight(SetWeights[0]), if (set.warmup) KColors.Accent else if (isCurrent) KColors.White else KColors.Muted, null, onLabel, sub = set.previous)
-        if (weighted) Cell(set.weightText, Modifier.weight(SetWeights[1]), KColors.White, editingField == SetField.WEIGHT, onWeight)
-        Cell(set.reps?.toString() ?: "—", Modifier.weight(SetWeights[2]), KColors.White, editingField == SetField.REPS, onReps)
-        CheckCell(set.completed, Modifier.weight(SetWeights[3]).padding(horizontal = 4.dp).height(40.dp).clickable { onCheck() })
-        Box(Modifier.weight(SetWeights[4]).clickable { onMore() }, contentAlignment = Alignment.Center) { KIcon(KIcon.Dots, KColors.Muted, size = 18.dp) }
+    Box(Modifier.fillMaxWidth().height(46.dp).background(KColors.Bg)) {
+        Row(
+            Modifier.fillMaxSize().padding(vertical = 3.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Cell(set.label, Modifier.weight(SetWeights[0]), if (isCurrent) KColors.Accent else KColors.Muted, null, onLabel, sub = set.previous)
+            if (weighted) Cell(set.weightText, Modifier.weight(SetWeights[1]), KColors.White, editingField == SetField.WEIGHT, onWeight)
+            Cell(set.reps?.toString() ?: "—", Modifier.weight(SetWeights[2]), KColors.White, editingField == SetField.REPS, onReps)
+            CheckCell(set.completed, Modifier.weight(SetWeights[3]).padding(horizontal = 4.dp).height(40.dp).clickable { onCheck() }, highlighted = isCurrent)
+            Box(Modifier.weight(SetWeights[4]).clickable { onMore() }, contentAlignment = Alignment.Center) { KIcon(KIcon.Dots, KColors.Muted, size = 18.dp) }
+        }
+        if (isCurrent) {
+            Box(Modifier.align(Alignment.CenterStart).width(2.dp).height(20.dp)
+                .clip(RoundedCornerShape(1.dp)).background(KColors.Accent))
+        }
     }
 }
 

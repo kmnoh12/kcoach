@@ -42,7 +42,7 @@ class SensorCaptureFormatTest {
         SensorCaptureFormat.write(output, records, sampleRateRequestedHz = 50.0)
         val document = SensorCaptureFormat.read(ByteArrayInputStream(output.toByteArray()))
 
-        assertEquals(1, document.formatVersion)
+        assertEquals(2, document.formatVersion)
         assertEquals(50.0, document.sampleRateRequestedHz)
         assertEquals(2, document.sampleCount)
         assertEquals(1_000_000_000L, document.startMonotonicNs)

@@ -9,10 +9,19 @@ object WearSync {
     const val PATH_CAPTURE_ASSET_V3 = "/kcoach/v3/capture/asset"
     const val PATH_CAPTURE_ASSET_EMULATOR = "/kcoach/emulator/capture/asset"
     const val PATH_PERSONAL_PROFILE = "/kcoach/personal-profile"
+    const val PATH_PATTERN_PROFILE = "/kcoach/pattern-profile"
+    const val PATH_PATTERN_PROFILE_ACK = "/kcoach/pattern-profile/ack"
     const val PATH_PERSONAL_PROFILE_DELETE = "/kcoach/personal-profile/delete"
     const val PATH_ACK_V3 = "/kcoach/v3/ack"
     const val PATH_COMMAND = "/kcoach/command"
     const val PATH_COMMAND_ACK = "/kcoach/command/ack"
+    const val PATH_MANUAL_SET = "/kcoach/manual-set"
+    const val PATH_MANUAL_ACK = "/kcoach/manual-set/ack"
+    const val PATH_WORKOUT_OFFER = "/kcoach/workout-offer"
+    const val PATH_WORKOUT_CONTROL = "/kcoach/workout-control"
+    const val PATH_WORKOUT_CONTROL_ACK = "/kcoach/workout-control/ack"
+    const val PATH_CLOCK_REQUEST = "/kcoach/clock/request"
+    const val PATH_CLOCK_REPLY = "/kcoach/clock/reply"
     const val PATH_SET_ACK = "/kcoach/set/ack"
     const val PATH_RECONNECT = "/kcoach/reconnect"
     const val PATH_PROBE_START = "/kcoach/probe/start"
@@ -63,6 +72,40 @@ object WearSync {
         while (f.size < 15) f.add(when (f.size) { 10, 12 -> "0"; else -> "" })
         f[13] = setId; f[14] = attemptId
         return f.joinToString("|")
+    }
+
+    fun withPatternShadow(payload: String, commandId: String): String {
+        if (commandId.isEmpty()) return payload
+        require(commandId.matches(Regex("[A-Za-z0-9._-]{1,100}")))
+        val fields = parse(payload).toMutableList()
+        require(fields.firstOrNull() == "2")
+        while (fields.size < 16) fields.add(when (fields.size) { 10, 12 -> "0"; else -> "" })
+        fields[15] = commandId
+        return fields.joinToString("|")
+    }
+
+    fun withPatternBinding(payload: String, key: PatternCompatibility): String {
+        val fields = parse(payload).toMutableList()
+        require(fields.firstOrNull() == "2")
+        while (fields.size < 17) fields.add(when (fields.size) { 10, 12 -> "0"; else -> "" })
+        fields[16] = PatternCompatibilityCodec.encode(key)
+        return fields.joinToString("|")
+    }
+
+    fun withPatternWearing(payload: String, wearing: PatternWearingContext): String {
+        val fields = parse(payload).toMutableList()
+        require(fields.firstOrNull() == "2")
+        while (fields.size < 18) fields.add(when (fields.size) { 10, 12 -> "0"; else -> "" })
+        fields[17] = wearing.encode()
+        return fields.joinToString("|")
+    }
+
+    fun withVerifiedPatternSelection(payload: String): String {
+        val fields = parse(payload).toMutableList()
+        require(fields.firstOrNull() == "2")
+        while (fields.size < 19) fields.add(when (fields.size) { 10, 12 -> "0"; else -> "" })
+        fields[18] = "VERIFIED_PATTERN"
+        return fields.joinToString("|")
     }
 
     fun hello(device: String): String = listOf("1", device, System.currentTimeMillis()).joinToString("|")

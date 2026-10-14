@@ -13,12 +13,16 @@ class AnalysisSignalQualityTest {
         }
     }
     private fun analyze(records: List<SensorCaptureRecord>, requestedHz: Double = 20.0) =
-        PhoneRepAnalyzer.analyze(SensorCaptureDocument(1, requestedHz, records), "pull_up", watchDetectedReps = 3).result
+        PhoneRepAnalyzer.analyze(SensorCaptureDocument(1, requestedHz, records), "lat_pull_down", watchDetectedReps = 3).result
     @Test fun aCleanRegularSignalStillConfirmsItsCompletedRepetitions() {
         val result = analyze(records())
         assertEquals(3, result.phoneReanalyzedReps)
         assertEquals(3, result.confirmedReps)
         assertEquals(1.0, result.signalQuality)
+        assertNull(result.relativeRom)
+        assertNull(result.wristMotionRange)
+        assertNull(result.wristMotionSpeed)
+        assertNull(result.averageAngularSpeed)
     }
     @Test fun aLongMissingIntervalCannotConfirmTheWholeSetDespiteClearRemainingReps() {
         val baseline = analyze(records())

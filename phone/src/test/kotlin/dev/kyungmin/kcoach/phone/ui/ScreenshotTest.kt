@@ -23,7 +23,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.runtime.CompositionLocalProvider
 import com.github.takahirom.roborazzi.captureRoboImage
 import dev.kyungmin.kcoach.phone.SetAnalysisUi
-import dev.kyungmin.kcoach.phone.repMetricRows
+import dev.kyungmin.kcoach.phone.resultMetricRows
+import dev.kyungmin.kcoach.phone.ANALYSIS_ESTIMATE_NOTE
 import dev.kyungmin.kcoach.phone.WorkoutData
 import dev.kyungmin.kcoach.phone.WorkoutRecord
 import org.junit.Rule
@@ -106,14 +107,14 @@ class ScreenshotTest {
         val context = androidx.compose.ui.platform.LocalContext.current
         val blank = { android.view.View(context) }
         val ui = CalibrationUi(
-            "랫 풀 다운", "개인 보정 적용 중", true, "기준 자세를 잡고 자연스럽게 5회 왕복해요", false,
-            CalibrationProfileUi("보정된 값", listOf("반복 길이" to "42cm", "평균 템포" to "2.4초"), "센서 기록은 이 폰에만 남아요"),
+            "랫 풀 다운", "최근 보정 저장됨 · 감지 5회", false, "기준 자세를 잡고 자연스럽게 5회 왕복해요", false,
+            CalibrationProfileUi("최근 보정", listOf("감지된 반복" to "5회", "보정 때 반복 시간" to "2.4초", "설정 용도" to "움직임·반복 시간 기준"), "다시 보정하면 이전 설정을 바꿔요. 평소 착용 위치와 속도로 보정해 주세요."),
             listOf(
                 CalibrationRowUi("a", "랫 풀 다운", "등", "보정 완료", true, blank),
                 CalibrationRowUi("b", "시티드 로우", "등", "보정 전", false, blank),
             ),
         )
-        CalibrationScreen(ui, { false }, { CalibrationButtonUi("보정 시작", true) }, CalibrationActions({}, {}, {}))
+        CalibrationScreen(ui, { false }, { CalibrationButtonUi("보정 시작", true) }, CalibrationActions({}, {}, {}, {}))
     }
 
     @Test
@@ -121,8 +122,8 @@ class ScreenshotTest {
         WorkoutResultScreen(
             ResultUi(
                 "등·이두", "68분 · 22세트 · 세션 12345678",
-                listOf(ResultSectionUi("랫 풀 다운 · 세트 1", listOf("워치 측정값" to "10회", "확정 반복수" to "10회"))),
-                "확정 반복수는 폰이 센서 기록을 다시 분석한 결과를 기준으로 해요.",
+                listOf(ResultSectionUi("랫 풀 다운 · 세트 1", SetAnalysisUi("lat_pull_down", "랫 풀 다운", 0, 10, 10, 10, 0.87).resultMetricRows())),
+                ANALYSIS_ESTIMATE_NOTE,
                 listOf("랫 풀 다운 · 최고 중량" to "60 → 62.5kg", "시티드 로우 · 최고 볼륨" to "2,400 → 2,640kg"),
             ),
             {}, {},
@@ -134,8 +135,8 @@ class ScreenshotTest {
         val analysis = SetAnalysisUi("external_rotation", "외회전", 0, 10, 0, null, 0.0)
         WorkoutResultScreen(
             ResultUi("어깨전문", "12분 · 2세트 · 세션 12345678",
-                listOf(ResultSectionUi("외회전 · 세트 1", analysis.repMetricRows())),
-                "확정 반복수는 폰이 센서 기록을 다시 분석한 결과를 기준으로 해요."),
+                listOf(ResultSectionUi("외회전 · 세트 1", analysis.resultMetricRows())),
+                ANALYSIS_ESTIMATE_NOTE),
             {}, {},
         )
     }
@@ -182,6 +183,7 @@ class ScreenshotTest {
         return WorkoutUiModel(
             "등·이두", false, false, now - 21 * 60_000L, 0L, 0L, 0, listOf(ex), false,
             if (resting) now - 20_000L else 0L, if (resting) now + 70_000L else 0L, 0L, "다음 랫 풀 다운 3세트",
+            restingSet = if (resting) 0 to 1 else null,
         )
     }
 

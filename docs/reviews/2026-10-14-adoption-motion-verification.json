@@ -1,0 +1,217 @@
+{
+  "schemaVersion": 1,
+  "createdAtUtc": "2026-10-14T06:15:48.273889+00:00",
+  "scope": "SOFTWARE_PATTERN_ADOPTION_ROLLBACK_BASIC_RESET_AND_OBSERVED_MOTION_EXPORT",
+  "tests": {
+    "core": {
+      "tests": 203,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "phone": {
+      "tests": 204,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "wear": {
+      "tests": 59,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "totalTests": 466,
+  "checkLog": "work/parallel-stage3-stage4-full-check.log",
+  "checkLogSha256": "82320b8c5127216ab33e31d3ad7415dae81907de899a19cf6007ad1c9b39d337",
+  "debugApkBuilds": {
+    "phone": {
+      "path": "phone/build/outputs/apk/debug/phone-debug.apk",
+      "sha256": "53b5f212f1a9c4745cdfdfa8b2658adbbd5589f68866d1fcd71af1d81e736d2c",
+      "installedOnPhysicalDeviceVerified": false
+    },
+    "wear": {
+      "path": "wear/build/outputs/apk/debug/wear-debug.apk",
+      "sha256": "343e04a876858301711f184fc8bbe33e2bc48f02d9a25b541426a89e88390358",
+      "installedOnPhysicalDeviceVerified": false
+    }
+  },
+  "lintDebug": {
+    "phone": {
+      "errors": 0,
+      "warnings": 148,
+      "reportSha256": "2b020c73d94672d745281f0f7b6a93bf0441a7babb9b2e1dfd33be0485968e5a"
+    },
+    "wear": {
+      "errors": 0,
+      "warnings": 34,
+      "reportSha256": "39f508f084d31cf14a8edb62ecc4a8138925e1b34a32f518c05dbb1d236674f6"
+    }
+  },
+  "verifiedTestCases": {
+    "dev.kyungmin.kcoach.core.CameraObservedMetricsTest": [
+      "torsoRelativeElbowPositionDoesNotMistakeWholeFrameTranslationForElbowSway()",
+      "optionalWorldConfidenceIsNotFabricatedWhileImageConfidenceRemainsMandatory()",
+      "outOfFrameOccludedMultiplePersonUnknownClockOrMissingBodyCannotCreateMetrics()",
+      "imageGeometryUsesPixelsForAspectRatioAndReportsOnlyObservedPlaneVariation()",
+      "previewMirroringNeverSwapsAnatomicalSidesAndBilateralNeedsExplicitReview()"
+    ],
+    "dev.kyungmin.kcoach.core.ReviewedMotionBaselineTest": [
+      "verifiedOriginalCyclesProduceMedianAndMadInRadiansAndCurrentRatioSurvivesEncoding()",
+      "missingEditedRawReviewedLabelsConditionsAndRuntimeAllRefuseBaseline()",
+      "zeroGyroMotionDoesNotFabricateAMovementPercentageAndLegacyMetricsStillDecode()"
+    ],
+    "dev.kyungmin.kcoach.core.ObservedMotionMetricsTest": [
+      "brokenCoverageOutOfCaptureAndOverlappingCyclesCannotProduceMetrics()",
+      "reviewedPauseLabelsAreExcludedFromMovingPhasesAndEccentricDepartureIsMapped()",
+      "unequalObservedPhasesAndTrueGyroUnitsSurviveDurableEncoding()",
+      "lateWristTravelChangeIsSeparateFromTempoAndDoesNotDivideByZero()",
+      "tempoUsesDurationsAndShowsMeasuredLateSlowdownWithoutInventingFatigue()",
+      "genericAnalyzerRetainsUnequalTurnaroundTimesWithoutAnatomicalPhaseClaims()"
+    ],
+    "dev.kyungmin.kcoach.core.PatternDtwEquivalenceTest": [
+      "removingCellAllocationsPreservesDistanceAndTurnaroundIncludingTiedPaths()"
+    ],
+    "dev.kyungmin.kcoach.core.ReviewedPatternTest": [
+      "countOnlyTruthAndActualZeroAreScoredWithoutInventingBoundaries()",
+      "aLearnedPatternCountsNewUnevenTempoCyclesAndDoesNotInventHalfDurationPhases()",
+      "previousActiveRuntimeIsComparedOnTheSameUnpaddedInputAndInvalidRawIsNotZero()",
+      "renamingTheSameOriginalDoesNotCreateAnotherIndependentValidationSet()",
+      "confirmedVideoCyclesTeachARecipePatternButAutomaticAgreementCannotTeachIt()",
+      "aFrozenCandidateRoundTripsWithItsSourcesAndRejectsUnknownSchemaOrTrailingBytes()",
+      "theWatchSnapshotKeepsTheCandidateIdentityWithoutShippingItsTrainingArchive()",
+      "theWatchCandidateUsesOnlyDeliveredSamplesAndReportsDelayedCompleteReturns()",
+      "trainingReplaysCannotPassAsIndependentValidationAndSmallNewSetsRemainPending()",
+      "phoneReanalysisUsesTheFrozenPersonalEngineAndObservedUnequalPhases()"
+    ],
+    "dev.kyungmin.kcoach.core.PatternNativeValidationTest": [
+      "renamedNativeOriginalCannotInflateIndependentEvidenceAndWrongRecipesAreRejected()",
+      "missingNativeEvidenceCannotBecomeAnApprovedProfile()",
+      "qualifyingObservedOutputsCanPassButEmulationOrMissingFeedbackCannot()",
+      "nativeCountOnlyAndZeroKeepCountsButCannotSupplyBoundaryOrLatencyEvidence()",
+      "nativeBaselineMustMatchTheObservedActiveSnapshotAndItsActualCausalCount()"
+    ],
+    "dev.kyungmin.kcoach.core.PatternRegressionTest": [
+      "aFrozenComparisonRejectsAWorsePatternButDoesNotPretendToBeIndependentAccuracyEvidence()"
+    ],
+    "dev.kyungmin.kcoach.phone.PatternTransferOutboxTest": [
+      "pendingTransfersSurviveRestartAndOnlyMatchingObservedUseAcknowledgesTheRequestedProfile",
+      "rollbackHistoryRequiresObservedUseAndSurvivesComparisonHistoryTrimming",
+      "disablingLeavesAnObservedBasicEngineTombstoneAcrossHistoryTrimming",
+      "activeTransitionConflictsNeedNewEvidenceAndDoNotReplaceComparisonTransfers"
+    ],
+    "dev.kyungmin.kcoach.phone.PatternBenchmarkStoreTest": [
+      "aFixedDatasetSurvivesRestartAndRejectsChangedOrMissingOriginalsAndLabels"
+    ],
+    "dev.kyungmin.kcoach.phone.PatternAdoptionControllerTest": [
+      "aFrozenCandidateWithoutOriginalsCannotChangeWatchSettings",
+      "aStagedRequestIsNotShownAsActiveUntilTheWatchObservesUse"
+    ],
+    "dev.kyungmin.kcoach.phone.ObservedMotionPresentationTest": [
+      "cameraPresentationRequiresObservedValuesAndMakesTheirPlaneAndUnitsExplicit",
+      "reviewedWristComparisonHasUnitsSampleCountAndNeverClaimsJointRange",
+      "mixedSignalExerciseDisplaysOnlyMeasuredGyroUnitsAndUnknownPauseStaysHidden",
+      "localResultMetricsSurviveStoreRestartAndOldTwentyFourFieldsStillRead"
+    ],
+    "dev.kyungmin.kcoach.phone.CalibrationEvidenceExportTest": [
+      "oneSelectedCaptureExportsOriginalsClocksAndExplicitZeroWithoutCredentialsOrUnselectedVideo"
+    ],
+    "dev.kyungmin.kcoach.wear.PatternActiveServiceTest": [
+      "normalWearingContextKeepsAnInitiallyAbsentProfileAcrossRestartAndUsesItOnlyInTheNextAttempt",
+      "thePrimaryCounterUsesTheBoundActiveSnapshotAndSavesThatSnapshotWithItsRawData",
+      "pairedCalibrationObservesTheCurrentPersonalBaselineFromTheFirstPreparationSample",
+      "disablingAcknowledgesActualBasicProcessingWithoutMarkingTheRemovedPatternAsUsed",
+      "aNewConfirmedWorkoutDoesNotSilentlyUseAnOldSelfLabeledCalibration",
+      "restartingDuringRestDoesNotApplyThePreviousExercisesBindingToTheNextExercise",
+      "aDifferentWearingSelectionCannotUseTheStoredActiveProfile"
+    ],
+    "dev.kyungmin.kcoach.wear.PatternProfileStoreTest": [
+      "anUnpersonalizedSetStaysUnpersonalizedUntilTheNextAttempt",
+      "activationAndRollbackWaitForNewSetsAndRestoreTheExactPreviousSnapshot",
+      "stagingSurvivesRestartAndCannotReplaceTheFrozenProfileMidSet",
+      "disablingWaitsForANewAttemptAndAnObservedBasicDetectorSample"
+    ]
+  },
+  "sourceSha256": {
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/CameraObservedMetrics.kt": "97386b150b0bbc63e41954c00d512c6d49b9802bc851ad3c93b32bd1095453bd",
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/ObservedMotionMetrics.kt": "432bb76b891d99647166039ec7745453e8ac86e36287b3cfa07039f4b87364b3",
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/PatternCompatibilityCodec.kt": "c73f9d0a68aae4f562da805ea9592a8229450dd2c43b29d48b3b94e86069ccb5",
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/PatternNativeValidation.kt": "1c0104a6c1260b3b3b6919c9286fb2cb60ad704d2e081cfbc7cf439bbe4804ad",
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/PatternProfileProtocol.kt": "37e34b32849169811651dbc013553415d066fe666e65bd3a642dedcf3125d580",
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/PatternRegressionValidation.kt": "695fc679e759833650727191f93d8af097a091d43495dbb3d34fb3eb48bc8903",
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/PatternRuntimeProfile.kt": "118b938e9fd0306909f4e0e600eb55e4a2557ef877e5707de2a577db65739f3f",
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/PatternTrialTrace.kt": "c1f58925d801e62e09361a87feb211f7a4dd84c5e53489eff07e97aca92c9348",
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/PatternWearingContext.kt": "f8777561dbd9c0d30de8c23c5b774d70e384fd9b5e93a6f31334751272651076",
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/PatternWindowMatcher.kt": "47a1c57e3fe356235f0a8c7bc554e71dd6e93529deab12f5c292a447621305b1",
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/PersonalCalibrationProfile.kt": "22697d3b6e34d22451763147555012a407791b047d2e00ed7bd209141e84f5b5",
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/PhoneRepAnalyzer.kt": "f82894274a3cc6684a23aae59bb2643b955e2036bf3179e5b4dc368b0f031051",
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/ReviewedMotionBaseline.kt": "9c7c65fda4366f53e221d397c4803eeb411a399d467961ad2ecb8403f70c46de",
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/ReviewedPattern.kt": "a12a797642cde6b97cbe5e2607c129f74b23971a0f2d741f1e48f43a782a7b12",
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/ReviewedPatternAnalyzer.kt": "c42ec9d97bf9902b000f9586d78a8570369dbd2f3160f7d2b7fcdffa6483343a",
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/ReviewedPatternCodec.kt": "08b5e9651ac578cb62c563db6bd53a8adc4b67c5a72c615179db31485d0361d5",
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/ReviewedPatternDetector.kt": "5443932c8f1a0609d641bc6617af5635775530948df88047beb47b47612f208a",
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/ReviewedPatternValidation.kt": "23ee5aa92ca972dc2d2edb41a920dbb41470c7105f9f979e82dc47b948c24a67",
+    "core/src/test/kotlin/dev/kyungmin/kcoach/core/CameraObservedMetricsTest.kt": "27f8028b9db881110a803431074c1dede035aad19d1284d4c28884b77b199965",
+    "core/src/test/kotlin/dev/kyungmin/kcoach/core/ObservedMotionMetricsTest.kt": "2557307ed8b9f8eaa8fcae76441cfa077c45c0bf68f0927869c98857020b0945",
+    "core/src/test/kotlin/dev/kyungmin/kcoach/core/PatternDtwEquivalenceTest.kt": "6c96da36e890baddd294186cd659edce11c1b36d86c3f65c3a1e53b7e19592f6",
+    "core/src/test/kotlin/dev/kyungmin/kcoach/core/PatternNativeValidationTest.kt": "8b87eaa295c9bd8fa4cf644f1d9f1701bf54c89fb02d25570effd38801e7f359",
+    "core/src/test/kotlin/dev/kyungmin/kcoach/core/PatternProfileProtocolTest.kt": "faca338cefa89e6b0bc6393d7ae6889482cc0d3e69632921ac29191b80d22366",
+    "core/src/test/kotlin/dev/kyungmin/kcoach/core/PatternRegressionTest.kt": "54dcdbd43b8e92ac2b9ad78734b26771809d0b75f0e1ce70aa2ead4a401ec863",
+    "core/src/test/kotlin/dev/kyungmin/kcoach/core/PatternTrialTraceTest.kt": "7b01ff5ea07a1b4fdff5fd4df6e4031431ea7e3da5d236756b61f817453130d6",
+    "core/src/test/kotlin/dev/kyungmin/kcoach/core/PersonalCalibrationProfileTest.kt": "d654c0590ff7163d7fb77b4a256f4bb7019bc7fe59bf8d4288f832f72d0afffd",
+    "core/src/test/kotlin/dev/kyungmin/kcoach/core/PhoneRepAnalyzerTest.kt": "c6bf6847e3b847a41c660d7f6165445b4db3a58e903bae6509d8c16a13a66244",
+    "core/src/test/kotlin/dev/kyungmin/kcoach/core/ReviewedMotionBaselineTest.kt": "466687304ca246ca86d187789ae64cdf684fb1605a738cc070089574b61f5c9f",
+    "core/src/test/kotlin/dev/kyungmin/kcoach/core/ReviewedPatternTest.kt": "56bce4a1eb66d6f3be00e7ebf9595be6f353b6afe306d9a1bcb2790d82195df5",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/CalibrationCameraActivity.kt": "19777e5b19bd54920803aa04d0415f679216360e340350588293a9eedb83ba42",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/CalibrationCaptureStore.kt": "47a50f17d0f37b86308a1e35bc5f4d4fad726ae46cec6dcd589dafa22b6812d6",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/CalibrationEvidenceExport.kt": "caf27a86da9909c7f0eb9a8cb48f80dc8542a0b55dbb11ebd1bd17e661780b6c",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/CalibrationReviewActivity.kt": "eb4ecd608ac9145162a986b5367f67fcf256f3725f492005c1b5f5e8052c4081",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/CalibrationReviewStore.kt": "da6d288b75f6b8d1893b3be126e9885be5e89fb90c68f4498a3f024ed7b24e4a",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/CameraObservedPresentation.kt": "8dd6dcd0a92ef1db737883059e800d40d1cdb8851c2a9056caa926a4b84ac3d8",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/PatternAdoptionController.kt": "059a7e9cbf10bc0102cc8c8e493e6bf6705a2b5b16cc7a7d06d40eb2e0274585",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/PatternBenchmarkStore.kt": "32c1650493b32cac302109c07dcc4aa631e1ed0259dec81d76f575a02b5d8df5",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/PatternCandidateStore.kt": "2eb141ce8fc8ef174fd40902fd287afb08e0cedc1bd77d1e453cbdeafdd9057b",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/PatternCandidatesActivity.kt": "128f9522aea0463d1ccf0785f6a748551eee0e7ec7f437a2569c16d0cf3515bc",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/PatternTransferOutbox.kt": "6081a61b4db590ab09ae58af6ad401df61269880fd26bfe678f4a57bc8f4cdbf",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/PhoneWearListenerService.kt": "cf3c41a57e27156fc832a33732e58aef4c4d2a99e7024e6c3b8c7d9d46f86872",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/ReviewedMotionBaselineStore.kt": "8f0bc05c954a07921d232f782b469468ff03b025e6f4b5aeffe899130b871d58",
+    "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/SetAnalysisStore.kt": "4fe4c7834f6aafdc5cdae6d10a1f609671f3b741ebd0b8043a318f582432bdb1",
+    "phone/src/test/kotlin/dev/kyungmin/kcoach/phone/CalibrationCaptureStoreTest.kt": "a1eedec780ba4fc053e32a72435df069be0d8c57481ee510266726499ab85556",
+    "phone/src/test/kotlin/dev/kyungmin/kcoach/phone/CalibrationEvidenceExportTest.kt": "f885ad76e145ba65c88e439d3acd63342ced8c0ba58c3db93fe7ec47671ac596",
+    "phone/src/test/kotlin/dev/kyungmin/kcoach/phone/CalibrationReviewStoreTest.kt": "73b75297d9531c5c6acaa6379486b83314e47b3cf2e2e10ab3ca080a9838590b",
+    "phone/src/test/kotlin/dev/kyungmin/kcoach/phone/ObservedMotionPresentationTest.kt": "f3a605e632db7cd375eef48fa4c25a11a8eefff5f56a73fc8f695d44dd76ac6a",
+    "phone/src/test/kotlin/dev/kyungmin/kcoach/phone/PatternAdoptionControllerTest.kt": "70db15b77649f095b421febe55a97943a28065af16cbb8fe7b8b70ea9e7875e0",
+    "phone/src/test/kotlin/dev/kyungmin/kcoach/phone/PatternBenchmarkStoreTest.kt": "5d5558199830e3eab87904e623019671d48ba7337f290031cba8f99b7ab255f8",
+    "phone/src/test/kotlin/dev/kyungmin/kcoach/phone/PatternCandidateStoreTest.kt": "8df616f0e550513a43f23461afce7610cf54939df7e08337ae98580be1ef4d7e",
+    "phone/src/test/kotlin/dev/kyungmin/kcoach/phone/PatternTransferOutboxTest.kt": "4b455dd67021935434a77a1558083cdc7a90ea6965676830b07a3f65117d9aa8",
+    "wear/src/main/kotlin/dev/kyungmin/kcoach/wear/PatternProfileStore.kt": "990ae62b65f15147a6ba5d6fe66b56bf746ba08c48902f5f61b7ca4e7cce19d4",
+    "wear/src/main/kotlin/dev/kyungmin/kcoach/wear/WearWorkoutService.kt": "37f0101886c8b9d247cdb8f32d31f46ec0e3f5effd92b0888f091a078c3ebc6b",
+    "wear/src/test/kotlin/dev/kyungmin/kcoach/wear/PatternActiveServiceTest.kt": "12af6f6c52124c30c9163430dbf69dbb4006639118e92d459a315584e529e7ab",
+    "wear/src/test/kotlin/dev/kyungmin/kcoach/wear/PatternProfileListenerTest.kt": "8e341997d11536276d232d3749b347786a61611efd9ad82cd888a774f3347027",
+    "wear/src/test/kotlin/dev/kyungmin/kcoach/wear/PatternProfileStoreTest.kt": "1524859a8b728ca7aa062cddfcbee716d71d1511d89ba0255c1d32b9bea73aa2",
+    "wear/src/test/kotlin/dev/kyungmin/kcoach/wear/PatternShadowServiceTest.kt": "6b0da52bf9ab763c0ed06162740a85705e6e33d60d6937ee372da8005fef4d17"
+  },
+  "baseCommit": "ccf2b7327e7d7c370b00bb432eb99e0bc3d9e993",
+  "worktreeChangesUncommitted": true,
+  "adoptionControllerConnected": true,
+  "activationAndRollbackUiConnected": true,
+  "basicEngineResetConnected": true,
+  "observedPhaseAndWristMetricsConnected": true,
+  "reviewedPersonalWristBaselineConnected": true,
+  "reviewedCameraMetricsConnected": true,
+  "selectedCaptureEvidenceExportConnected": true,
+  "actualWatch8ValidationMaterialAvailable": false,
+  "hardwareVerified": false,
+  "accuracyImprovementVerified": false,
+  "aiModelExecutionVerified": false,
+  "watchIndependentManualStartConnected": false,
+  "released": false,
+  "limits": [
+    "Tests use synthetic signals and simulated Android services; they do not prove Watch8 accuracy or sensor latency.",
+    "Camera values are estimates and image-plane observations, not a validated posture or joint ROM score.",
+    "Actual camera graph, MP4 codec, storage picker, installed APK identity and Bluetooth acceptance remain unverified.",
+    "The older-model-blocked-during-new-capture review finding was withdrawn: new captures use paired- rather than legacy calibration-.",
+    "All-stage completion and GitHub release remain outstanding."
+  ]
+}

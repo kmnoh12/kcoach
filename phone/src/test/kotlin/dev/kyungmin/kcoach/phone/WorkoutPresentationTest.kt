@@ -106,4 +106,57 @@ class WorkoutPresentationTest {
             assertEquals("next-attempt", fields[14])
         } finally { activity.pause().stop().destroy() }
     }
+    @Test fun restingHighlightUsesCompletedSetIdentityInsteadOfNextExecutionCursor() {
+        val completed = plan().plannedSets.single().copy(completed = true, performedReps = 10)
+        val next = completed.copy(setIndex = 1, completed = false, performedReps = null,
+            setId = "next-set", attemptId = "next-attempt")
+        SessionStore(app).saveActive(plan().copy(setIndex = 1, phase = WorkoutPhase.RESTING,
+            restEndAtMs = System.currentTimeMillis() + 90_000,
+            plannedSets = listOf(completed, next),
+            lastCompletedSetKey = SetIdentity.completionKey(plan().sessionId, completed)))
+        val activity = Robolectric.buildActivity(MainActivity::class.java).create().start().resume()
+        try {
+            val instance = activity.get()
+            val workout = MainActivity::class.java.getDeclaredField("activeWorkout").apply { isAccessible = true }.get(instance)!!
+            val build = MainActivity::class.java.getDeclaredMethod("buildWorkoutModel", workout.javaClass).apply { isAccessible = true }
+            val resting = build.invoke(instance, workout) as dev.kyungmin.kcoach.phone.ui.WorkoutUiModel
+            assertEquals(1, resting.exercises.single().currentSetIndex)
+            assertEquals(0 to 0, resting.restingSet)
+            MainActivity::class.java.getDeclaredField("activeRestEndAtMs").apply { isAccessible = true }.setLong(instance, 0L)
+            val working = build.invoke(instance, workout) as dev.kyungmin.kcoach.phone.ui.WorkoutUiModel
+            assertNull(working.restingSet)
+            assertEquals(1, working.exercises.single().currentSetIndex)
+        } finally { activity.pause().stop().destroy() }
+    }
+
+    @Test fun calibrationCannotReplaceAnActiveWorkoutCommand() {
+        SessionStore(app).saveActive(plan())
+        val activity = Robolectric.buildActivity(MainActivity::class.java).create().start().resume()
+        try {
+            val before = PhoneCommandOutbox(app).pending()
+            MainActivity::class.java.getDeclaredMethod("startOrStopCalibration").apply { isAccessible = true }.invoke(activity.get())
+            assertNull(MainActivity::class.java.getDeclaredField("calibrationSessionId").apply { isAccessible = true }.get(activity.get()))
+            assertEquals(before, PhoneCommandOutbox(app).pending())
+            assertEquals(plan().sessionId, SessionStore(app).loadActive().getOrThrow()!!.sessionId)
+        } finally { activity.pause().stop().destroy() }
+    }
+
+    @Test fun sensorViewRemainsReachableWhenNoWorkoutIsRunning() {
+        val activity = Robolectric.buildActivity(MainActivity::class.java).create().start().resume()
+        try {
+            MainActivity::class.java.getDeclaredMethod("showSensorView").apply { isAccessible = true }.invoke(activity.get())
+            assertEquals(ProbeActivity::class.java.name,
+                org.robolectric.Shadows.shadowOf(activity.get()).nextStartedActivity.component!!.className)
+        } finally { activity.pause().stop().destroy() }
+    }
+
+    @Test fun sensorViewCannotCompeteWithAnActiveWorkout() {
+        SessionStore(app).saveActive(plan())
+        val activity = Robolectric.buildActivity(MainActivity::class.java).create().start().resume()
+        try {
+            MainActivity::class.java.getDeclaredMethod("showSensorView").apply { isAccessible = true }.invoke(activity.get())
+            assertNull(org.robolectric.Shadows.shadowOf(activity.get()).nextStartedActivity)
+        } finally { activity.pause().stop().destroy() }
+    }
+
 }

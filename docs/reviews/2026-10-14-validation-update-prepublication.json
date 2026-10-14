@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "createdAtUtc": "2026-10-14T07:42:22.517313+00:00",
+  "scope": "VALIDATION_UPDATE_LOCAL_PREPUBLICATION_CHECK",
+  "userApproval": "기존 앱 업데이트로 먼저 배포",
+  "releaseTag": "p0.7.4-w0.2.5",
+  "artifacts": {
+    "phone": {
+      "path": "phone/build/outputs/apk/ota/phone-ota.apk",
+      "bytes": 59947200,
+      "sha256": "b9813e31f90d59321fe21178fa30fcff9ed63022116d598b252e4f74f8fadab5",
+      "certificateSha256": "45130eab69678aeee288c565de466912b97dab48c317cbcf0983430a22c1da2c",
+      "matchesPreviousPublishedCertificate": true,
+      "packageBadging": "package: name='dev.kyungmin.kcoach' versionCode='34' versionName='0.7.4' platformBuildVersionName='15' platformBuildVersionCode='35' compileSdkVersion='35' compileSdkVersionCodename='15'",
+      "signatureVerified": true
+    },
+    "watch": {
+      "path": "wear/build/outputs/apk/ota/wear-ota.apk",
+      "bytes": 818372,
+      "sha256": "e456c139ab1e95b0edffe09add754fb3df0757d806577b8351df744db2526364",
+      "certificateSha256": "45130eab69678aeee288c565de466912b97dab48c317cbcf0983430a22c1da2c",
+      "matchesPreviousPublishedCertificate": true,
+      "packageBadging": "package: name='dev.kyungmin.kcoach' versionCode='33' versionName='0.2.5' platformBuildVersionName='15' platformBuildVersionCode='35' compileSdkVersion='35' compileSdkVersionCodename='15'",
+      "signatureVerified": true
+    }
+  },
+  "tests": {
+    "core": {
+      "tests": 203,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "phone": {
+      "tests": 220,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "wear": {
+      "tests": 63,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "lint": {
+    "phone": {
+      "Error": 0,
+      "Fatal": 0,
+      "Warning": 150
+    },
+    "wear": {
+      "Error": 0,
+      "Fatal": 0,
+      "Warning": 37
+    }
+  },
+  "logs": {
+    "work/validation-update-full-check.log": {
+      "sha256": "5068a462e766f55f18c0fe9cb51c75ee2ea76c0b8633b65e759779df0f67f471"
+    },
+    "work/validation-update-phone-final.log": {
+      "sha256": "ab8868dbeb886eec28df34ebc05fb6a8eac2f3761cd186e044d42d9232c7edc1"
+    },
+    "work/validation-update-ota-build.log": {
+      "sha256": "cb2a7dc015ab14e8ea21b5170243eca210c8a42b134efb4a6212a226f313c317"
+    }
+  },
+  "published": false,
+  "installedVerified": false,
+  "watch8AccuracyImprovementVerified": false,
+  "cameraHardwareVerified": false,
+  "aiAccountInferenceVerified": false,
+  "entireGoalComplete": false,
+  "bundledPoseModel": {
+    "sha256": "59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a",
+    "matchesSource": true,
+    "uncompressed": true
+  },
+  "pythonExportInspectionTests": {
+    "tests": 4,
+    "failures": 0,
+    "errors": 0
+  },
+  "limits": [
+    "Existing published certificates match local APKs; an installed device has not been inspected.",
+    "Robolectric and source review do not prove physical screen retention, Bluetooth, camera timing or Watch8 accuracy.",
+    "AI runner/context storage are foundation code; profile editor, chat UI, automatic reviews and GPT calibration worker remain unconnected."
+  ]
+}

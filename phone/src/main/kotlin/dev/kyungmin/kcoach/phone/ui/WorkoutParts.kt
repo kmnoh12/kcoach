@@ -77,9 +77,10 @@ fun FlipText(
 
 /** Completion box: border/fill fade and a check that draws itself in. */
 @Composable
-fun CheckCell(checked: Boolean, modifier: Modifier = Modifier) {
+fun CheckCell(checked: Boolean, modifier: Modifier = Modifier, highlighted: Boolean = true) {
     val progress by animateFloatAsState(if (checked) 1f else 0f, tween(260, easing = Motion.UiEasing), label = "check")
-    val border by animateColorAsState(if (checked) KColors.Accent else Color.Transparent, Motion.ui(), label = "checkBorder")
+    val border by animateColorAsState(if (checked && highlighted) KColors.Accent else Color.Transparent, Motion.ui(), label = "checkBorder")
+    val checkColor by animateColorAsState(if (highlighted) KColors.Accent else KColors.Soft, Motion.ui(), label = "checkColor")
     Box(
         modifier
             .clip(KShape.Control)
@@ -102,7 +103,7 @@ fun CheckCell(checked: Boolean, modifier: Modifier = Modifier) {
                     lineTo(p2.x + (p3.x - p2.x) * b, p2.y + (p3.y - p2.y) * b)
                 }
             }
-            drawPath(path, KColors.Accent, style = Stroke(width = 2.6.dp.toPx(), cap = StrokeCap.Round))
+            drawPath(path, checkColor, style = Stroke(width = 2.6.dp.toPx(), cap = StrokeCap.Round))
         }
     }
 }

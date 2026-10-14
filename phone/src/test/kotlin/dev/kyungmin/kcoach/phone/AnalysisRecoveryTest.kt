@@ -64,6 +64,37 @@ class AnalysisRecoveryTest {
         val analyses=restored.javaClass.getDeclaredField("analyses").apply{isAccessible=true}.get(restored) as Map<*,*>
         assertEquals(1, analyses.size)
     }
+    @Test fun capturedGenericProfileIsNotReplacedByALaterPersonalCalibration() {
+        val later = PersonalCalibrationProfile("later-profile", 1, "external_rotation", "standard", "LEFT",
+            "WRIST_BONE", "Galaxy Watch8", 1, 1, 0.1, 0.1, 0.8, 1.2, 1.0, 1500, 0.0, 5, 999)
+        app.getSharedPreferences("wear-sync", Context.MODE_PRIVATE).edit()
+            .putString("personalProfile:external_rotation", PersonalCalibrationProfileCodec.encode(later)).commit()
+        val generic = ExerciseTrackingProfiles.resolve("external_rotation", "외회전")
+        val original = fixture().first
+        val captured = original.copy(payload = original.payload + mapOf(
+            "trackingProfileId" to generic.id,
+            "personalProfile" to "",
+        ))
+        val result = analyze(captured)
+        assertEquals("Reanalysis must use the profile used when the set was captured", generic.id, result.trackingProfileId)
+    }
+
+    @Test fun capturedPersonalSettingsRemainStableAfterRecalibration() {
+        val old = PersonalCalibrationProfile("old-profile", 1, "external_rotation", "standard", "LEFT",
+            "WRIST_BONE", "Galaxy Watch8", 1, 1, 0.1, 0.1, 0.8, 1.2, 1.0, 1500, 0.0, 5, 111)
+        val later = old.copy(profileId = "later-profile", medianRepDurationMs = 7000, createdAtMs = 999)
+        app.getSharedPreferences("wear-sync", Context.MODE_PRIVATE).edit()
+            .putString("personalProfile:external_rotation", PersonalCalibrationProfileCodec.encode(later)).commit()
+        val capturedProfile = PersonalCalibrationBuilder.personalizedTrackingProfile(old,
+            ExerciseTrackingProfiles.resolve("external_rotation", "외회전"))
+        val original = fixture().first
+        val captured = original.copy(payload = original.payload + mapOf(
+            WirePayloadKeys.TRACKING_PROFILE_ID to capturedProfile.id,
+            WirePayloadKeys.TRACKING_PROFILE_SNAPSHOT to TrackingProfileSnapshot.encode(capturedProfile),
+        ))
+        assertEquals(capturedProfile.id, analyze(captured).trackingProfileId)
+    }
+
     private fun analyze(manifest: WireEnvelope = fixture().first): SetAnalysisUi {
         val received = CaptureInbox(app, app.getSharedPreferences("wear-sync", Context.MODE_PRIVATE))
             .receive(manifest, fixture().second).getOrThrow()
@@ -144,13 +175,26 @@ class AnalysisRecoveryTest {
 
     @Test fun countRowsDistinguishUnknownZeroAndManualEntry() {
         val unknown = SetAnalysisUi("external_rotation", "외회전", 0, null, 0, null, 0.0)
-        assertEquals(listOf("미측정", "0회", "확정 불가"), unknown.repMetricRows().map { it.second })
+        assertEquals(listOf("미측정", "0회", "확인 필요"), unknown.repMetricRows().map { it.second })
         assertEquals("수동 입력 필요", unknown.copy(trackingMode = "MANUAL_REQUIRED").repMetricRows().last().second)
     }
 
+    @Test fun legacyRangeAndHeuristicScoreCannotAppearAsAccuracyOrJointRange() {
+        val legacy = SetAnalysisUi("external_rotation", "외회전", 0, 10, 9, 9, 0.87,
+            wristMotionRange = 1.0, relativeRom = 0.8)
+        val rows = legacy.resultMetricRows()
+        assertTrue(rows.contains("분석 점수" to "87/100"))
+        assertTrue(rows.contains("자동 추정 횟수" to "9회"))
+        assertFalse(rows.any { it.first.contains("범위") || it.first.contains("신뢰도") || it.first.contains("확정") })
+        assertFalse(legacy.copy(trackingMode = "MANUAL_REQUIRED").resultMetricRows().any { it.first == "분석 점수" })
+        val mixed = legacy.copy(exerciseId = "lat_pull_down", exerciseName = "랫 풀 다운", wristMotionSpeed = 2.0)
+        assertFalse(mixed.resultMetricRows().any { it.first == "손목 관측 속도" })
+        assertTrue(ANALYSIS_ESTIMATE_NOTE.contains("정답 확률이 아니에요"))
+    }
+
     @Test fun lowQualityNativeAnalysisNeverReplacesTheAlreadySavedWatchCount() {
-        val saved = snapshot().copy(plannedSets = listOf(PlannedSetSnapshot(0, "pull_up", 0, 10, 5.0, true,
-            performedReps = 6, repSource = SetRepSource.WATCH)), performedReps = mapOf("pull_up" to 6))
+        val saved = snapshot().copy(plannedSets = listOf(PlannedSetSnapshot(0, "lat_pull_down", 0, 10, 5.0, true,
+            performedReps = 6, repSource = SetRepSource.WATCH)), performedReps = mapOf("lat_pull_down" to 6))
         SessionStore(app).saveActive(saved)
         val records = buildList {
             var t = 1_000_000L
@@ -160,9 +204,9 @@ class AnalysisRecoveryTest {
             } }
         }
         val bytes = ByteArrayOutputStream().also { SensorCaptureFormat.write(it, records, 50.0) }.toByteArray()
-        val manifest = WireMessages.captureManifest("audit", "pull_up", "set", "poor-quality", 1, "NONE", records.size,
+        val manifest = WireMessages.captureManifest("audit", "lat_pull_down", "set", "poor-quality", SensorCaptureFormat.FORMAT_VERSION, "NONE", records.size,
             50.0, 20.0, records.first().sample.timestampNs, records.last().sample.timestampNs, SensorCaptureFormat.sha256(bytes),
-            bytes.size.toLong(), watchDetectedReps = 6, exerciseId = "pull_up", exerciseName = "pull", setIndex = 0)
+            bytes.size.toLong(), watchDetectedReps = 6, exerciseId = "lat_pull_down", exerciseName = "랫 풀다운", setIndex = 0)
         val raw = CaptureInbox(app, app.getSharedPreferences("wear-sync", Context.MODE_PRIVATE)).receive(manifest, bytes).getOrThrow()
         val listener = Robolectric.buildService(PhoneWearListenerService::class.java).get()
         PhoneWearListenerService::class.java.getDeclaredMethod("analyzeAndPersistCapture", ReceivedCapture::class.java)

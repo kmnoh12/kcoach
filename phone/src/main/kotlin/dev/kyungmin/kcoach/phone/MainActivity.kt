@@ -346,7 +346,7 @@ class MainActivity : ComponentActivity() {
                 }
                 PhoneWearListenerService.ACTION_CALIBRATION_RAW_SAVED -> {
                     if (intent.getStringExtra("sessionId").orEmpty() == calibrationSessionId) {
-                        calibrationButtonOverride.value = CalibrationButtonUi("원본 저장 완료 · 개인 프로필 적용 중…", false)
+                        calibrationButtonOverride.value = CalibrationButtonUi("원본 저장 완료 · 보정 설정 만드는 중…", false)
                     }
                 }
                 PhoneWearListenerService.ACTION_CALIBRATION_RESULT -> {
@@ -358,7 +358,7 @@ class MainActivity : ComponentActivity() {
                     if (succeeded) {
                         Toast.makeText(
                             this@MainActivity,
-                            "보정 완료 · 유효 ${validReps}회 · 개인 프로필을 저장하고 실제 운동에 적용했어요",
+                            "보정 설정을 저장했어요 · 감지 ${validReps}회",
                             Toast.LENGTH_LONG,
                         ).show()
                     } else {
@@ -402,7 +402,7 @@ class MainActivity : ComponentActivity() {
                     lastWorkoutResult?.takeIf { it.sessionId == sessionId }?.analyses?.set(analysis.key, analysis)
                     lastWorkoutResult?.takeIf { it.sessionId == sessionId }?.let(::persistLastWorkoutResult)
                     wearLiveStatus?.takeIf { it.tag != WATCH_PANEL_TELEMETRY }?.apply {
-                        text = "세트 분석 완료 · 워치 ${measuredRepsText(analysis.watchReps, "미측정")} · 폰 ${measuredRepsText(analysis.phoneReps, "산출 불가")} · 확정 ${measuredRepsText(analysis.confirmedReps, "불가")}"
+                        text = "세트 분석 완료 · 자동 추정 ${measuredRepsText(analysis.confirmedReps, "확인 필요")} · 실제 횟수를 확인해 주세요"
                         setTextColor(green)
                     }
                     if (currentScreen == Screen.ROOT && lastWorkoutResult?.sessionId == sessionId) showWorkoutResult(lastWorkoutResult!!)
@@ -653,6 +653,7 @@ class MainActivity : ComponentActivity() {
         stopTicker()
         currentScreen = Screen.ROUTINE
         selectedRoutine = routine
+        if (active == null && activeWorkout == null) prepareRoutineForWatch(routine)
 
         val reload = { showRoutine(routine, reorderMode, active, onExit) }
         val rows = routine.exercises.mapIndexed { index, item ->
@@ -809,6 +810,7 @@ class MainActivity : ComponentActivity() {
                 analysis.setId,
                 analysis.attemptId,
                 analysis.captureId,
+                analysis.motionMetrics?.let(dev.kyungmin.kcoach.core.ObservedMotionMetricsCodec::encode) ?: "",
             ).joinToString(",", transform = encode)
         }
         getSharedPreferences("workout_results", MODE_PRIVATE).edit()
@@ -825,8 +827,8 @@ class MainActivity : ComponentActivity() {
             val analyses = mutableMapOf<String, SetAnalysisUi>()
             fields[4].takeIf { it.isNotBlank() }?.split(';')?.forEach { encoded ->
                 val values = encoded.split(',', limit = 40)
-                if (values.size == 7 || values.size == 15 || values.size == 18 || values.size == 19 || values.size == 21 || values.size == 22 || values.size == 24 || values.size >= 30) {
-                    val currentFormat = values.size == 18 || values.size == 19 || values.size == 21 || values.size == 22
+                if (values.size == 7 || values.size == 15 || values.size == 18 || values.size == 19 || values.size == 21 || values.size == 22 || values.size == 23 || values.size == 24 || values.size >= 30) {
+                    val currentFormat = values.size == 18 || values.size == 19 || values.size == 21 || values.size == 22 || values.size == 23
                     val legacyExpanded = values.size >= 30
                     val tempoIndex = when {
                         currentFormat -> 14
@@ -867,10 +869,11 @@ class MainActivity : ComponentActivity() {
                         signalQuality = values.getOrNull(signalIndex)?.let(decode)?.toDoubleOrNull(),
                         averageSpeed = values.getOrNull(speedIndex)?.let(decode)?.toDoubleOrNull(),
                         relativeRom = values.getOrNull(rangeIndex)?.let(decode)?.toDoubleOrNull(),
-                        lateDrift = if (values.size == 19 || values.size == 21 || values.size == 22) values[18].let(decode).toDoubleOrNull() else null,
-                        setId = if (values.size == 21 || values.size == 22) values[19].let(decode) else "",
-                        attemptId = if (values.size == 21 || values.size == 22) values[20].let(decode) else "",
-                        captureId = if (values.size == 22) values[21].let(decode) else "",
+                        lateDrift = if (values.size == 19 || values.size == 21 || values.size == 22 || values.size == 23) values[18].let(decode).toDoubleOrNull() else null,
+                        setId = if (values.size == 21 || values.size == 22 || values.size == 23) values[19].let(decode) else "",
+                        attemptId = if (values.size == 21 || values.size == 22 || values.size == 23) values[20].let(decode) else "",
+                        captureId = if (values.size == 22 || values.size == 23) values[21].let(decode) else "",
+                        motionMetrics = if (values.size == 23) values[22].let(decode).takeIf { it.isNotBlank() }?.let { runCatching { dev.kyungmin.kcoach.core.ObservedMotionMetricsCodec.decode(it) }.getOrNull() } else null,
                     )
                     analyses[analysis.key] = analysis
                 }
@@ -926,20 +929,10 @@ class MainActivity : ComponentActivity() {
         currentTab = RootTab.RECORDS
         currentScreen = Screen.ROOT
         val sections = if (result.analyses.isEmpty()) {
-            listOf(ResultSectionUi("분석 대기", listOf("센서 기록" to "워치에서 받는 중", "확정 반복수" to "센서 기록을 받으면 표시돼요")))
+            listOf(ResultSectionUi("분석 대기", listOf("센서 기록" to "워치에서 받는 중", "자동 추정 횟수" to "센서 기록을 받으면 표시돼요")))
         } else {
             result.analyses.values.sortedWith(compareBy<SetAnalysisUi> { it.exerciseName }.thenBy { it.setIndex }).map { analysis ->
-                val confidenceText = "%.0f%%".format(Locale.US, analysis.confidence * 100.0)
-                val metricRows = mutableListOf(
-                    "측정 방식" to "${analysis.capabilityTier} · ${analysis.trackingStatus.ifBlank { analysis.trackingMode }} · ${analysis.trackingProfileId}",
-                )
-                metricRows += analysis.repMetricRows()
-                metricRows += "분석 신뢰도" to confidenceText
-                (analysis.wristMotionSpeed ?: analysis.averageSpeed)?.let { metricRows += "손목 관측 속도" to "%.2f rad/s".format(Locale.US, it) }
-                (analysis.wristMotionRange ?: analysis.relativeRom)?.let { metricRows += "손목 관측 범위" to "%.0f%%".format(Locale.US, it * 100.0) }
-                analysis.tempoConsistency?.let { metricRows += "템포 일관성" to "$it/100" }
-                analysis.signalQuality?.let { metricRows += "신호 품질" to "%.0f%%".format(Locale.US, it * 100.0) }
-                ResultSectionUi("${analysis.exerciseName} · 세트 ${analysis.setIndex + 1}", metricRows)
+                ResultSectionUi("${analysis.exerciseName} · 세트 ${analysis.setIndex + 1}", analysis.resultMetricRows())
             }
         }
         val ui = ResultUi(
@@ -947,7 +940,7 @@ class MainActivity : ComponentActivity() {
             subtitle = "${result.durationMinutes}분 · ${result.completedSets}세트 · 세션 ${result.sessionId.takeLast(8)}",
             sections = sections,
             records = if (lastWorkoutResult?.sessionId == result.sessionId) lastWorkoutRecords else emptyList(),
-            footnote = "확정 반복수는 워치 표시값이 아니라 폰이 센서 기록을 다시 분석한 결과를 기준으로 해요.",
+            footnote = ANALYSIS_ESTIMATE_NOTE,
         )
         showStandalone(ComposeView(this).apply {
             setContent { WorkoutResultScreen(ui, back = { onBackPressed() }, toRecords = { showRecords() }) }
@@ -975,48 +968,12 @@ class MainActivity : ComponentActivity() {
             return
         }
 
-        if (
-            Build.FINGERPRINT.contains("generic", ignoreCase = true) ||
-            Build.MODEL.contains("Android SDK", ignoreCase = true) ||
-            Build.PRODUCT.startsWith("sdk", ignoreCase = true)
-        ) {
-            beginCalibrationSession()
+        if (activeWorkout != null || sessionStore.loadActive().getOrNull() != null) {
+            Toast.makeText(this, "진행 중인 운동을 종료한 뒤 함께 촬영해 주세요", Toast.LENGTH_LONG).show()
             return
         }
-        Wearable.getNodeClient(this).connectedNodes
-            .addOnSuccessListener { nodes ->
-                if (nodes.isEmpty()) {
-                    Toast.makeText(this, "연결된 Watch8을 찾지 못했어요", Toast.LENGTH_LONG).show()
-                    return@addOnSuccessListener
-                }
-                beginCalibrationSession()
-            }
-            .addOnFailureListener {
-                Toast.makeText(this, "워치 연결 상태를 확인하지 못했어요", Toast.LENGTH_LONG).show()
-            }
-    }
-
-    private fun beginCalibrationSession() {
-        val exercise = WorkoutData.catalog.firstOrNull { it.id == selectedCalibrationExerciseId } ?: return
-        val tracking = ExerciseTrackingProfiles.resolve(exercise.id, exercise.name)
-        if (tracking.mode == TrackingMode.MANUAL_REQUIRED) {
-            Toast.makeText(this, "이 운동은 손목 센서로 측정할 수 없어서 수동 기록만 지원해요", Toast.LENGTH_LONG).show()
-            return
-        }
-        val newSession = "calibration-${exercise.id}-${System.currentTimeMillis()}"
-        calibrationSessionId = newSession
-        cancelCalibrationSaveTimeout()
-        activeCalibrationExerciseId = exercise.id
-        calibrationStopRequested = false
-        calibrationButtonOverride.value = CalibrationButtonUi("보정 종료·저장", true)
-        sendWear(
-            WearSync.PATH_COMMAND,
-            WearSync.richCommand(
-                "START", newSession, exercise.id, exercise.name,
-                0, 5, null, 0,
-            ),
-        )
-        Toast.makeText(this, "시작 자세를 2초 유지한 뒤, 진동이 오면 평소 범위와 속도로 5회 해 주세요", Toast.LENGTH_LONG).show()
+        val selected = WorkoutData.catalog.firstOrNull { it.id == selectedCalibrationExerciseId } ?: return
+        startActivity(Intent(this, CalibrationCameraActivity::class.java).putExtra("exerciseId", selected.id).putExtra("exerciseName", selected.name))
     }
 
     private fun scheduleCalibrationSaveTimeout(sessionId: String) {
@@ -1052,44 +1009,33 @@ class MainActivity : ComponentActivity() {
             ?.let { runCatching { PersonalCalibrationProfileCodec.decode(it) }.getOrNull() }
         fun calibrationLabel(exerciseId: String): String {
             val profile = personalProfile(exerciseId)
-            if (profile != null) return "개인 프로필 보정 완료 · 유효 ${profile.validRepCount}회"
+            if (profile != null) return "최근 보정 저장됨 · 감지 ${profile.validRepCount}회"
             return when (calibrationPrefs.getString("calibration:$exerciseId:status", null)) {
                 "CALIBRATION_FAILED" -> "보정 실패 · 다시 수행 필요"
-                "RAW_SAVED" -> "원본 저장 완료 · 개인 프로필 적용 중"
+                "RAW_SAVED" -> "원본 저장 완료 · 보정 설정 만드는 중"
                 else -> "자동 인식 후보 · 프로필 미보정"
             }
         }
-        val instructions = if (selected.id == "external_rotation") {
-            "1. 왼손 워치를 손목뼈 위에 고정\n" +
-                "2. 팔꿈치를 몸 옆에 붙이고 90도 유지\n" +
-                "3. 손바닥이 앞쪽인 기준 자세로 2초\n" +
-                "4. 진동 후 평소 범위·속도로 바깥 회전·복귀 5회\n" +
-                "5. 5회째 즉시 폰 원본 저장과 개인 프로필 적용"
-        } else {
-            "워치를 평소 위치에 고정하고 기준 자세 2초\n" +
-                "→ 진동 후 ${selectedProfile.label}\n" +
-                "→ 평소 범위·속도로 왕복 5회\n" +
-                "→ 즉시 폰 저장과 개인 프로필 적용"
-        }
+        val instructions = "1. 운동과 워치를 착용한 손·화면 방향 선택\n" +
+            "2. 폰을 고정하고 팔·몸통이 보이게 촬영\n" +
+            "3. 평소 동작으로 6~8회부터 수행한 뒤 촬영 종료\n" +
+            "4. 영상과 워치 움직임의 시점·반복 구간 확인\n" +
+            "5. 확인 자료를 보관하고 별도 세트에서 개인 설정 검증"
         calibrationButtonOverride.value = null
         val profileUi = personalProfile(selected.id)?.let { profile ->
-            val applied = PersonalCalibrationBuilder.personalizedTrackingProfile(profile, selectedProfile)
-            val axis = listOf("X", "Y", "Z").getOrElse(profile.dominantAxis) { "?" }
             val created = SimpleDateFormat("yyyy.MM.dd HH:mm", Locale.KOREA).format(Date(profile.createdAtMs))
-            val naturalRange = Math.toDegrees(profile.minimumRom / 2.0).coerceAtLeast(0.0)
             CalibrationProfileUi(
-                "저장된 개인 프로필 · 실 운동 적용 중",
+                "이전 보정 설정",
                 listOf(
                     "저장 시각" to created,
-                    "유효 반복" to "${profile.validRepCount}회",
-                    "학습 회전 범위" to "편도 약 ${"%.0f".format(naturalRange)}° 이상",
-                    "학습 반복 시간" to "${"%.2f".format(profile.medianRepDurationMs / 1_000.0)}초",
-                    "주 회전축" to "$axis 축",
-                    "실 운동 허용 시간" to "${"%.2f".format(applied.minimumRepMs / 1_000.0)}–${"%.2f".format(applied.maximumRepMs / 1_000.0)}초",
-                    "적용 위치" to "워치 실시간 + 폰 재분석",
-                    "가중치" to "개인 80% + 일반 20%",
+                    "감지된 반복" to "${profile.validRepCount}회",
+                    "보정 때 반복 시간" to "${"%.2f".format(profile.medianRepDurationMs / 1_000.0)}초",
+                    "설정 용도" to if (selectedProfile.family == dev.kyungmin.kcoach.core.MotionFamily.FLEXION_EXTENSION)
+                        "반복 시간 기준" else "움직임·반복 시간 기준",
                 ),
-                "시작 자세 2초는 센서의 기준축과 흔들림 기준을 잡는 단계예요. 손목 센서만으로 팔꿈치나 몸 전체 자세까지 판단하진 않아요.",
+                if (selectedProfile.family == dev.kyungmin.kcoach.core.MotionFamily.FLEXION_EXTENSION)
+                    "이전 컬 설정은 반복 시간에만 반영돼요. 새 촬영은 확인·검증 전까지 이 설정을 바꾸지 않아요."
+                else "새 촬영 자료는 확인·검증 전까지 이전 설정을 바꾸지 않아요.",
             )
         }
         val ui = CalibrationUi(
@@ -1119,6 +1065,8 @@ class MainActivity : ComponentActivity() {
         val actions = CalibrationActions(
             toggle = ::startOrStopCalibration,
             deleteProfile = { confirmDeletePersonalProfile(selected.id, selected.name) },
+            openSensorView = ::showSensorView,
+            openCaptureReview = { startActivity(Intent(this, CalibrationReviewActivity::class.java)) },
             select = { id ->
                 selectedCalibrationExerciseId = id
                 showCalibration()
@@ -1132,7 +1080,7 @@ class MainActivity : ComponentActivity() {
                     button = {
                         calibrationButtonOverride.value ?: CalibrationButtonUi(
                             if (manualRequired) "이 운동은 수동 기록만 지원"
-                            else if (calibrationSessionId == null) "워치 연결 후 5회 보정 시작"
+                            else if (calibrationSessionId == null) "워치와 함께 영상 촬영"
                             else if (calibrationStopRequested) "보정 원본 저장 중…"
                             else "보정 종료·저장",
                             !calibrationStopRequested,
@@ -1142,6 +1090,14 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }, null, RootTab.CALIBRATION)
+    }
+
+    private fun showSensorView() {
+        if (calibrationSessionId != null || activeWorkout != null || sessionStore.loadActive().getOrNull() != null) {
+            Toast.makeText(this, "운동이나 보정을 종료한 뒤 센서 화면을 열어 주세요", Toast.LENGTH_LONG).show()
+            return
+        }
+        startActivity(Intent(this, ProbeActivity::class.java))
     }
 
     private fun confirmDeletePersonalProfile(exerciseId: String, exerciseName: String) {
@@ -1184,10 +1140,15 @@ class MainActivity : ComponentActivity() {
                 }
             },
             install = { updateManager.requestInstall() },
-            openProbe = { startActivity(Intent(this, ProbeActivity::class.java)) },
+            openCalibration = ::showCalibration,
+            openSettings = { startActivity(Intent(this, SettingsActivity::class.java)) },
         )
         showScaffold(ComposeView(this).apply {
-            setContent { MenuScreen(BuildConfig.VERSION_NAME, actions) }
+            setContent {
+                val wearing = if (activeWorkout != null) WorkoutWearingStore(this@MainActivity).selection(activeWorkout!!.sessionId).getOrNull()
+                    else WorkoutWearingStore(this@MainActivity).lastSelection().getOrNull()
+                MenuScreen(BuildConfig.VERSION_NAME, actions, wearing)
+            }
         }, null, RootTab.MENU)
     }
 
@@ -1197,7 +1158,16 @@ class MainActivity : ComponentActivity() {
         startSetIndex: Int = 0,
         onStarted: ((ActiveWorkout) -> Unit)? = null,
     ) {
-        fun start() {
+        if (calibrationSessionId != null) {
+            Toast.makeText(this, "보정을 종료한 뒤 운동을 시작해 주세요", Toast.LENGTH_LONG).show()
+            return
+        }
+        fun start(wearing: WorkoutWearingSelection?) {
+            if (sessionStore.loadActive().getOrNull() != null) {
+                activeWorkout = restoreActiveWorkout()
+                if (activeWorkout != null) showActiveWorkout()
+                return
+            }
             previewWorkout = null
             val safeExerciseIndex = startExerciseIndex.coerceIn(
                 0,
@@ -1208,15 +1178,23 @@ class MainActivity : ComponentActivity() {
                 routine.exercises.getOrNull(safeExerciseIndex)
                     ?.sets?.lastIndex?.coerceAtLeast(0) ?: 0,
             )
-            activeWorkout = ActiveWorkout(
+            val workout = ActiveWorkout(
                 routine = routine.copy(exercises = routine.exercises.map { item ->
                     item.copy(sets = item.sets.map { it.copy(completed = false, performedReps = null, repSource = null, setId = java.util.UUID.randomUUID().toString(), attemptId = java.util.UUID.randomUUID().toString(), identityRequired = true) }.toMutableList())
                 }.toMutableList()),
                 exerciseIndex = safeExerciseIndex,
                 setIndex = safeSetIndex,
             )
-            val workout = activeWorkout ?: return
-            if (!persistActiveWorkout(workout)) return
+            WorkoutWearingStore(this).beginSession(workout.sessionId, wearing).onFailure {
+                Toast.makeText(this, "착용 상태를 저장하지 못했어요. 다시 시작해 주세요.", Toast.LENGTH_LONG).show()
+                return
+            }
+            activeWorkout = workout
+            if (!persistActiveWorkout(workout)) {
+                activeWorkout = restoreActiveWorkout()
+                if (activeWorkout != null) showActiveWorkout()
+                return
+            }
             val first = workout.routine.exercises.getOrNull(safeExerciseIndex)
             if (first != null) {
                 val startPayload = PhoneSessionController.command(workoutSnapshot(workout), "START")
@@ -1236,16 +1214,23 @@ class MainActivity : ComponentActivity() {
             if (onStarted != null) onStarted(workout) else showActiveWorkout()
         }
         showSheet { dismiss ->
-            BigChoiceSheet(
-                eyebrow = "▶", eyebrowColor = KColors.Accent,
-                title = "운동 시작",
-                body = "운동을 시작할까요?\n\n워치가 연결돼 있으면 세트와 심박수가 함께 기록돼요.",
-                bodyColor = KColors.White,
-                cancel = "취소", confirm = "시작",
-                dismiss = dismiss, onCancel = {}, onConfirm = ::start,
-                filledButtons = false,
-            )
+            dev.kyungmin.kcoach.phone.ui.WorkoutWearingStartSheet(
+                previous = WorkoutWearingStore(this).lastSelection().getOrNull(), cancel = dismiss,
+                start = { selection -> dismiss(); start(selection) }, startBasic = { dismiss(); start(null) })
         }
+    }
+
+    private fun prepareRoutineForWatch(routine: WorkoutRoutine) {
+        if (calibrationSessionId != null || routine.exercises.none { it.sets.isNotEmpty() }) return
+        val prepared = ActiveWorkout(routine = routine.copy(exercises = routine.exercises.map { item ->
+            item.copy(sets = item.sets.map { it.copy(completed = false, performedReps = null, repSource = null,
+                setId = java.util.UUID.randomUUID().toString(), attemptId = java.util.UUID.randomUUID().toString(),
+                identityRequired = true) }.toMutableList())
+        }.toMutableList()))
+        val plan = workoutSnapshot(prepared).copy(startedAtMs = 0, restEndAtMs = 0, pausedRestRemainingMs = 0)
+        sessionStore.prepareForWatch(plan, System.currentTimeMillis())
+            .onSuccess { sendWear(WearSync.PATH_WORKOUT_OFFER, it.encode()) }
+            .onFailure { Log.w(EVENT_TAG, "watch routine offer not prepared", it) }
     }
 
     private fun adjustRestDuration(
@@ -1367,6 +1352,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun refreshActiveSession() {
+        if (activeWorkout == null) {
+            activeWorkout = restoreActiveWorkout() ?: return
+            previewWorkout = null
+            if (currentScreen in setOf(Screen.ACTIVE, Screen.REST, Screen.ROUTINE)) showActiveWorkout(forceRebuild = true)
+            else if (currentScreen == Screen.ROOT && currentTab == RootTab.HOME) showHome()
+        }
         val workout = activeWorkout ?: return
         val snapshot = sessionStore.loadActive().getOrElse {
             Log.e(EVENT_TAG, "active session refresh failed", it)
@@ -1533,6 +1524,14 @@ class MainActivity : ComponentActivity() {
             restEndAtMs = activeRestEndAtMs,
             pausedRestRemainingMs = pausedRestRemainingMs,
             nextSetText = nextText,
+            restingSet = if (activeWorkout === workout && (activeRestEndAtMs > 0L || pausedRestRemainingMs > 0L)) {
+                workout.routine.exercises.flatMapIndexed { exerciseIndex, exercise ->
+                    exercise.sets.mapIndexedNotNull { setIndex, set ->
+                        val key = "${workout.sessionId}:${SetIdentity.key(exercise.exercise.id, setIndex, set.setId, set.attemptId)}"
+                        if (set.completed && key == workout.lastCompletedSetKey) exerciseIndex to setIndex else null
+                    }
+                }.singleOrNull()
+            } else null,
             exercises = workout.routine.exercises.mapIndexed { exerciseIndex, routineExercise ->
                 val currentSet = if (exerciseIndex == workout.exerciseIndex) workout.setIndex
                 else workout.setIndexByExercise[workoutExerciseKey(routineExercise)]
@@ -1621,7 +1620,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                     SetField.REPS -> {
-                        val reps = value.toIntOrNull()?.coerceAtLeast(0) ?: 0
+                        val reps = value.toIntOrNull()?.takeIf { it in 0..9_999 } ?: return@forEach
                         if (set.completed) {
                             set.performedReps = reps
                             set.repSource = SetRepSource.MANUAL
@@ -1652,11 +1651,11 @@ class MainActivity : ComponentActivity() {
                         val startedExercise = startedWorkout.routine.exercises
                             .getOrNull(startedWorkout.exerciseIndex) ?: return@showStartGuide
                         val startedSet = startedExercise.sets.getOrNull(setIndex) ?: return@showStartGuide
-                        completeWorkoutSet(startedWorkout, startedExercise, setIndex, startedSet)
+                        requestSetCompletion(startedWorkout, startedExercise, setIndex, startedSet)
                     }
                     return
                 }
-                completeWorkoutSet(workout, routineExercise, setIndex, plannedSet)
+                requestSetCompletion(workout, routineExercise, setIndex, plannedSet)
             } else {
                 plannedSet.completed = false
                 val current = workout.performedRepsByExercise[routineExercise.exercise.id] ?: 0
@@ -1752,15 +1751,13 @@ class MainActivity : ComponentActivity() {
 
         override fun onAllSetsDone(exerciseIndex: Int) {
             val workout = workout() ?: return
-            val routineExercise = exercise(exerciseIndex) ?: return
-            routineExercise.sets.filter { !it.completed }.forEach {
-                it.completed = true
-                it.performedReps = it.targetReps
-                it.repSource = SetRepSource.MANUAL
+            if (activeWorkout !== workout) {
+                showStartGuide(workout.routine, startExerciseIndex = exerciseIndex) { started ->
+                    started.routine.exercises.getOrNull(exerciseIndex)?.let { requestAllSetsCompletion(started, it) }
+                }
+                return
             }
-            workout.performedRepsByExercise[routineExercise.exercise.id] = routineExercise.sets.sumOf { it.performedReps ?: 0 }
-            activeWorkout?.let(::persistActiveWorkout)
-            bumpWorkoutUi()
+            exercise(exerciseIndex)?.let { requestAllSetsCompletion(workout, it) }
         }
 
         override fun onAdjustRest(deltaSeconds: Int) {
@@ -1924,25 +1921,59 @@ class MainActivity : ComponentActivity() {
         return cleanWeight(value)
     }
 
+    private fun requestSetCompletion(workout: ActiveWorkout, exercise: RoutineExercise, setIndex: Int, set: PlannedSet) {
+        val revision = sessionStore.manualSetRevision(workout.sessionId, set.setId, set.attemptId).getOrNull() ?: return
+        val identity = set.setId to set.attemptId
+        showSheet { dismiss ->
+            dev.kyungmin.kcoach.phone.ui.ManualCountSheet("${setIndex + 1}세트 완료", listOf(set.targetReps), listOf(setIndex + 1)) { counts ->
+                dismiss()
+                if (activeWorkout !== workout || set.setId != identity.first || set.attemptId != identity.second) return@ManualCountSheet
+                completeWorkoutSet(workout, exercise, setIndex, set, counts.single(), revision)
+            }
+        }
+    }
+
+    private fun requestAllSetsCompletion(workout: ActiveWorkout, exercise: RoutineExercise) {
+        val remaining = exercise.sets.withIndex().filter { !it.value.completed }
+        if (remaining.isEmpty()) return
+        val before = sessionStore.loadActive().getOrNull() ?: return
+        val identities = remaining.map { it.value.setId to it.value.attemptId }
+        showSheet { dismiss ->
+            dev.kyungmin.kcoach.phone.ui.ManualCountSheet("모든 세트 완료", remaining.map { it.value.targetReps }, remaining.map { it.index + 1 }) { counts ->
+                dismiss()
+                val current = sessionStore.loadActive().getOrNull()
+                if (activeWorkout !== workout || current != before || remaining.map { it.value.setId to it.value.attemptId } != identities) {
+                    Toast.makeText(this, "세트가 변경됐어요. 최신 횟수를 확인해 주세요.", Toast.LENGTH_LONG).show()
+                    refreshActiveSession()
+                    return@ManualCountSheet
+                }
+                val actual = identities.zip(counts).toMap()
+                val sets = current.plannedSets.map { saved -> actual[saved.setId to saved.attemptId]?.let { count ->
+                    saved.copy(completed = true, performedReps = count, repSource = SetRepSource.MANUAL)
+                } ?: saved }
+                val updated = current.copy(plannedSets = sets, performedReps = sets.filter { it.completed }
+                    .groupBy { it.exerciseId }.mapValues { (_, values) -> values.sumOf { it.performedReps ?: 0 } })
+                if (!sessionStore.saveActive(updated)) { refreshActiveSession(); return@ManualCountSheet }
+                applySnapshotToWorkout(workout, updated)
+                resyncActiveWorkoutToWatch(workout)
+                bumpWorkoutUi()
+            }
+        }
+    }
+
     private fun completeWorkoutSet(
         workout: ActiveWorkout,
         routineExercise: RoutineExercise,
         setIndex: Int,
         plannedSet: PlannedSet,
+        performedReps: Int,
+        expectedRevision: Long,
     ) {
         val restSeconds = effectiveRestSeconds(routineExercise, setIndex)
-        val restEndAtMs = System.currentTimeMillis() + restSeconds * 1_000L
-        val transaction = sessionStore.completeSet(
-            SetCompletionEvent(
-                sessionId = workout.sessionId,
-                exerciseId = routineExercise.exercise.id,
-                setIndex = setIndex,
-                reps = plannedSet.targetReps,
-                restEndAtMs = restEndAtMs,
-                sequence = System.currentTimeMillis(),
-                setId = plannedSet.setId,
-                attemptId = plannedSet.attemptId,
-            ),
+        val transaction = sessionStore.applyManualSet(
+            dev.kyungmin.kcoach.core.ManualSetCommand(java.util.UUID.randomUUID().toString(), workout.sessionId,
+                routineExercise.exercise.id, setIndex, plannedSet.setId, plannedSet.attemptId,
+                performedReps, expectedRevision, dev.kyungmin.kcoach.core.ManualSetOperation.COMPLETE), System.currentTimeMillis(),
         ).getOrElse {
             activeLiveStatus?.takeIf { it.tag != WATCH_PANEL_TELEMETRY }?.apply {
                 text = "세트 완료 저장 실패 · 세션은 유지 중"
@@ -1950,18 +1981,24 @@ class MainActivity : ComponentActivity() {
             }
             return
         }
-        if (transaction !is SetCompletionResult.Applied) return
-        applySnapshotToWorkout(workout, transaction.snapshot)
+        if (transaction.ack.status != dev.kyungmin.kcoach.core.ManualSetStatus.APPLIED) {
+            Toast.makeText(this, "세트가 변경됐어요. 최신 횟수를 확인해 주세요.", Toast.LENGTH_LONG).show()
+            refreshActiveSession()
+            return
+        }
+        val saved = requireNotNull(transaction.snapshot)
+        applySnapshotToWorkout(workout, saved)
         lastCompletedLiveKey = workout.lastCompletedSetKey
-        activeRestStartAtMs = restEndAtMs - restSeconds * 1_000L
-        activeRestEndAtMs = restEndAtMs
-        if (activeWorkout === workout) {
+        activeRestStartAtMs = saved.restEndAtMs - restSeconds * 1_000L
+        activeRestEndAtMs = saved.restEndAtMs
+        if (activeWorkout === workout && transaction.restStarted && !saved.paused) {
             sendWear(
                 WearSync.PATH_COMMAND,
-                PhoneSessionController.command(transaction.snapshot, "SET_COMPLETE", restSeconds),
+                PhoneSessionController.command(saved, "REST", restSeconds),
             )
         }
-        showRest(restSeconds, restEndAtMs)
+        if (transaction.restStarted && !saved.paused) showRest(restSeconds, saved.restEndAtMs)
+        else { resyncActiveWorkoutToWatch(workout); showActiveWorkout(forceRebuild = true) }
     }
 
     private fun workoutExerciseKey(exercise: RoutineExercise): String = exercise.sets.firstOrNull()?.setId ?: exercise.exercise.id
@@ -2368,7 +2405,8 @@ class MainActivity : ComponentActivity() {
         val info = ExerciseInfoUi(
             name = exercise.name,
             muscles = exercise.muscles,
-            description = exerciseDescription(exercise),
+            description = exerciseDescription(exercise) + "\n\n" +
+                dev.kyungmin.kcoach.core.ExerciseMeasurementContracts.explanation(exercise.id, exercise.name),
             myRecord = listOf(
                 "● 나의 기록" to "이 운동이 포함된 루틴 ${matching.size}개\n계획된 총 세트 ${plannedSets}세트\n\n최근 루틴\n${matching.firstOrNull()?.name ?: "아직 기록 없음"}",
                 "● 최근 목표" to (matching.firstOrNull()?.exercises?.firstOrNull { it.exercise.id == exercise.id }?.sets?.firstOrNull()?.let { set ->
@@ -2381,7 +2419,9 @@ class MainActivity : ComponentActivity() {
                 "${averageRest}초" to "평균 휴식",
                 exercise.equipment to "기구",
             ),
-            analysisNote = "워치 센서 기록이 연결되면 템포, 진폭, 반복 일관성을 이 운동 기준으로 분석해요.",
+            analysisNote = if (ExerciseTrackingProfiles.resolve(exercise.id, exercise.name).mode == TrackingMode.MANUAL_REQUIRED)
+                "실제 횟수를 폰이나 워치에서 입력해 주세요. 손목 신호로 횟수·다리 자세를 판정하지 않아요."
+                else "손목에서 관측한 움직임과 반복을 추정해요. 영상 확인과 별도 검증 전에는 자세의 정답으로 취급하지 않아요.",
         )
         showStandalone(ComposeView(this).apply {
             setContent {

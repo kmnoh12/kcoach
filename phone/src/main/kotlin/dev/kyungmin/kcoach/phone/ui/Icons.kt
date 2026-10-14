@@ -22,7 +22,7 @@ import kotlin.math.sin
 enum class KIcon {
     Home, Records, Stats, Calibrate, Menu, Back, Forward, Down, Plus, Minus, Check, Close,
     Play, Pause, Stop, Info, Dots, DotsVertical, Clock, Search, Sliders, Heart, Flag, Swap,
-    Reload, Trash, Link, Skip, Watch,
+    Reload, Trash, Link, Skip, Watch, Settings,
 }
 
 @Composable
@@ -47,6 +47,19 @@ private fun DrawScope.drawKIcon(icon: KIcon, tint: Color, filled: Boolean) {
     fun dot(cx: Float, cy: Float, r: Float = 1.5f) = drawCircle(tint, r * s, p(cx, cy))
 
     when (icon) {
+        KIcon.Settings -> {
+            val gear = Path()
+            for (i in 0 until 32) {
+                val angle = i * kotlin.math.PI / 16.0
+                val radius = if (i % 4 == 1 || i % 4 == 2) 9f else 7f
+                val x = (12 + cos(angle) * radius).toFloat() * s
+                val y = (12 + sin(angle) * radius).toFloat() * s
+                if (i == 0) gear.moveTo(x, y) else gear.lineTo(x, y)
+            }
+            gear.close()
+            drawPath(gear, tint, style = stroke)
+            circle(12f, 12f, 3f)
+        }
         KIcon.Home -> {
             poly(4f to 11f, 12f to 4f, 20f to 11f)
             poly(6.5f to 9.5f, 6.5f to 20f, 17.5f to 20f, 17.5f to 9.5f)

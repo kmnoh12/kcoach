@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "createdAtUtc": "2026-10-14T06:55:04.139674+00:00",
+  "scope": "LOCAL_SIGNED_OTA_ARTIFACTS_AND_EXPORT_INSPECTION_PREPARATION",
+  "otaBuildLog": "work/stage5-ota-build.log",
+  "otaBuildLogSha256": "8d1885fe524478631e8a41b7669ec52306e3a95be9f2f7509521120d2d023dd9",
+  "artifacts": {
+    "phone": {
+      "path": "phone/build/outputs/apk/ota/phone-ota.apk",
+      "bytes": 59947204,
+      "sha256": "8b175878225fc57a85ef0a3e43c585cb1e91f7f710b69e7d3bbd02bca62ebe16",
+      "signatureVerified": true,
+      "certificateSha256": "45130eab69678aeee288c565de466912b97dab48c317cbcf0983430a22c1da2c",
+      "packageBadging": "package: name='dev.kyungmin.kcoach' versionCode='33' versionName='0.7.3' platformBuildVersionName='15' platformBuildVersionCode='35' compileSdkVersion='35' compileSdkVersionCodename='15'",
+      "installedVerified": false
+    },
+    "wear": {
+      "path": "wear/build/outputs/apk/ota/wear-ota.apk",
+      "bytes": 818372,
+      "sha256": "b9b81c2e23a726806a3bee20459678e6a5374e81e35687286f3c325a2806d593",
+      "signatureVerified": true,
+      "certificateSha256": "45130eab69678aeee288c565de466912b97dab48c317cbcf0983430a22c1da2c",
+      "packageBadging": "package: name='dev.kyungmin.kcoach' versionCode='32' versionName='0.2.4' platformBuildVersionName='15' platformBuildVersionCode='35' compileSdkVersion='35' compileSdkVersionCodename='15'",
+      "installedVerified": false
+    }
+  },
+  "sharedSigningCertificateVerified": true,
+  "bundledPoseModel": {
+    "path": "assets/pose_landmarker_lite.task",
+    "sha256": "59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a",
+    "matchesSource": true,
+    "uncompressed": true
+  },
+  "exportInspector": "tools/inspect_measurement_export.py",
+  "exportInspectorSha256": "53d6237ab699480b0c578d2a7d41b76eeca98f9749b8a916dc146e3fec962b5b",
+  "integrationFixture": {
+    "path": "work/selected-capture-evidence-fixture.zip",
+    "sha256": "0cfd5e0f8c08df754a6c283b206019d9efad282eea5b3bb34687f6008542c0df",
+    "source": "SYNTHETIC_KOTLIN_APP_EXPORT_TEST",
+    "actualWatch8Data": false
+  },
+  "pythonInspectionTests": {
+    "tests": 4,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "kotlinExporterFocusedLog": "work/export-inspection-kotlin-check.log",
+  "previousAndroidFullCheck": "docs/reviews/2026-10-14-watch-workout-control-verification.json",
+  "hardwareVerified": false,
+  "accuracyImprovementVerified": false,
+  "cameraHardwareVerified": false,
+  "aiModelExecutionVerified": false,
+  "published": false,
+  "versionsBumped": false,
+  "limits": [
+    "Local signature verification does not prove compatibility with an installed APK.",
+    "Version names are unchanged; automatic latest-release updates do not point to these local files.",
+    "ZIP integrity and numeric metadata are not independent accuracy, clock alignment or video-codec acceptance.",
+    "Actual Watch8 measurements and independent count-verifiable video are still required."
+  ],
+  "publishedPreviousReleaseCertificates": {
+    "phone": {
+      "release": "p0.7.3-w0.2.4",
+      "apkSha256": "ba40167986622948c3dcbde3b6ecf41c7816c671d5263afeb087eafe0d731b8c",
+      "certificateSha256": "45130eab69678aeee288c565de466912b97dab48c317cbcf0983430a22c1da2c",
+      "matchesLocalOta": true
+    },
+    "watch": {
+      "release": "p0.7.3-w0.2.4",
+      "apkSha256": "9b978d80f9c33745b4d2904d73c7c6a07882609c4541f254613e56539a9a2883",
+      "certificateSha256": "45130eab69678aeee288c565de466912b97dab48c317cbcf0983430a22c1da2c",
+      "matchesLocalOta": true
+    }
+  },
+  "installedVerified": false
+}

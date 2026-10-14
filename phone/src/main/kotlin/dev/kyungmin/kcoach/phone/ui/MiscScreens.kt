@@ -85,7 +85,13 @@ class CalibrationUi(
 /** Live state of the main button, driven by watch events. */
 class CalibrationButtonUi(val text: String, val enabled: Boolean, val textAmber: Boolean = false)
 
-class CalibrationActions(val toggle: () -> Unit, val deleteProfile: () -> Unit, val select: (String) -> Unit)
+class CalibrationActions(
+    val toggle: () -> Unit,
+    val deleteProfile: () -> Unit,
+    val select: (String) -> Unit,
+    val openSensorView: (() -> Unit)? = null,
+    val openCaptureReview: (() -> Unit)? = null,
+)
 
 @Composable
 fun CalibrationScreen(
@@ -98,7 +104,7 @@ fun CalibrationScreen(
     val active = sessionActive()
     Column(Modifier.fillMaxSize().background(KColors.Bg).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 20.dp)) {
         Row(Modifier.fillMaxWidth().heightIn(min = 52.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("개인 보정", color = KColors.White, fontSize = 32.sp, fontWeight = FontWeight.Medium)
+            Text("측정·보정", color = KColors.White, fontSize = 32.sp, fontWeight = FontWeight.Medium)
         }
         Spacer(Modifier.height(24.dp))
         Text(ui.selectedName, color = KColors.White, fontSize = 24.sp, fontWeight = FontWeight.Medium)
@@ -115,6 +121,16 @@ fun CalibrationScreen(
             enabled = state.enabled && !ui.manualRequired,
             onClick = actions.toggle,
         )
+        actions.openSensorView?.let { open ->
+            Spacer(Modifier.height(10.dp))
+            WideButton("센서·3D 보기", KColors.SurfaceRaised, KColors.Soft, 48,
+                enabled = !active, onClick = open)
+        }
+        actions.openCaptureReview?.let { open ->
+            Spacer(Modifier.height(10.dp))
+            WideButton("저장한 촬영·반복 구간 확인", KColors.SurfaceRaised, KColors.Soft, 48,
+                enabled = !active, onClick = open)
+        }
         ui.profile?.let { profile ->
             Spacer(Modifier.height(28.dp))
             SectionCard(profile.title, profile.values)
@@ -225,7 +241,7 @@ fun WorkoutResultScreen(result: ResultUi, back: () -> Unit, toRecords: () -> Uni
             SectionCard("오늘 깬 기록", result.records)
         }
         Spacer(Modifier.height(28.dp))
-        Text("세트별 확정 분석", color = KColors.Soft, fontSize = 15.sp)
+        Text("세트별 센서 추정", color = KColors.Soft, fontSize = 15.sp)
         Spacer(Modifier.height(10.dp))
         result.sections.forEach {
             SectionCard(it.title, it.values)

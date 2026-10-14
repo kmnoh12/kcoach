@@ -1,0 +1,27 @@
+{
+  "date": "2026-10-14",
+  "scope": "Frozen public MM-Fit replay comparison; not independent personal/Watch8 validation",
+  "setCount": 616,
+  "report": "core/build/peak-engine-comparison.md",
+  "csv": "core/build/peak-engine-comparison.csv",
+  "dataPath": "work/datasets/mmfit-probe",
+  "datasetPreviouslyExplored": true,
+  "settings": {
+    "smoothingWindowNs": 2000000000,
+    "order": 4,
+    "thresholdFraction": 0.25,
+    "minimumAccelerationSpan": 0.25,
+    "minimumGyroSpan": 0.12
+  },
+  "candidateAdaptedNotExactReplication": true,
+  "lookaheadNs": 1000000000,
+  "watchLatencyGatePassed": false,
+  "automaticAdoption": false,
+  "rawCountsNotUserConfirmation": true,
+  "bicepsBilateralLabelsScoredAgainstOneWrist": false,
+  "sourceSha256": {
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/PaperPeakRepAnalyzer.kt": "6d61d57e89faafe9d6c667f42d4bd725d3ce590c4c95f1e494906b1b00d4c461",
+    "core/src/main/kotlin/dev/kyungmin/kcoach/core/SavitzkyGolayFilter.kt": "0dd83cfb160837125c17d411056e79898fd92ede906a8bbc9f1c7500e1c06d99",
+    "core/src/test/kotlin/dev/kyungmin/kcoach/core/PeakEngineComparisonTest.kt": "0a1f249a72f434899c192fbf78613d9b931bb022f08ac292ff50775746e1d8d5"
+  }
+}

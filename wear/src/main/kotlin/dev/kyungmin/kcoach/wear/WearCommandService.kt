@@ -11,6 +11,9 @@ import dev.kyungmin.kcoach.core.WireCodec
 import dev.kyungmin.kcoach.core.WirePayloadKeys
 import dev.kyungmin.kcoach.core.PersonalCalibrationProfileCodec
 import org.json.JSONObject
+import com.google.android.gms.tasks.Tasks
+import com.google.android.gms.wearable.Wearable
+import java.util.concurrent.TimeUnit
 
 class WearCommandService : WearableListenerService() {
     private var emulatorBridge: EmulatorBridgeClient? = null
@@ -28,10 +31,54 @@ class WearCommandService : WearableListenerService() {
     }
 
     override fun onMessageReceived(event: MessageEvent) {
+        if (event.path == WearSync.PATH_PATTERN_PROFILE) {
+            receivePatternProfile(String(event.data), event.sourceNodeId)
+            return
+        }
         handlePayload(event.path, String(event.data))
     }
 
     private fun handlePayload(path: String, payload: String) {
+        val receivedNs = android.os.SystemClock.elapsedRealtimeNanos()
+        if (path == WearSync.PATH_WORKOUT_OFFER) {
+            runCatching { check(WatchWorkoutOutbox(this).receiveOffer(payload)) }.onSuccess {
+                sendBroadcast(Intent(WearWorkoutService.ACTION_WORKOUT_CONTROL).setPackage(packageName))
+            }
+            return
+        }
+        if (path == WearSync.PATH_WORKOUT_CONTROL_ACK) {
+            if (runCatching { dev.kyungmin.kcoach.core.WatchWorkoutControlAck.decode(payload) }.isFailure) return
+            ContextCompat.startForegroundService(this, Intent(this, WearWorkoutService::class.java)
+                .putExtra(WearWorkoutService.EXTRA_COMMAND, "WORKOUT_CONTROL_ACK").putExtra("payload", payload))
+            return
+        }
+        if (path == WearSync.PATH_PATTERN_PROFILE) {
+            receivePatternProfile(payload, null)
+            return
+        }
+        if (path == WearSync.PATH_CLOCK_REQUEST) {
+            val reply = runCatching {
+                val request = WireCodec.decode(payload)
+                val epoch = WearClockEpoch.current(this)
+                val reply = dev.kyungmin.kcoach.core.ClockProbeProtocol.reply(request, receivedNs,
+                    android.os.SystemClock.elapsedRealtimeNanos(), epoch.id, epoch.verified)
+                WireCodec.encode(reply.copy(payload = reply.payload + mapOf("pairedReferenceSupported" to "true", "captureFormats" to "1,2",
+                    "patternShadowCaptureSupported" to "true", "patternProfileFormat" to "1", "patternActiveBindingSupported" to "true")))
+            }.getOrNull() ?: return
+            Thread {
+                runCatching { Tasks.await(Wearable.getNodeClient(this).connectedNodes, 2, TimeUnit.SECONDS).forEach { node ->
+                    Tasks.await(Wearable.getMessageClient(this).sendMessage(node.id, WearSync.PATH_CLOCK_REPLY, reply.toByteArray()), 2, TimeUnit.SECONDS)
+                } }
+                emulatorBridge?.send(WearSync.PATH_CLOCK_REPLY, reply)
+            }.start()
+            return
+        }
+        if (path == WearSync.PATH_MANUAL_ACK) {
+            if (runCatching { dev.kyungmin.kcoach.core.ManualSetAck.decode(payload) }.isFailure) return
+            ContextCompat.startForegroundService(this, Intent(this, WearWorkoutService::class.java)
+                .putExtra(WearWorkoutService.EXTRA_COMMAND, "MANUAL_ACK").putExtra("payload", payload))
+            return
+        }
         if (path == WearSync.PATH_SET_ACK) {
             ContextCompat.startForegroundService(this, Intent(this, WearWorkoutService::class.java)
                 .putExtra(WearWorkoutService.EXTRA_COMMAND, "SET_ACK").putExtra("payload", payload))
@@ -47,7 +94,7 @@ class WearCommandService : WearableListenerService() {
             val ownsSession = state?.optString("session").orEmpty().isNotBlank()
             val hasCompletion = state != null && !state.isNull("pendingCompletion")
             val hasCaptures = getSharedPreferences("capture-outbox", MODE_PRIVATE).getStringSet("pendingCaptureIds", emptySet()).orEmpty().isNotEmpty()
-            if (!ownsSession && !hasCompletion && !hasCaptures) return
+            if (!ownsSession && !hasCompletion && !hasCaptures && ManualSetOutbox(this).pending().isEmpty() && WatchWorkoutOutbox(this).pending().isEmpty()) return
             dispatchCommand("HEARTBEAT", emptyList())
             return
         }
@@ -77,11 +124,33 @@ class WearCommandService : WearableListenerService() {
         if (path != WearSync.PATH_COMMAND && path != WearSync.PATH_PAIR) return
         val fields = WearSync.parse(payload)
         if (path == WearSync.PATH_PAIR) {
+            if (fields.getOrNull(1) == "phone") {
+                WatchWorkoutOutbox(this).receivePhoneHello(fields)
+                sendBroadcast(Intent(WearWorkoutService.ACTION_WORKOUT_CONTROL).setPackage(packageName))
+            }
             dispatchCommand("HELLO", fields)
             return
         }
         if (fields.size < 2) return
         dispatchCommand(fields[1], fields)
+    }
+
+    private fun receivePatternProfile(payload: String, sourceNodeId: String?) {
+        val command = runCatching { dev.kyungmin.kcoach.core.PatternProfileCommand.decode(payload) }.getOrNull() ?: return
+        val response = PatternProfileStore(this).stage(command).getOrElse {
+            android.util.Log.w("KCoachPattern", "Profile staging failed; no acknowledgement sent", it)
+            return
+        }
+        val encoded = response.encode()
+        Thread {
+            runCatching {
+                val nodes = sourceNodeId?.takeIf { it.isNotBlank() }?.let(::listOf)
+                    ?: Tasks.await(Wearable.getNodeClient(this).connectedNodes, 2, TimeUnit.SECONDS).map { it.id }
+                nodes.forEach { node -> Tasks.await(Wearable.getMessageClient(this).sendMessage(node,
+                    WearSync.PATH_PATTERN_PROFILE_ACK, encoded.toByteArray()), 2, TimeUnit.SECONDS) }
+            }
+            emulatorBridge?.send(WearSync.PATH_PATTERN_PROFILE_ACK, encoded)
+        }.start()
     }
 
     private fun dispatchCommand(type: String, fields: List<String>) {
@@ -103,6 +172,10 @@ class WearCommandService : WearableListenerService() {
                 putExtra("pausedRestRemainingMs", fields.getOrNull(12)?.toLongOrNull() ?: 0L)
                 putExtra("setId", fields.getOrNull(13).orEmpty())
                 putExtra("attemptId", fields.getOrNull(14).orEmpty())
+                putExtra("patternShadowCommandId", fields.getOrNull(15).orEmpty())
+                putExtra("patternBinding", fields.getOrNull(16).orEmpty())
+                putExtra("patternWearing", fields.getOrNull(17).orEmpty())
+                putExtra("patternSelectionMode", fields.getOrNull(18).orEmpty())
             } else {
                 putExtra("session", fields.getOrNull(2).orEmpty())
                 putExtra("exerciseId", fields.getOrNull(3).orEmpty())

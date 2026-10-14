@@ -73,17 +73,10 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.Velocity
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import kotlin.math.roundToInt
 
@@ -126,8 +119,10 @@ fun OverlayHost(state: OverlayState) {
             transitionSpec = { overlayTransition(initialState, targetState) },
             label = "overlay",
         ) { overlay ->
-            if (overlay != null) {
-                Box(Modifier.fillMaxSize(), contentAlignment = if (overlay.isSheet) Alignment.BottomCenter else Alignment.Center) {
+            // Keep the empty state full-sized too. A zero-size outgoing state makes
+            // AnimatedContent resize/reposition the incoming sheet diagonally.
+            Box(Modifier.fillMaxSize(), contentAlignment = if (overlay?.isSheet == true) Alignment.BottomCenter else Alignment.Center) {
+                if (overlay != null) {
                     if (overlay.isSheet) SheetSurface(state::dismiss) { overlay.content(state::dismiss) }
                     else DialogSurface { overlay.content(state::dismiss) }
                 }
@@ -316,22 +311,17 @@ fun SetSheet(title: String, subtitle: String, groups: List<SegGroup>, actions: L
 private fun SegmentedBar(options: List<SegOption>, modifier: Modifier = Modifier) {
     val count = options.size
     val selected = options.indexOfFirst { it.selected }.coerceAtLeast(0)
-    val scope = rememberCoroutineScope()
-    val haptic = LocalHapticFeedback.current
+    var preview by remember { mutableStateOf<Int?>(null) }
+    val highlighted = preview ?: selected
     BoxWithConstraints(modifier.fillMaxWidth().height(42.dp).clip(KShape.Control).background(KColors.SurfaceRaised)) {
         val width = constraints.maxWidth.toFloat()
         val segment = width / count
-        val thumbX = remember { Animatable(selected * segment) }
-        var dragging by remember { mutableStateOf(false) }
-        LaunchedEffect(selected, segment, dragging) {
-            if (!dragging) thumbX.animateTo(selected * segment, spring(dampingRatio = 1f, stiffness = Spring.StiffnessMedium))
-        }
-        val highlighted = ((thumbX.value + segment / 2) / segment).toInt().coerceIn(0, count - 1)
-        val lift by animateFloatAsState(if (dragging) 1.04f else 1f, Motion.ui(), label = "thumbLift")
+        val thumbX by animateFloatAsState(highlighted * segment, Motion.ui(), label = "segmentThumb")
+        val lift by animateFloatAsState(if (preview != null) 1.04f else 1f, Motion.ui(), label = "thumbLift")
 
         Box(
             Modifier
-                .offset { IntOffset(thumbX.value.roundToInt(), 0) }
+                .offset { IntOffset(thumbX.roundToInt(), 0) }
                 .width(with(LocalDensity.current) { segment.toDp() })
                 .fillMaxHeight()
                 .padding(2.dp)
@@ -352,32 +342,12 @@ private fun SegmentedBar(options: List<SegOption>, modifier: Modifier = Modifier
         Box(
             Modifier
                 .fillMaxSize()
-                .pointerInput(count, segment) {
-                    awaitEachGesture {
-                        val down = awaitFirstDown()
-                        dragging = true
-                        var lastIndex = (down.position.x / segment).toInt().coerceIn(0, count - 1)
-                        var cancelled = false
-                        fun follow(x: Float) = scope.launch { thumbX.animateTo((x - segment / 2).coerceIn(0f, width - segment), tween(90)) }
-                        follow(down.position.x)
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            val change = event.changes.first()
-                            // A vertical drag belongs to the sheet; give up and let the thumb return.
-                            if (change.isConsumed) { cancelled = true; break }
-                            val x = change.position.x
-                            val index = (x / segment).toInt().coerceIn(0, count - 1)
-                            if (index != lastIndex) {
-                                lastIndex = index
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            }
-                            scope.launch { thumbX.snapTo((x - segment / 2).coerceIn(0f, width - segment)) }
-                            if (!change.pressed) break
-                        }
-                        dragging = false
-                        if (!cancelled && lastIndex != selected) options[lastIndex].onClick()
-                    }
-                },
+                .slidingSelection(
+                    selected = selected,
+                    indexAt = { x -> (x / segment).toInt().coerceIn(0, count - 1) },
+                    preview = { preview = it },
+                    onSelect = { options[it].onClick() },
+                ),
         )
     }
 }
