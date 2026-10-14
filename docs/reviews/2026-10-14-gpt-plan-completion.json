@@ -41,7 +41,7 @@
   "actual_account_inference": false,
   "physical_device_test": false,
   "user_delivery_flow": "update_then_user_usage_feedback",
-  "status": "READY_FOR_RELEASE",
+  "status": "PUBLISHED",
   "integration": {
     "old_head": "3cbdcdebbe5cc60b918fe10dee36bfa4047c156d",
     "new_head": "475026d8b652a9e02d311ed744ce5d83e420a6f5",
@@ -72,5 +72,27 @@
     "test_fixture_only": true,
     "visual_inspection": true
   },
-  "merged_working_tree_compile": "PASS"
+  "merged_working_tree_compile": "PASS",
+  "release_url": "https://github.com/kmnoh12/kcoach/releases/tag/p0.7.6-w0.2.6",
+  "release_id": 412820104,
+  "published_at": "2026-10-14T14:32:50Z",
+  "release_target": "21db02bbf79ec75260a1765e66e9f54198c2e2c3",
+  "live_update_manifest_verification": {
+    "phone": {
+      "latest_url": "https://github.com/kmnoh12/kcoach/releases/latest/download/update-phone.json",
+      "version": "0.7.6",
+      "code": 36,
+      "asset_sha256": "963d35084e4e58c75ce422df1eb446b4d3f6ab2e1ecaa7ddefd9be1358e3776c",
+      "asset_digest_verified": true,
+      "resolved_asset_host": "release-assets.githubusercontent.com"
+    },
+    "watch": {
+      "latest_url": "https://github.com/kmnoh12/kcoach/releases/latest/download/update-watch.json",
+      "version": "0.2.6",
+      "code": 34,
+      "asset_sha256": "affb79c2cfce65787231c303bcd9863fd858d3782cf8accc164192444ab17515",
+      "asset_digest_verified": true,
+      "resolved_asset_host": "release-assets.githubusercontent.com"
+    }
+  }
 }
