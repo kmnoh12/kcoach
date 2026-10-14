@@ -67,6 +67,9 @@ object CameraRepProposals {
                 } else stableSince = null
                 return@forEach
             }
+            // READY is permission to observe, not the start of the repetition.
+            // Retain the last actually observed resting frame before movement.
+            if (!departed && motion.atRest(value)) { start = ns; extreme = value; return@forEach }
             if (!departed && !motion.atRest(value)) { departed = true; turn = ns; extreme = value }
             if (departed && (if (motion.increasing) value > extreme else value < extreme)) { extreme = value; turn = ns }
             if (departed && motion.atRest(value)) {

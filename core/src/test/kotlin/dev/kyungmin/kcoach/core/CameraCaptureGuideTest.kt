@@ -5,6 +5,15 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 class CameraCaptureGuideTest {
+    @Test fun longReadyHoldDoesNotBecomeTheFirstRepetitionOrDiscardTheActualMovement() {
+        val ready = (1000L..16000L step 200).map { frame(it, 160.0) }
+        val motion = listOf(frame(16200, 120.0), frame(16400, 60.0), frame(16600, 100.0), frame(16800, 160.0))
+        val proposed = CameraRepProposals.propose(ready + motion, "dumbbell_curl", true)
+        assertEquals(1, proposed.size)
+        assertEquals(16000_000_000L, proposed.single().startNs)
+        assertEquals(16400_000_000L, proposed.single().turnaroundNs)
+        assertEquals(16800_000_000L, proposed.single().endNs)
+    }
     private fun frame(timeMs: Long, angle: Double, visible: Boolean = true): CameraPoseFrame {
         val image = List(33) { CameraLandmark(0.5, 0.5, 0.0, if (visible) 1.0 else 0.0, 1.0) }
         val world = MutableList(33) { CameraLandmark(0.0, 0.0, 0.0, 1.0, 1.0) }
