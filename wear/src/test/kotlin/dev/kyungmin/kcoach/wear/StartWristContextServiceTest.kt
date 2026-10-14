@@ -23,12 +23,15 @@ import java.time.Duration
 @Config(sdk = [34])
 class StartWristContextServiceTest {
     private val declared = StartWristContext("external_rotation", "owner", "LEFT", "OUTSIDE", "ELBOW", "PALM_UP_HORIZONTAL")
-    private fun command(context: StartWristContext = declared, revision: Long = 1): Intent {
+    private fun command(context: StartWristContext = declared, revision: Long = 1,
+        direction: StartDirectionRuntimeProfile? = null): Intent {
         val listener = Robolectric.buildService(WearCommandService::class.java).get()
         val base = WearSync.withVerifiedPatternSelection(WearSync.withPatternWearing(
             WearSync.richCommand("START", "session", "external_rotation", "회전", 0, 8, 5.0, 60,
                 setId = "set", attemptId = "attempt"), PatternWearingContext("owner", "LEFT", "OUTSIDE")))
-        val payload = WearSync.parse(WearSync.withStartWristContext(base, context)).toMutableList().apply { this[10] = revision.toString() }.joinToString("|")
+        val bound = WearSync.withStartWristContext(base, context)
+        val payload = WearSync.parse(direction?.let { WearSync.withStartDirectionProfile(bound, it) } ?: bound)
+            .toMutableList().apply { this[10] = revision.toString() }.joinToString("|")
         listener.onMessageReceived(object : MessageEvent {
             override fun getRequestId() = 1
             override fun getPath() = WearSync.PATH_COMMAND
@@ -37,18 +40,96 @@ class StartWristContextServiceTest {
         })
         return shadowOf(RuntimeEnvironment.getApplication()).nextStartedService
     }
-    private fun sample(service: WearWorkoutService) {
+    private fun sample(service: WearWorkoutService, accelerationAccuracy: Int = SensorManager.SENSOR_STATUS_ACCURACY_HIGH, z: Float = 9.8f) {
         ShadowSystemClock.advanceBy(Duration.ofMillis(20))
         val timestamp = SystemClock.elapsedRealtimeNanos()
         for (type in listOf(Sensor.TYPE_ACCELEROMETER, Sensor.TYPE_GYROSCOPE)) {
             val event = SensorEvent::class.java.getDeclaredConstructor(Int::class.javaPrimitiveType).apply { isAccessible = true }.newInstance(3)
             event.sensor = ShadowSensor.newInstance(type); event.timestamp = timestamp
-            event.accuracy = SensorManager.SENSOR_STATUS_ACCURACY_HIGH
-            if (type == Sensor.TYPE_ACCELEROMETER) event.values[2] = 9.8f
+            event.accuracy = if (type == Sensor.TYPE_ACCELEROMETER) accelerationAccuracy else SensorManager.SENSOR_STATUS_ACCURACY_HIGH
+            if (type == Sensor.TYPE_ACCELEROMETER) event.values[2] = z
             service.onSensorChanged(event)
         }
     }
     private fun state() = shadowOf(RuntimeEnvironment.getApplication()).broadcastIntents.last { it.action == WearWorkoutService.ACTION_STATE }
+    private fun target() = StartDirectionRuntimeProfile("synthetic-direction", 1,
+        StartWristDirectionKey(declared, WearClockEpoch.current(RuntimeEnvironment.getApplication()).deviceId),
+        "a".repeat(64), "b".repeat(64), StartPoseGateConfig.forProfile(ExerciseTrackingProfiles.resolve("external_rotation"))
+            .copy(requireSetupMotion = false, maxSampleGapMs = 60, maxAccelerationAgeMs = 40,
+                expectedGravity = StartWristGravityTarget(0.0, 0.0, -1.0, .1)))
+
+    @Test fun targetWaitsOnTheOppositeHoldAndDoesNotJoinPreparationAcrossServiceRecreation() {
+        val app = RuntimeEnvironment.getApplication()
+        val profile = target()
+        val first = Robolectric.buildService(WearWorkoutService::class.java).create()
+        first.get().onStartCommand(command(direction = profile), 0, 1)
+        assertEquals("START_DIRECTION_WAITING", state().getStringExtra("phase"))
+        repeat(150) { sample(first.get()) }
+        assertEquals("START_DIRECTION_WAITING", state().getStringExtra("phase"))
+        repeat(50) { sample(first.get(), z = -9.8f) }
+        first.destroy()
+        val restored = Robolectric.buildService(WearWorkoutService::class.java).create()
+        try {
+            repeat(60) { sample(restored.get(), z = -9.8f) }
+            assertEquals("START_DIRECTION_WAITING", state().getStringExtra("phase"))
+            repeat(45) { sample(restored.get(), z = -9.8f) }
+            assertEquals("WORKING_START_CONFIRMED", state().getStringExtra("phase"))
+            assertEquals(0, state().getIntExtra("reps", -1))
+            restored.get().onStartCommand(Intent().putExtra("command", "PAUSE").putExtra("session", "session").putExtra("commandRevision", 2L), 0, 2)
+            restored.get().onStartCommand(command(revision = 3, direction = profile.copy(version = 2)), 0, 3)
+            assertEquals(2L, app.getSharedPreferences("workout-runtime", 0).getLong("commandRevision", -1))
+            restored.get().onStartCommand(Intent().putExtra("command", "RESUME").putExtra("session", "session").putExtra("commandRevision", 4L), 0, 4)
+            sample(restored.get(), z = -9.8f)
+            restored.get().onStartCommand(Intent().putExtra("command", "STOP").putExtra("session", "session").putExtra("commandRevision", 5L), 0, 5)
+            val manifest = WireCodec.decode(app.filesDir.listFiles()!!.single { it.name.endsWith(".manifest") }.readText())
+            assertEquals("CONFIRMED", manifest.payload["startDirectionStatus"])
+            assertEquals(profile, StartDirectionRuntimeCodec.decode(manifest.payload.getValue("startDirectionSnapshot")))
+            val document = SensorCaptureFormat.read(app.filesDir.listFiles()!!.single { it.name.endsWith(".kcs") }.inputStream())
+            assertEquals(306, document.sampleCount)
+            val counting = StartDirectionMeasurementWindow.select(document, manifest.payload.getValue("countingStartNs").toLong())!!
+            assertTrue(counting.sampleCount < 10)
+        } finally { restored.destroy() }
+    }
+
+    @Test fun explicitlyBypassingTheGateUsesTheNextSensorTimestampAndSurvivesPause() {
+        val app = RuntimeEnvironment.getApplication()
+        val service = Robolectric.buildService(WearWorkoutService::class.java).create()
+        try {
+            service.get().onStartCommand(command(direction = target()), 0, 1)
+            repeat(10) { sample(service.get()) }
+            service.get().onStartCommand(Intent().putExtra("command", "START_DIRECTION_BYPASS")
+                .putExtra("session", "session").putExtra("setId", "set").putExtra("attemptId", "wrong"), 0, 2)
+            assertEquals("START_DIRECTION_WAITING", state().getStringExtra("phase"))
+            service.get().onStartCommand(Intent().putExtra("command", "START_DIRECTION_BYPASS")
+                .putExtra("session", "session").putExtra("setId", "set").putExtra("attemptId", "attempt"), 0, 3)
+            assertEquals("WORKING_START_BYPASSED", state().getStringExtra("phase"))
+            sample(service.get())
+            val firstCounting = SystemClock.elapsedRealtimeNanos()
+            service.get().onStartCommand(Intent().putExtra("command", "PAUSE").putExtra("session", "session").putExtra("commandRevision", 2L), 0, 4)
+            service.get().onStartCommand(Intent().putExtra("command", "RESUME").putExtra("session", "session").putExtra("commandRevision", 3L), 0, 5)
+            sample(service.get())
+            service.get().onStartCommand(Intent().putExtra("command", "STOP").putExtra("session", "session").putExtra("commandRevision", 4L), 0, 6)
+            val manifest = WireCodec.decode(app.filesDir.listFiles()!!.single { it.name.endsWith(".manifest") }.readText())
+            assertEquals("BYPASSED", manifest.payload["startDirectionStatus"])
+            assertEquals(firstCounting, manifest.payload.getValue("countingStartNs").toLong())
+            assertEquals(0, state().getIntExtra("reps", -1))
+        } finally { service.destroy() }
+    }
+    @Test fun unreliableAccelerationCannotFinishTheCalibrationHoldEvenWithAReliableGyroscope() {
+        val controller = Robolectric.buildService(WearWorkoutService::class.java).create()
+        try {
+            controller.get().onStartCommand(Intent().putExtra("command", "START").putExtra("session", "calibration-quality")
+                .putExtra("exerciseId", "external_rotation").putExtra("setId", "set").putExtra("attemptId", "attempt")
+                .putExtra("targetReps", 8).putExtra("commandRevision", 1L), 0, 1)
+            repeat(160) { sample(controller.get(), SensorManager.SENSOR_STATUS_UNRELIABLE) }
+            assertEquals("BASELINE", state().getStringExtra("phase"))
+            repeat(90) { sample(controller.get()) }
+            assertEquals("BASELINE", state().getStringExtra("phase"))
+            repeat(15) { sample(controller.get()) }
+            assertEquals("CONTROLLED_REPS", state().getStringExtra("phase"))
+            assertEquals(0, state().getIntExtra("reps", -1))
+        } finally { controller.destroy() }
+    }
     @Test fun actualListenerRuntimeAndRawManifestPreserveDeclarationsAndRejectChangesDuringPause() {
         val app = RuntimeEnvironment.getApplication()
         val first = Robolectric.buildService(WearWorkoutService::class.java).create()

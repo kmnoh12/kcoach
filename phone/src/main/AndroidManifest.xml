@@ -39,6 +39,7 @@
         <activity android:name=".CalibrationCameraActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".CalibrationReviewActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".PatternCandidatesActivity" android:exported="false" android:screenOrientation="portrait" />
+        <activity android:name=".StartDirectionReviewActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".SettingsActivity" android:exported="false" />
         <activity android:name=".AiCoachActivity" android:exported="false" />
         <activity android:name=".ChatGptAccountActivity" android:exported="true" android:launchMode="singleTop">

@@ -78,7 +78,13 @@ class WorkoutWearingStore(private val context: Context) {
                 val startContext = if (wearing != null && StartWristContext.expectedVariant(normalized) != null)
                     StartWristContextCodec.encode(StartWristContext(normalized, json.getString("owner"), wearing.side,
                         wearing.placement, wearing.deviceTop ?: "UNKNOWN", wearing.startVariants[normalized] ?: "UNKNOWN")) else ""
-                bindings.put(identity, JSONObject().put("exerciseId", exercise).put("binding", binding).put("startContext", startContext))
+                val direction = startContext.takeIf { it.isNotEmpty() }?.let(StartWristContextCodec::decode)
+                    ?.takeIf { it.completeForDirectionValidation }?.let {
+                        // Invalidated evidence falls back to an explicitly unconfirmed start; it never learns from that set.
+                        StartDirectionReviewStore(context).selected(it).getOrNull()
+                    }
+                bindings.put(identity, JSONObject().put("exerciseId", exercise).put("binding", binding).put("startContext", startContext)
+                    .put("startDirectionSnapshot", direction?.let(StartDirectionRuntimeCodec::encode).orEmpty()))
                 check(prefs.edit().putString(sessionKey(session), json.toString()).commit()) { "Could not freeze the set binding" }
             }
             val frozen = bindings.getJSONObject(identity)
@@ -91,7 +97,10 @@ class WorkoutWearingStore(private val context: Context) {
             require(explicitStart.isEmpty() || explicitStart == startContext) { "Set start direction context changed" }
             val bound = if (encoded.isEmpty()) payload else WearSync.withPatternWearing(payload, PatternWearingContext.decode(encoded))
             val selected = WearSync.withVerifiedPatternSelection(bound)
-            if (startContext.isEmpty()) selected else WearSync.withStartWristContext(selected, StartWristContextCodec.decode(startContext))
+            val withContext = if (startContext.isEmpty()) selected else WearSync.withStartWristContext(selected, StartWristContextCodec.decode(startContext))
+            val snapshot = frozen.optString("startDirectionSnapshot")
+            require(fields.getOrNull(20).isNullOrEmpty() || fields[20] == snapshot) { "Set start direction profile changed" }
+            if (snapshot.isEmpty()) withContext else WearSync.withStartDirectionProfile(withContext, StartDirectionRuntimeCodec.decode(snapshot))
         }
     }
 

@@ -81,6 +81,7 @@ class CalibrationReviewActivity : ComponentActivity() {
     private fun showList() {
         root(); content.addView(text("저장한 촬영", 24f))
         content.addView(button("개인 패턴·검증 현황") { startActivity(Intent(this, PatternCandidatesActivity::class.java)) })
+        content.addView(button("준비 손목 방향 · 자료 확인") { startActivity(Intent(this, StartDirectionReviewActivity::class.java)) })
         val clips = captures.list()
         if (clips.isEmpty()) content.addView(text("아직 촬영 자료가 없어요."))
         clips.forEach { clip -> content.addView(button("${clip.exerciseName} · ${if (clip.videoComplete) "영상 확인" else "중단 자료"}") { showCapture(clip.id) }) }
@@ -177,6 +178,7 @@ class CalibrationReviewActivity : ComponentActivity() {
             setTextColor(Color.WHITE); isEnabled = mapping != null && received != null
         }
         content.addView(alignment)
+        if (selected.startWristContext?.completeForDirectionValidation == true) addDirectionReview(id, alignment)
         val simultaneous = CheckBox(this).apply {
             text = "양팔을 동시에 움직인 촬영이에요 (좌우 비교용)"
             setTextColor(Color.WHITE); isChecked = review?.cameraMetrics?.simultaneousArmsReviewed == true
@@ -213,6 +215,54 @@ class CalibrationReviewActivity : ComponentActivity() {
         }) else content.addView(text("이 운동은 손목 자동 측정 대상이 아니에요. 영상과 실제 횟수는 보관하며 워치 횟수 보정 후보를 만들지 않아요."))
         content.addView(button("촬영 목록") { showList() })
         selectFrame(0)
+    }
+
+    private fun addDirectionReview(id: String, alignment: CheckBox) {
+        var intervalStart: Long? = null
+        val marks = mutableListOf<StartDirectionMark>()
+        var expectedRevision: Long? = null
+        val summary = text("손목 방향 구간을 영상으로 확인해 주세요. 전체 몸 자세를 판정하는 기능은 아니에요.")
+        content.addView(summary)
+        worker.execute {
+            val revision = StartDirectionReviewStore(this).reviewRevision(id).getOrNull()
+            runOnUiThread { if (!isFinishing && !isDestroyed && capture?.id == id) expectedRevision = revision }
+        }
+        content.addView(button("손목 방향 구간 시작 지정") {
+            val ns = currentNs()
+            if (ns == null) toast("영상 프레임이 표시된 뒤 지정해 주세요.")
+            else { intervalStart = ns; toast("방향 구간의 시작을 지정했어요.") }
+        })
+        content.addView(button("손목 방향 구간 끝 · 종류 지정") {
+            val start = intervalStart; val end = currentNs()
+            if (start == null || end == null || end - start < 2_200_000_000L) {
+                toast("시계 오차 여유를 포함해 2.2초 이상의 구간을 선택해 주세요.")
+            } else {
+                AlertDialog.Builder(this).setTitle("영상에서 확인한 손목 방향")
+                    .setItems(arrayOf("지정한 시작 방향", "반대 손목 방향", "일상 움직임 · 운동 준비 아님")) { _, index ->
+                        marks.add(StartDirectionMark(start, end, StartDirectionLabel.entries[index]))
+                        intervalStart = null
+                        summary.text = "선택한 방향 구간 ${marks.size}개 · 아직 저장 전"
+                    }.setNegativeButton("취소", null).show()
+            }
+        })
+        content.addView(button("영상으로 확인한 손목 방향 저장") {
+            val revision = expectedRevision
+            if (!alignment.isChecked || marks.isEmpty() || revision == null) {
+                toast("동작 시점 정렬과 방향 구간을 먼저 확인해 주세요.")
+            } else {
+                val frozen = marks.toList()
+                worker.execute {
+                    val store = StartDirectionReviewStore(this)
+                    val result = store.saveVideoReview(id, frozen, true, revision)
+                    runOnUiThread {
+                        if (isFinishing || isDestroyed || capture?.id != id) return@runOnUiThread
+                        result.onSuccess { expectedRevision = it.revision; summary.text = "영상 확인 방향 ${it.intervals.size}개 저장 · 후보·독립 검증 전" }
+                            .onFailure { toast("저장하지 못했어요. 구간 겹침·2초 연속 센서·영상 종료·시간 정렬을 확인해 주세요.") }
+                    }
+                }
+            }
+        })
+        content.addView(button("방향 후보·독립 검증") { startActivity(Intent(this, StartDirectionReviewActivity::class.java)) })
     }
 
     override fun onSaveInstanceState(outState: Bundle) {

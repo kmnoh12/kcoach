@@ -52,6 +52,9 @@ class CalibrationCameraActivity : ComponentActivity() {
     private lateinit var stop: Button
     private lateinit var hand: CheckBox
     private lateinit var orientation: Spinner
+    private var startConditions: Button? = null
+    private var deviceTop = "UNKNOWN"
+    private var startVariant = "UNKNOWN"
     private var provider: ProcessCameraProvider? = null
     private var analysis: ImageAnalysis? = null
     private var pose: PoseLandmarker? = null
@@ -119,6 +122,13 @@ class CalibrationCameraActivity : ComponentActivity() {
         }
         addView(this@CalibrationCameraActivity.orientation)
         this@CalibrationCameraActivity.orientation.setSelection(when (intent.getStringExtra("watchOrientation")) { "OUTSIDE" -> 1; "INSIDE" -> 2; else -> 0 })
+        if (StartWristContext.expectedVariant(exerciseId) != null) {
+            startConditions = Button(this@CalibrationCameraActivity).apply {
+                text = "시작 방향 조건 · 미확인"
+                setOnClickListener { chooseStartConditions() }
+            }
+            addView(startConditions)
+        }
         val frame = FrameLayout(this@CalibrationCameraActivity)
         preview = PreviewView(this@CalibrationCameraActivity).apply { scaleType = PreviewView.ScaleType.FIT_CENTER }
         this@CalibrationCameraActivity.overlay = PoseOverlay()
@@ -145,6 +155,39 @@ class CalibrationCameraActivity : ComponentActivity() {
         addView(Button(this@CalibrationCameraActivity).apply { text = "저장한 촬영 확인"; setOnClickListener {
             if (capture == null) startActivity(Intent(this@CalibrationCameraActivity, CalibrationReviewActivity::class.java))
         } })
+    }
+
+    private fun chooseStartConditions() {
+        val mounts = listOf("UNKNOWN", "ELBOW", "HAND")
+        val variants = listOf("UNKNOWN", requireNotNull(StartWristContext.expectedVariant(exerciseId)))
+        val mount = Spinner(this).apply {
+            adapter = ArrayAdapter(this@CalibrationCameraActivity, android.R.layout.simple_spinner_dropdown_item,
+                listOf("본체 방향 미확인", "본체 위쪽이 팔꿈치 쪽", "본체 위쪽이 손 쪽"))
+            setSelection(mounts.indexOf(deviceTop).coerceAtLeast(0))
+        }
+        val variant = Spinner(this).apply {
+            val label = when (ExerciseMotionCatalog.normalizeExerciseId(exerciseId)) {
+                "external_rotation" -> "손바닥 위 · 전완 수평"
+                "crossover_reverse_fly" -> "손등 위 그립"
+                else -> "기본 뉴트럴 · 팔 내림"
+            }
+            adapter = ArrayAdapter(this@CalibrationCameraActivity, android.R.layout.simple_spinner_dropdown_item,
+                listOf("다른 방식 · 미확인", label))
+            setSelection(variants.indexOf(startVariant).coerceAtLeast(0))
+        }
+        val options = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; setPadding(24, 12, 24, 12)
+            addView(TextView(this@CalibrationCameraActivity).apply {
+                text = "실제 본체 방향과 이번 시작 변형을 기록해요. 이 선택만으로 방향이 검증되지는 않아요. 모르면 미확인으로 두세요."
+            })
+            addView(mount); addView(variant)
+        }
+        android.app.AlertDialog.Builder(this).setTitle("시작 방향 조건").setView(options).setNegativeButton("취소", null)
+            .setPositiveButton("저장") { _, _ ->
+                deviceTop = mounts[mount.selectedItemPosition]; startVariant = variants[variant.selectedItemPosition]
+                startConditions?.text = if (deviceTop == "UNKNOWN" || startVariant == "UNKNOWN")
+                    "시작 방향 조건 · 미확인" else "시작 방향 조건 · 선택한 조건 저장"
+            }.show()
     }
 
     @androidx.annotation.OptIn(ExperimentalCamera2Interop::class)
@@ -199,6 +242,8 @@ class CalibrationCameraActivity : ComponentActivity() {
             if (nodes.isEmpty()) { starting = false; start.isEnabled = true; status.text = "워치를 연결한 뒤 함께 촬영해 주세요."; return@addOnSuccessListener }
             val onLeft = hand.isChecked
             val wearing = when (orientation.selectedItemPosition) { 1 -> "OUTSIDE"; 2 -> "INSIDE"; else -> "UNKNOWN" }
+            val pickedTop = deviceTop
+            val pickedVariant = startVariant
             worker.execute {
                 runCatching {
                     selectedShadow = null
@@ -214,7 +259,13 @@ class CalibrationCameraActivity : ComponentActivity() {
                         PhoneWorkoutService.send(this, WearSync.PATH_PATTERN_PROFILE, selectedShadow!!.encode())
                     }
                     val epoch = PhoneClockEpoch.current(this)
-                    val next = store.begin(exerciseId, exerciseName, onLeft, epoch.id, wearing).getOrThrow()
+                    val declared = StartWristContext.expectedVariant(exerciseId)?.takeIf {
+                        pickedTop != "UNKNOWN" && pickedVariant != "UNKNOWN"
+                    }?.let {
+                        StartWristContext(ExerciseMotionCatalog.normalizeExerciseId(exerciseId), PatternCandidateStore(this).localUserId(),
+                            if (onLeft) "LEFT" else "RIGHT", wearing, pickedTop, pickedVariant)
+                    }
+                    val next = store.begin(exerciseId, exerciseName, onLeft, epoch.id, wearing, declared).getOrThrow()
                     frameIndex = 0; firstCameraNs = null; stopping = false; watchStartScheduled = false; encoder = null
                     val motion = cameraMotion(exerciseId)
                     counter = motion?.let(::UpperBodyPoseCounter)
@@ -222,7 +273,8 @@ class CalibrationCameraActivity : ComponentActivity() {
                     lastClockWindowAtMs = SystemClock.elapsedRealtime()
                     probe(next.id, "START")
                     main.post {
-                        stop.isEnabled = true; hand.isEnabled = false; orientation.isEnabled = false; status.text = "워치의 동시 촬영 지원과 응답을 확인하는 중…"
+                        stop.isEnabled = true; hand.isEnabled = false; orientation.isEnabled = false; startConditions?.isEnabled = false
+                        status.text = "워치의 동시 촬영 지원과 응답을 확인하는 중…"
                         main.postDelayed({ if (preparedCapture?.id == next.id) stopCapture("Watch reference capture support not confirmed") }, 5_000)
                         startWhenReady(next)
                     }
@@ -233,6 +285,10 @@ class CalibrationCameraActivity : ComponentActivity() {
 
     private fun startWhenReady(prepared: CalibrationCapture) {
         if (!clocks.pairedCaptureSupported(prepared.id)) return
+        if (prepared.startWristContext != null && !clocks.startWristContextSupported(prepared.id)) {
+            status.text = "시작 방향 자료를 저장하려면 워치도 업데이트해 주세요. 응답을 다시 확인하는 중…"
+            return
+        }
         val shadow = selectedShadow
         if (shadow != null) {
             if (!clocks.patternActiveSupported(prepared.id)) return
@@ -252,7 +308,11 @@ class CalibrationCameraActivity : ComponentActivity() {
                 preparedCapture = null
                 val startCommand = WearSync.withPatternShadow(WearSync.richCommand("START", prepared.id, exerciseId,
                     exerciseName, 0, 8, null, 0, setId = prepared.setId, attemptId = prepared.attemptId), selectedShadow?.commandId.orEmpty())
-                val boundCommand = selectedShadow?.runtime?.compatibility?.let { WearSync.withPatternBinding(startCommand, it) } ?: startCommand
+                val patternBound = selectedShadow?.runtime?.compatibility?.let { WearSync.withPatternBinding(startCommand, it) } ?: startCommand
+                val boundCommand = prepared.startWristContext?.let { declared ->
+                    WearSync.withStartWristContext(WearSync.withPatternWearing(patternBound,
+                        PatternWearingContext(declared.owner, declared.side, declared.placement)), declared)
+                } ?: patternBound
                 PhoneWorkoutService.send(this, WearSync.PATH_COMMAND, boundCommand)
             }
             main.post { starting = false; status.text = "촬영 시작 · 워치 준비 자세를 잡고 평소 동작으로 움직여 주세요." }
@@ -345,7 +405,7 @@ class CalibrationCameraActivity : ComponentActivity() {
             val saved = store.finish(active.id, videoFinished, reason)
             capture = null; preparedCapture = null; counter = null; stopping = false
             main.post {
-                starting = false; start.isEnabled = cameraReady; hand.isEnabled = true; orientation.isEnabled = true
+                starting = false; start.isEnabled = cameraReady; hand.isEnabled = true; orientation.isEnabled = true; startConditions?.isEnabled = true
                 status.text = if (saved.getOrNull()?.status == CalibrationCaptureStatus.REVIEW_PENDING)
                     "영상 저장 완료 · 워치 원본 수신 후 동작을 확인해 주세요." else "중단 자료를 보관했어요. 새 촬영에서 이어갈 수 있어요."
                 if (reason == null && saved.isSuccess && !isFinishing && lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED))

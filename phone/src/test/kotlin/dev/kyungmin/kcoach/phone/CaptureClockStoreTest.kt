@@ -11,6 +11,27 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class CaptureClockStoreTest {
+    @Test fun explicitlyDeclaredDirectionNeedsSupportFromEveryReplyInOneWatchEpoch() {
+        val store = CaptureClockStore(RuntimeEnvironment.getApplication())
+        fun reply(id: String, sentNs: Long, format: String?, epoch: String = "watch") {
+            val request = store.prepareProbe(id, "START", sentNs, "phone", true).getOrThrow()
+            val response = ClockProbeProtocol.reply(request, sentNs - 990_000_000, sentNs - 988_000_000, epoch, true)
+            val capabilities = mapOf("pairedReferenceSupported" to "true", "captureFormats" to "1,2") +
+                (format?.let { mapOf("startWristContextFormat" to it) } ?: emptyMap())
+            store.acceptReply(response.copy(payload = response.payload + capabilities), sentNs + 22_000_000, "phone").getOrThrow()
+        }
+        reply("old", 2_000_000_000, null)
+        assertTrue(store.pairedCaptureSupported("old"))
+        assertFalse(store.startWristContextSupported("old"))
+        reply("new", 3_000_000_000, "1")
+        assertTrue(store.startWristContextSupported("new"))
+        reply("new", 4_000_000_000, null)
+        assertFalse(store.startWristContextSupported("new"))
+        reply("changed", 5_000_000_000, "1")
+        reply("changed", 6_000_000_000, "1", "restarted")
+        assertFalse(store.startWristContextSupported("changed"))
+    }
+
     @Test fun aComparisonTrialNeedsExplicitSupportForTheBoundPrimaryEngine() {
         val store = CaptureClockStore(RuntimeEnvironment.getApplication())
         fun receive(captureId: String, sentNs: Long, activeSupported: Boolean) {

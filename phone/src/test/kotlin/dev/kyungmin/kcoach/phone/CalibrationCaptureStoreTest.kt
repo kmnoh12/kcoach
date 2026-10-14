@@ -11,6 +11,25 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class CalibrationCaptureStoreTest {
+    @Test fun declaredCameraConditionsSurviveMetadataReloadWhileLegacyClipsKeepAbsence() {
+        val app = RuntimeEnvironment.getApplication(); val store = CalibrationCaptureStore(app)
+        val declared = StartWristContext("external_rotation", PatternCandidateStore(app).localUserId(), "LEFT", "OUTSIDE", "HAND", "PALM_UP_HORIZONTAL")
+        val clip = store.begin("external_rotation", "회전", true, "clock", "OUTSIDE", declared).getOrThrow()
+        assertEquals(declared, CalibrationCaptureStore(app).load(clip.id).getOrThrow().startWristContext)
+        store.finish(clip.id, false, "synthetic fixture").getOrThrow()
+        val file = app.filesDir.resolve("calibration-captures/${clip.id}/capture.json")
+        val old = org.json.JSONObject(file.readText()).apply { remove("startWristContext") }
+        file.writeText(old.toString())
+        assertNull(CalibrationCaptureStore(app).load(clip.id).getOrThrow().startWristContext)
+    }
+    @Test fun mismatchedUserHandOrPlacementCannotBeRecordedAsTheCamerasStartConditions() {
+        val app = RuntimeEnvironment.getApplication(); val store = CalibrationCaptureStore(app)
+        val declared = StartWristContext("external_rotation", PatternCandidateStore(app).localUserId(), "LEFT", "OUTSIDE", "ELBOW", "PALM_UP_HORIZONTAL")
+        assertTrue(store.begin("external_rotation", "회전", true, "clock", "OUTSIDE", declared.copy(owner = "someone-else")).isFailure)
+        assertTrue(store.begin("external_rotation", "회전", false, "clock", "OUTSIDE", declared).isFailure)
+        assertTrue(store.begin("external_rotation", "회전", true, "clock", "INSIDE", declared).isFailure)
+        assertNull(store.active().getOrThrow())
+    }
     @Test fun nonVideoBytesCannotBecomeACompletedReferenceAndPhoneRuntimeRemainsAliveDuringCapture() {
         val app = RuntimeEnvironment.getApplication()
         val store = CalibrationCaptureStore(app)

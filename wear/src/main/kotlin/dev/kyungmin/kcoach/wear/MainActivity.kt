@@ -109,6 +109,7 @@ class MainActivity : Activity() {
     private val manualOutbox by lazy { ManualSetOutbox(this) }
     private val workoutControls by lazy { WatchWorkoutOutbox(this) }
     private lateinit var workoutControlButton: TextView
+    private lateinit var directionBypassButton: TextView
     private val restUiTicker = object : Runnable {
         override fun run() {
             if (!resting) return
@@ -300,6 +301,16 @@ class MainActivity : Activity() {
             setOnClickListener { requestWorkoutControl() }
         }
         details.addView(workoutControlButton)
+        directionBypassButton = label("방향 확인 없이 직접 시작", 12f, Color.rgb(0, 210, 185), true).apply {
+            gravity = Gravity.CENTER; setPadding(8, 10, 8, 10)
+            background = rounded(Color.rgb(18, 35, 30), 14)
+            setOnClickListener {
+                startService(Intent(this@MainActivity, WearWorkoutService::class.java)
+                    .putExtra(WearWorkoutService.EXTRA_COMMAND, "START_DIRECTION_BYPASS")
+                    .putExtra("session", sessionId).putExtra("setId", setId).putExtra("attemptId", attemptId))
+            }
+        }
+        details.addView(directionBypassButton)
         heartText = label("❤️ -- bpm", 12f, Color.rgb(255, 82, 82), true).apply {
             gravity = Gravity.CENTER
         }
@@ -382,6 +393,9 @@ class MainActivity : Activity() {
             runtimePhase == "CAPTURE_RECOVERY_REQUIRED" -> "센서 기록 복구 필요"
             runtimePhase == "MANUAL_PENDING" -> "횟수 저장 대기"
             runtimePhase == "MANUAL_CONFLICT" -> "횟수를 확인해 주세요"
+            running && runtimePhase == "START_DIRECTION_WAITING" -> "준비 손목 방향 확인"
+            running && runtimePhase == "WORKING_START_CONFIRMED" -> "손목 방향 확인 · 운동 중"
+            running && runtimePhase == "WORKING_START_BYPASSED" -> "직접 시작 · 방향 미확인"
             running && runtimePhase == "POSITIONING" -> "손목 안정 확인"
             running && runtimePhase in setOf("PREPARING", "BASELINE") -> "센서 기준 확인"
             running && runtimePhase == "CONTROLLED_REPS" -> "진동 후 동작 시작"
@@ -392,6 +406,7 @@ class MainActivity : Activity() {
             else -> "스마트폰 연결 대기"
         }
         val hasActiveExercise = running || resting || paused || (sessionId.isNotBlank() && setId.isNotBlank())
+        directionBypassButton.visibility = if (running && runtimePhase == "START_DIRECTION_WAITING") View.VISIBLE else View.GONE
         val offered = workoutControls.offer()
         val pendingControl = workoutControls.pending().firstOrNull()
         workoutControlButton.visibility = if (pendingControl != null || workoutControls.supportsControls() &&
@@ -407,6 +422,7 @@ class MainActivity : Activity() {
         val weightText = weightKg?.let { " · ${if (it % 1.0 == 0.0) it.toInt() else "%.1f".format(it)}kg" } ?: ""
         setText.text = when {
             runtimePhase == "CAPTURE_RECOVERY_REQUIRED" -> "센서 기록이 일부 없거나 손상됐어요"
+            running && runtimePhase == "START_DIRECTION_WAITING" -> "선택한 시작 손목 방향으로 2초 유지\n어렵다면 직접 시작할 수 있어요"
             running && runtimePhase == "WORKING_START_UNCHECKED" ->
                 "시작 방향 미확인\n세트 ${setIndex + 1} · 목표 ${targetReps}회$weightText"
             running && runtimePhase == "POSITIONING" ->
@@ -428,7 +444,7 @@ class MainActivity : Activity() {
         )
         repCaption.text = if (resting) "남은 휴식 / 전체 휴식" else if (manualRequired) "입력한 횟수 / 이번 세트 목표" else "추정 횟수 / 이번 세트 목표"
         repText.text = when {
-            running && runtimePhase in setOf("POSITIONING", "PREPARING", "BASELINE") -> "준비"
+            running && runtimePhase in setOf("POSITIONING", "PREPARING", "BASELINE", "START_DIRECTION_WAITING") -> "준비"
             resting -> "${countdown.remainingSeconds} / ${countdown.totalSeconds}초"
             manualRequired && manualStatus.isBlank() -> "— / ${targetReps}회"
             hasActiveExercise -> "$reps / ${targetReps}회"

@@ -12,7 +12,8 @@ enum class CalibrationCaptureStatus { RECORDING, REVIEW_PENDING, INTERRUPTED }
 data class CalibrationCapture(val id: String, val exerciseId: String, val exerciseName: String,
     val watchOnLeft: Boolean, val watchOrientation: String, val phoneClockId: String,
     val setId: String, val attemptId: String, val createdAtMs: Long, val status: CalibrationCaptureStatus,
-    val videoComplete: Boolean = false, val interruptionReason: String? = null, val ownerProcessId: String = "UNKNOWN")
+    val videoComplete: Boolean = false, val interruptionReason: String? = null, val ownerProcessId: String = "UNKNOWN",
+    val startWristContext: StartWristContext? = null)
 
 /** A stopped/interrupted clip remains its own immutable attempt, with original frame clocks. */
 class CalibrationCaptureStore(private val context: Context) {
@@ -20,21 +21,32 @@ class CalibrationCaptureStore(private val context: Context) {
     private val prefs = context.getSharedPreferences("calibration-captures", Context.MODE_PRIVATE)
 
     fun begin(exerciseId: String, name: String, watchOnLeft: Boolean, phoneClockId: String,
-              watchOrientation: String = "UNKNOWN"): Result<CalibrationCapture> = synchronized(lock) {
-        runCatching {
+              watchOrientation: String = "UNKNOWN", startWristContext: StartWristContext? = null): Result<CalibrationCapture> {
+        // PatternCandidateStore reads captures while holding its own lock. Resolve the immutable
+        // local owner first, so camera creation never takes these locks in the opposite order.
+        val owner = if (startWristContext == null) null else runCatching { PatternCandidateStore(context).localUserId() }
+            .getOrElse { return Result.failure(it) }
+        return synchronized(lock) { runCatching {
             require(exerciseId.isNotBlank() && name.isNotBlank() && phoneClockId.isNotBlank())
             require(watchOrientation in setOf("OUTSIDE", "INSIDE", "UNKNOWN"))
+            startWristContext?.let { declared ->
+                require(declared.exerciseId == ExerciseMotionCatalog.normalizeExerciseId(exerciseId) &&
+                    declared.owner == owner &&
+                    declared.side == if (watchOnLeft) "LEFT" else "RIGHT")
+                require(declared.placement == watchOrientation)
+            }
             check(SessionStore(context).loadActive().getOrThrow() == null) { "An active workout owns the watch" }
             check(prefs.getString("active", null) == null) { "Another camera capture is recording" }
             val capture = CalibrationCapture("paired-${UUID.randomUUID()}", exerciseId, name, watchOnLeft,
                 watchOrientation, phoneClockId, UUID.randomUUID().toString(), UUID.randomUUID().toString(),
-                System.currentTimeMillis(), CalibrationCaptureStatus.RECORDING, ownerProcessId = processOwner)
+                System.currentTimeMillis(), CalibrationCaptureStatus.RECORDING, ownerProcessId = processOwner,
+                startWristContext = startWristContext)
             val directory = directory(capture.id).also { check(it.mkdirs() || it.isDirectory) }
             writeMetadata(capture)
             check(File(directory, "frames.jsonl").createNewFile())
             check(prefs.edit().putString("active", capture.id).commit())
             capture
-        }
+        } }
     }
 
     fun load(id: String): Result<CalibrationCapture> = synchronized(lock) {
@@ -80,6 +92,11 @@ class CalibrationCaptureStore(private val context: Context) {
             require(manifest.payload["capturePurpose"] == CapturePurpose.PAIRED_REFERENCE.name && manifest.setId == capture.setId &&
                 manifest.payload[WirePayloadKeys.ATTEMPT_ID] == capture.attemptId && manifest.payload[WirePayloadKeys.EXERCISE_ID] == capture.exerciseId)
             require(manifest.payload["watchClockId"].orEmpty().isNotBlank())
+            capture.startWristContext?.let { declared ->
+                require(StartWristContextCodec.decode(manifest.payload["startWristContext"].orEmpty()) == declared)
+                require(manifest.payload["startWristDeviceId"].orEmpty().isNotBlank() &&
+                    manifest.payload["startWristDeviceId"] == manifest.payload["watchDeviceId"])
+            }
             require(received.rawFile.canonicalFile.parentFile == File(context.filesDir, "captures").canonicalFile)
             val link = File(directory(capture.id), "sensor.json")
             val json = JSONObject().put("manifest", WireCodec.encode(manifest)).put("captureId", received.validated.captureId)
@@ -167,6 +184,7 @@ class CalibrationCaptureStore(private val context: Context) {
             .put("setId", capture.setId).put("attemptId", capture.attemptId).put("createdAtMs", capture.createdAtMs)
             .put("status", capture.status.name).put("videoComplete", capture.videoComplete)
             .put("ownerProcessId", capture.ownerProcessId)
+            .put("startWristContext", capture.startWristContext?.let(StartWristContextCodec::encode) ?: JSONObject.NULL)
             .put("interruptionReason", capture.interruptionReason ?: JSONObject.NULL)
             .put("model", "pose_landmarker_lite-float16-1").put("purpose", "PAIRED_REFERENCE")
         FileOutputStream(temp).use { output -> output.write(json.toString().toByteArray(Charsets.UTF_8)); output.fd.sync() }
@@ -179,7 +197,9 @@ class CalibrationCaptureStore(private val context: Context) {
             json.getBoolean("watchOnLeft"), json.getString("watchOrientation"), json.getString("phoneClockId"),
             json.getString("setId"), json.getString("attemptId"), json.getLong("createdAtMs"),
             CalibrationCaptureStatus.valueOf(json.getString("status")), json.getBoolean("videoComplete"),
-            if (json.isNull("interruptionReason")) null else json.getString("interruptionReason"), json.optString("ownerProcessId", "UNKNOWN"))
+            if (json.isNull("interruptionReason")) null else json.getString("interruptionReason"), json.optString("ownerProcessId", "UNKNOWN"),
+            json.optString("startWristContext").takeIf { json.has("startWristContext") && !json.isNull("startWristContext") }
+                ?.let(StartWristContextCodec::decode))
     }
 
     companion object {

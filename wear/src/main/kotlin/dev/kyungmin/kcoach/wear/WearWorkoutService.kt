@@ -170,6 +170,9 @@ class WearWorkoutService : Service(), SensorEventListener {
     private var patternWearing = ""
     private var startWristContext = ""
     private var startWristDeviceId = ""
+    private var startDirectionSnapshot = ""
+    private var startDirectionStatus = "UNCONFIRMED"
+    private var countingStartNs: Long? = null
     private var patternSelectionMode = ""
     private var frozenActive: FrozenPatternProfile? = null
     private var activeDetector: dev.kyungmin.kcoach.core.ReviewedPatternDetector? = null
@@ -316,6 +319,17 @@ class WearWorkoutService : Service(), SensorEventListener {
             "REST" -> startRest(intent)
             "PAUSE" -> pauseSession()
             "RESUME" -> resumeSession()
+            "START_DIRECTION_BYPASS" -> {
+                require(intent.getStringExtra("session") == sessionId && intent.getStringExtra("setId") == setId &&
+                    intent.getStringExtra("attemptId") == attemptId) { "Bypass belongs to a different attempt" }
+                if (running && !measurementReady && startDirectionSnapshot.isNotEmpty()) {
+                    startDirectionStatus = "BYPASSED"
+                    // The next original sensor sample is the first counting sample, not a synthetic callback time.
+                    beginMeasurementCounting()
+                    check(checkpoint())
+                    sendLiveState(currentWorkingPhase(), true, force = true); broadcastState(force = true)
+                }
+            }
             "STOP", "END" -> finishSession("STOPPED", startId)
             "COMPLETE" -> finishSession("COMPLETE", startId)
             "CAPTURE_ACK" -> acknowledgeCapture(intent.getStringExtra("captureId").orEmpty())
@@ -386,6 +400,18 @@ class WearWorkoutService : Service(), SensorEventListener {
         }
         if ((running || paused && pausedRestRemainingMs == 0L) && incoming == sessionId && sameSet(intent) &&
             workingRequest && requestedStart != startWristContext) return "START_CONTEXT_CHANGED"
+        val requestedDirection = intent.getStringExtra("startDirectionSnapshot").orEmpty()
+        if (workingRequest && requestedDirection.isNotEmpty()) {
+            val profile = runCatching {
+                dev.kyungmin.kcoach.core.StartDirectionRuntimeCodec.hash(requestedDirection)
+                dev.kyungmin.kcoach.core.StartDirectionRuntimeCodec.decode(requestedDirection)
+            }.getOrNull() ?: return "INVALID"
+            if (dev.kyungmin.kcoach.core.CapturePurpose.forSession(incoming) != dev.kyungmin.kcoach.core.CapturePurpose.WORKOUT ||
+                profile.key.deviceId != WearClockEpoch.current(this).deviceId ||
+                profile.key.context != runCatching { dev.kyungmin.kcoach.core.StartWristContextCodec.decode(requestedStart) }.getOrNull()) return "INVALID"
+        }
+        if ((running || paused && pausedRestRemainingMs == 0L) && incoming == sessionId && sameSet(intent) &&
+            workingRequest && requestedDirection != startDirectionSnapshot) return "START_PROFILE_CHANGED"
         val binding = if (type in setOf("START", "SET", "SYNC")) runCatching { incomingPatternBinding(intent) }.getOrElse { return "INVALID" }
             else intent.getStringExtra("patternBinding").orEmpty()
         if (binding.isNotEmpty() && type in setOf("START", "SET", "SYNC")) {
@@ -423,13 +449,19 @@ class WearWorkoutService : Service(), SensorEventListener {
         intent.getStringExtra("patternWearing")?.takeIf { it.isNotEmpty() }?.let { boundFields = boundFields + it }
         intent.getStringExtra("patternSelectionMode")?.takeIf { it.isNotEmpty() }?.let { boundFields = boundFields + it }
         intent.getStringExtra("startWristContext")?.takeIf { it.isNotEmpty() }?.let { boundFields = boundFields + it }
+        intent.getStringExtra("startDirectionSnapshot")?.takeIf { it.isNotEmpty() }?.let { boundFields = boundFields + it }
         return SensorCaptureFormat.sha256(JSONArray(boundFields).toString().toByteArray(Charsets.UTF_8))
     }
 
     private fun acknowledgeCommand(intent: Intent, status: String) {
         val revision = intent.getLongExtra("commandRevision", 0)
         if (revision <= 0) return
-        val payload = listOf("1", intent.getStringExtra("session").orEmpty(), revision, status, lastCommandRevision).joinToString("|")
+        val receipt = if (status in setOf("APPLIED", "DUPLICATE") &&
+            intent.getStringExtra("startDirectionSnapshot").orEmpty().isNotEmpty() &&
+            intent.getStringExtra("startDirectionSnapshot") == startDirectionSnapshot)
+            dev.kyungmin.kcoach.core.StartDirectionRuntimeCodec.hash(startDirectionSnapshot) else ""
+        val payload = listOf("1", intent.getStringExtra("session").orEmpty(), revision, status, lastCommandRevision)
+            .let { if (receipt.isEmpty()) it else it + receipt }.joinToString("|")
         sendToPhone(WearSync.PATH_COMMAND_ACK, payload, coalescible = false)
     }
 
@@ -538,6 +570,8 @@ class WearWorkoutService : Service(), SensorEventListener {
             .put("patternWearing", patternWearing)
             .put("patternSelectionMode", patternSelectionMode)
             .put("startWristContext", startWristContext).put("startWristDeviceId", startWristDeviceId)
+            .put("startDirectionSnapshot", startDirectionSnapshot).put("startDirectionStatus", startDirectionStatus)
+            .put("countingStartNs", countingStartNs ?: JSONObject.NULL)
             .put("activeInterrupted", activeInterrupted)
             .put("activeSampleCalls", activeSampleCalls)
         runtimePrefs.edit().putString("state", state.toString()).putLong("commandRevision", lastCommandRevision).putString("lastAppliedCommand", lastAppliedCommand).commit()
@@ -582,7 +616,6 @@ class WearWorkoutService : Service(), SensorEventListener {
             paired = false; lastPhoneHeartbeatAtMs = 0
             val ownsWorkingSet = running || (paused && pausedRestRemainingMs == 0L)
             patternSelectionMode = state.optString("patternSelectionMode")
-            configureTracking(state.optString("trackingProfileSnapshot").takeIf { it.isNotBlank() && ownsWorkingSet })
             patternBinding = state.optString("patternBinding")
             patternWearing = state.optString("patternWearing")
             startWristContext = state.optString("startWristContext")
@@ -593,12 +626,31 @@ class WearWorkoutService : Service(), SensorEventListener {
                 require(start.owner == wearing.owner && start.side == wearing.side && start.placement == wearing.placement)
                 require(startWristDeviceId == WearClockEpoch.current(this).deviceId)
             }
+            startDirectionSnapshot = state.optString("startDirectionSnapshot")
+            if (startDirectionSnapshot.isNotEmpty()) {
+                val profile = dev.kyungmin.kcoach.core.StartDirectionRuntimeCodec.decode(startDirectionSnapshot)
+                require(profile.key.deviceId == startWristDeviceId &&
+                    profile.key.context == dev.kyungmin.kcoach.core.StartWristContextCodec.decode(startWristContext))
+            }
+            configureTracking(state.optString("trackingProfileSnapshot").takeIf { it.isNotBlank() && ownsWorkingSet })
+            if (!bootChanged && startDirectionSnapshot.isNotEmpty()) {
+                val previousStatus = state.optString("startDirectionStatus")
+                countingStartNs = if (state.has("countingStartNs") && !state.isNull("countingStartNs")) state.getLong("countingStartNs").also { require(it > 0) } else null
+                require(previousStatus in setOf("WAITING", "CONFIRMED", "BYPASSED"))
+                startDirectionStatus = previousStatus
+                if (previousStatus in setOf("CONFIRMED", "BYPASSED")) {
+                    measurementReady = true; measurementArmed = true
+                    forearmRotationDetector?.beginCounting(); profiledMotionDetector?.beginCounting()
+                }
+            }
             configureActive()
             activeUseConfirmed = state.optBoolean("activeUseConfirmed")
             activeInterrupted = state.optBoolean("activeInterrupted")
             activeSampleCalls = state.optInt("activeSampleCalls")
             if (activeDetector != null && captureSampleCount > 0)
-                readCaptureChunks(captureSampleCount).forEach { chunk -> chunk.records.forEach { activeDetector!!.add(it.sample) } }
+                readCaptureChunks(captureSampleCount).forEach { chunk -> chunk.records.filter {
+                    startDirectionSnapshot.isEmpty() || countingStartNs?.let { start -> it.sample.timestampNs >= start } == true
+                }.forEach { activeDetector!!.add(it.sample) } }
             patternShadowCommandId = state.optString("patternShadowCommandId")
             shadowCount = state.optInt("shadowCount")
             shadowInterrupted = state.optBoolean("shadowInterrupted") || patternShadowCommandId.isNotEmpty()
@@ -649,6 +701,11 @@ class WearWorkoutService : Service(), SensorEventListener {
         captureAttemptInterrupted = interrupted
         captureBootCount = currentBoot
         sensorClockNeedsCheck = false
+        if (startDirectionSnapshot.isNotEmpty()) {
+            startDirectionStatus = "WAITING"; countingStartNs = null
+            measurementReady = false; measurementArmed = true
+            startPoseGate = StartPoseStabilityGate(dev.kyungmin.kcoach.core.StartDirectionRuntimeCodec.decode(startDirectionSnapshot).gateConfig)
+        }
         persistRuntime()
         return true
     }
@@ -822,13 +879,15 @@ class WearWorkoutService : Service(), SensorEventListener {
         lastAccelerometerNs = null; lastAccelerometerAccuracy = null; lastHeartRateNs = null
         calibrationStage = if (sessionId.startsWith("calibration-")) CalibrationStage.BASELINE else null
         patternSelectionMode = intent.getStringExtra("patternSelectionMode").orEmpty()
-        configureTracking()
         // Any unresolved previous chunks stay on disk instead of being erased
         // when a replacement set starts.
         resetCaptureBuffer(deleteChunks = false)
         patternWearing = intent.getStringExtra("patternWearing").orEmpty()
         startWristContext = intent.getStringExtra("startWristContext").orEmpty()
         startWristDeviceId = if (startWristContext.isEmpty()) "" else WearClockEpoch.current(this).deviceId
+        startDirectionSnapshot = intent.getStringExtra("startDirectionSnapshot").orEmpty()
+        countingStartNs = null
+        configureTracking()
         patternBinding = incomingPatternBinding(intent)
         configureActive()
         patternShadowCommandId = intent.getStringExtra("patternShadowCommandId").orEmpty()
@@ -989,10 +1048,12 @@ class WearWorkoutService : Service(), SensorEventListener {
         // baseline is a separate sensor-stability task, not an exercise posture verdict.
         val needsCalibrationBaseline = calibrationStage == CalibrationStage.BASELINE &&
             trackingProfile.mode != TrackingMode.MANUAL_REQUIRED
-        measurementReady = !needsCalibrationBaseline
+        val direction = startDirectionSnapshot.takeIf { it.isNotEmpty() }?.let(dev.kyungmin.kcoach.core.StartDirectionRuntimeCodec::decode)
+        startDirectionStatus = if (direction != null) "WAITING" else dev.kyungmin.kcoach.core.StartWristOrientationPolicy.uncheckedStartStatus(exerciseId)
+        measurementReady = !needsCalibrationBaseline && direction == null
         measurementArmed = measurementReady
         startPoseGate = if (measurementReady) null else
-            StartPoseStabilityGate(StartPoseGateConfig.forProfile(trackingProfile).copy(requireSetupMotion = false))
+            StartPoseStabilityGate(direction?.gateConfig ?: StartPoseGateConfig.forProfile(trackingProfile).copy(requireSetupMotion = false))
         if (measurementReady && trackingProfile.mode != TrackingMode.MANUAL_REQUIRED) {
             forearmRotationDetector?.beginCounting()
             profiledMotionDetector?.beginCounting()
@@ -1089,7 +1150,9 @@ class WearWorkoutService : Service(), SensorEventListener {
             if (measurementReady || trackingProfile.mode == TrackingMode.MANUAL_REQUIRED) {
                 sendLiveState(currentWorkingPhase(), true, force = true)
             } else {
-                startPoseGate = StartPoseStabilityGate(StartPoseGateConfig.forProfile(trackingProfile).copy(requireSetupMotion = false))
+                startPoseGate = StartPoseStabilityGate(startDirectionSnapshot.takeIf { it.isNotEmpty() }
+                    ?.let(dev.kyungmin.kcoach.core.StartDirectionRuntimeCodec::decode)?.gateConfig
+                    ?: StartPoseGateConfig.forProfile(trackingProfile).copy(requireSetupMotion = false))
                 measurementArmed = true
                 sendLiveState(currentWorkingPhase(), true, force = true)
             }
@@ -1158,7 +1221,7 @@ class WearWorkoutService : Service(), SensorEventListener {
                 lastGyro = event.values.copyOf()
                 if (running) observeShadow(SensorSample(event.timestamp, lastAccel[0], lastAccel[1], lastAccel[2],
                     lastGyro[0], lastGyro[1], lastGyro[2], sensorAccuracy = event.accuracy))
-                if (running && dev.kyungmin.kcoach.core.CapturePurpose.forSession(sessionId).preservePreparation) {
+                if (running && (dev.kyungmin.kcoach.core.CapturePurpose.forSession(sessionId).preservePreparation || startDirectionSnapshot.isNotEmpty())) {
                     captureSensorSample(SensorSample(event.timestamp, lastAccel[0], lastAccel[1], lastAccel[2],
                         lastGyro[0], lastGyro[1], lastGyro[2], sensorAccuracy = event.accuracy))
                 }
@@ -1174,18 +1237,27 @@ class WearWorkoutService : Service(), SensorEventListener {
                         sensorAccuracy = event.accuracy,
                     )
                     if (!measurementReady) {
-                        val gate = startPoseGate?.observe(sensorSample, lastAccelerometerNs)
+                        val gate = startPoseGate?.observe(sensorSample, lastAccelerometerNs, lastAccelerometerAccuracy)
                         measurementArmed = gate?.armed == true
                         if (gate?.ready == true) {
+                            if (startDirectionSnapshot.isNotEmpty()) {
+                                startDirectionStatus = "CONFIRMED"
+                            }
                             if (calibrationStage == CalibrationStage.BASELINE) {
                                 calibrationStage = CalibrationStage.CONTROLLED_REPS
                                 Log.i(CALIBRATION_TAG, "stage=CONTROLLED_REPS session=$sessionId exerciseId=$exerciseId")
                             }
                             beginMeasurementCounting()
+                            if (startDirectionSnapshot.isNotEmpty()) check(checkpoint())
                             sendLiveState(currentWorkingPhase(), true, force = true)
                             broadcastState(force = true)
                         }
                     } else {
+                        if (startDirectionSnapshot.isNotEmpty() && countingStartNs == null) {
+                            require(startDirectionStatus in setOf("CONFIRMED", "BYPASSED"))
+                            countingStartNs = sensorSample.timestampNs
+                            check(checkpoint())
+                        }
                         // Persist the same sample used by the live detector before it can
                         // complete the set. Callback delivery time must not discard a batch.
                         captureSensorSample(sensorSample)
@@ -1317,6 +1389,9 @@ class WearWorkoutService : Service(), SensorEventListener {
         CalibrationStage.CONTROLLED_REPS -> "CONTROLLED_REPS"
         null -> when {
             trackingProfile.mode == TrackingMode.MANUAL_REQUIRED -> "MANUAL_REQUIRED"
+            startDirectionSnapshot.isNotEmpty() && !measurementReady -> "START_DIRECTION_WAITING"
+            startDirectionSnapshot.isNotEmpty() && startDirectionStatus == "CONFIRMED" -> "WORKING_START_CONFIRMED"
+            startDirectionSnapshot.isNotEmpty() && startDirectionStatus == "BYPASSED" -> "WORKING_START_BYPASSED"
             !measurementReady && !measurementArmed -> "POSITIONING"
             !measurementReady -> "PREPARING"
             dev.kyungmin.kcoach.core.StartWristOrientationPolicy.uncheckedStartStatus(exerciseId) == "UNCONFIRMED" -> "WORKING_START_UNCHECKED"
@@ -1472,7 +1547,9 @@ class WearWorkoutService : Service(), SensorEventListener {
                     "patternBinding" to patternBinding,
                     "patternWearing" to patternWearing,
                     "patternSelectionMode" to patternSelectionMode,
-                    "startDirectionStatus" to dev.kyungmin.kcoach.core.StartWristOrientationPolicy.uncheckedStartStatus(exerciseId),
+                    "startDirectionStatus" to startDirectionStatus,
+                    "startDirectionSnapshot" to startDirectionSnapshot,
+                    "countingStartNs" to countingStartNs?.toString().orEmpty(),
                     "startDirectionCandidate" to dev.kyungmin.kcoach.core.StartWristOrientationPolicy.candidate(exerciseId).name,
                     "startWristContext" to startWristContext,
                     "startWristDeviceId" to startWristDeviceId,
@@ -1730,6 +1807,7 @@ class WearWorkoutService : Service(), SensorEventListener {
         patternShadowCommandId = ""; frozenShadow = null; shadowDetector = null; shadowUseConfirmed = false; shadowCount = 0; shadowInterrupted = false
         patternBinding = ""; patternWearing = ""; patternSelectionMode = ""; frozenActive = null; activeDetector = null; activeUseConfirmed = false; activeInterrupted = false
         startWristContext = ""; startWristDeviceId = ""
+        startDirectionSnapshot = ""; countingStartNs = null; startDirectionStatus = "UNCONFIRMED"
         sessionId = ""
         setId = ""; attemptId = ""
         exerciseId = ""

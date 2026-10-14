@@ -64,7 +64,8 @@ class StartPoseStabilityGate(
         setupMotionSamples = 0
     }
 
-    fun observe(sample: SensorSample, accelerationTimestampNs: Long? = sample.timestampNs): StartPoseGateObservation {
+    fun observe(sample: SensorSample, accelerationTimestampNs: Long? = sample.timestampNs,
+        accelerationAccuracy: Int? = sample.sensorAccuracy): StartPoseGateObservation {
         val timestampNs = sample.timestampNs
         if (timestampNs <= 0L || (lastTimestampNs > 0L && timestampNs <= lastTimestampNs)) {
             reset()
@@ -77,7 +78,8 @@ class StartPoseStabilityGate(
 
         if (accelerationTimestampNs == null || accelerationTimestampNs <= 0L ||
             accelerationTimestampNs > timestampNs || timestampNs - accelerationTimestampNs > config.maxAccelerationAgeMs * 1_000_000L ||
-            sample.sensorAccuracy == 0) {
+            sample.sensorAccuracy == 0 || accelerationAccuracy == 0 ||
+            config.expectedGravity != null && (sample.sensorAccuracy !in 1..3 || accelerationAccuracy !in 1..3)) {
             resetStability(timestampNs)
             return observation(candidate = false, stable = false, stableDurationMs = 0L)
         }

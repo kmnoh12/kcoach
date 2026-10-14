@@ -121,6 +121,16 @@ object WearSync {
         return fields.joinToString("|")
     }
 
+    fun withStartDirectionProfile(payload: String, profile: StartDirectionRuntimeProfile): String {
+        val fields = parse(payload).toMutableList()
+        require(fields.firstOrNull() == "2" && fields.getOrNull(1) in setOf("START", "SET", "SYNC"))
+        require(CapturePurpose.forSession(fields[2]) == CapturePurpose.WORKOUT)
+        require(StartWristContextCodec.decode(fields.getOrNull(19).orEmpty()) == profile.key.context)
+        while (fields.size < 21) fields.add("")
+        fields[20] = StartDirectionRuntimeCodec.encode(profile)
+        return fields.joinToString("|")
+    }
+
     fun hello(device: String): String = listOf("1", device, System.currentTimeMillis()).joinToString("|")
 
     fun heartbeat(device: String): String = listOf("1", device, System.currentTimeMillis()).joinToString("|")

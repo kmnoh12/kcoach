@@ -91,6 +91,13 @@ class CaptureClockStore(private val context: Context) {
         }
     }
 
+    fun startWristContextSupported(captureId: String): Boolean = synchronized(lock) {
+        val values = JSONArray(prefs.getString(samplesKey(captureId, "START"), "[]")!!)
+        pairedCaptureSupported(captureId) && (0 until values.length()).all {
+            WireCodec.decode(values.getJSONObject(it).getString("reply")).payload["startWristContextFormat"] == "1"
+        }
+    }
+
     private fun samplesKey(captureId: String, window: String) = "samples:$captureId:$window"
     companion object { private val lock = Any() }
 }

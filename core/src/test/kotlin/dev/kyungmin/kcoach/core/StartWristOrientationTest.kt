@@ -13,7 +13,7 @@ class StartWristOrientationTest {
         maxGyroMagnitude = 0.5,
         maxGravityMagnitudeError = 0.5,
     ))
-    private fun sample(ms: Long, z: Float = -9.80665f) = SensorSample(ms * 1_000_000L, 0f, 0f, z, 0f, 0f, 0f)
+    private fun sample(ms: Long, z: Float = -9.80665f) = SensorSample(ms * 1_000_000L, 0f, 0f, z, 0f, 0f, 0f, sensorAccuracy = 3)
 
     @Test fun oppositeQuietDirectionNeverPassesAndTheCorrectDirectionNeedsItsOwnFullHold() {
         val gate = gate()
@@ -38,14 +38,18 @@ class StartWristOrientationTest {
     }
 
     @Test fun missingStaleFutureAndUnreliableSamplesCannotCompleteAHold() {
-        for (case in 0..3) {
+        for (case in 0..7) {
             val gate = gate()
             for (ms in 1000L..2900L step 100L) gate.observe(sample(ms))
             val observation = when (case) {
                 0 -> gate.observe(sample(3000L), null)
                 1 -> gate.observe(sample(3000L), 2_800_000_000L)
                 2 -> gate.observe(sample(3000L), 3_001_000_000L)
-                else -> gate.observe(sample(3000L).copy(sensorAccuracy = 0))
+                3 -> gate.observe(sample(3000L).copy(sensorAccuracy = 0))
+                4 -> gate.observe(sample(3000L), 3_000_000_000L, 0)
+                5 -> gate.observe(sample(3000L), 3_000_000_000L, null)
+                6 -> gate.observe(sample(3000L).copy(sensorAccuracy = null))
+                else -> gate.observe(sample(3000L).copy(sensorAccuracy = 4))
             }
             assertFalse(observation.ready)
             assertFalse(observation.candidate)

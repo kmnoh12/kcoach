@@ -336,7 +336,7 @@ class PhoneWearListenerService : WearableListenerService() {
 
     private fun analyzeAndPersistCapture(received: ReceivedCapture) {
         val manifest = received.manifest
-        val document = received.validated.document
+        val rawDocument = received.validated.document
         val captureId = received.validated.captureId
         val watchReps = manifest.payload[WirePayloadKeys.WATCH_REPS]?.toIntOrNull()
         val exerciseId = manifest.payload[WirePayloadKeys.EXERCISE_ID].orEmpty()
@@ -348,7 +348,7 @@ class PhoneWearListenerService : WearableListenerService() {
             return // Paired raw data is reviewed before learning; the legacy builder never adopts it.
         }
         if (manifest.sessionId.startsWith("calibration-")) {
-            persistCalibrationResult(manifest, document, exerciseId, exerciseName)
+            persistCalibrationResult(manifest, rawDocument, exerciseId, exerciseName)
         }
         val personal = prefs.getString("personalProfile:$exerciseId", null)
             ?.let { runCatching { PersonalCalibrationProfileCodec.decode(it) }.getOrNull() }
@@ -366,7 +366,22 @@ class PhoneWearListenerService : WearableListenerService() {
             PersonalCalibrationBuilder.personalizedTrackingProfile(personal, generic)
         }
         val activeSnapshot = manifest.payload["patternActiveSnapshot"]?.takeIf { it.isNotEmpty() }
-        val analysis = if (activeSnapshot != null) {
+        val directionSnapshot = manifest.payload["startDirectionSnapshot"].orEmpty()
+        val document = if (directionSnapshot.isEmpty()) rawDocument else {
+            val direction = dev.kyungmin.kcoach.core.StartDirectionRuntimeCodec.decode(directionSnapshot)
+            require(direction.key.context == dev.kyungmin.kcoach.core.StartWristContextCodec.decode(manifest.payload.getValue("startWristContext")) &&
+                direction.key.deviceId == manifest.payload["watchDeviceId"] && direction.key.context.exerciseId == generic.exerciseId)
+            val status = manifest.payload["startDirectionStatus"]
+            require(status in setOf("WAITING", "CONFIRMED", "BYPASSED"))
+            val boundary = manifest.payload["countingStartNs"]?.takeIf { it.isNotEmpty() }?.toLong()
+            if (status == "WAITING") require(boundary == null)
+            dev.kyungmin.kcoach.core.StartDirectionMeasurementWindow.select(rawDocument,
+                boundary.takeIf { status in setOf("CONFIRMED", "BYPASSED") })
+        }
+        val analysis = if (document == null) {
+            PhoneRepAnalyzer.analyze(rawDocument.copy(records = emptyList()), trackingProfile, null).result.copy(
+                trackingStatus = "준비만 기록됨 · 실제 횟수 입력 필요")
+        } else if (activeSnapshot != null) {
             val runtime = dev.kyungmin.kcoach.core.PatternRuntimeCodec.decode(java.util.Base64.getDecoder().decode(activeSnapshot))
             val binding = dev.kyungmin.kcoach.core.PatternCompatibilityCodec.decode(manifest.payload.getValue("patternBinding"))
             require(runtime.compatibility == binding && runtime.candidateHash == manifest.payload["patternActiveCandidateHash"] &&
@@ -391,7 +406,7 @@ class PhoneWearListenerService : WearableListenerService() {
             .putExtra("exerciseId", manifest.payload[WirePayloadKeys.EXERCISE_ID].orEmpty())
             .putExtra("exerciseName", manifest.payload[WirePayloadKeys.EXERCISE_NAME].orEmpty())
             .putExtra("setIndex", manifest.payload[WirePayloadKeys.SET_INDEX]?.toIntOrNull() ?: 0)
-            .putExtra("sampleCount", document.sampleCount)
+            .putExtra("sampleCount", rawDocument.sampleCount)
             .putExtra("watchReps", analysis.watchDetectedReps ?: -1)
             .putExtra("phoneReps", analysis.phoneReanalyzedReps ?: -1)
             .putExtra("confirmedReps", analysis.confirmedReps ?: -1)
