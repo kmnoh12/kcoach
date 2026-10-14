@@ -41,7 +41,7 @@
   "actual_account_inference": false,
   "physical_device_test": false,
   "user_delivery_flow": "update_then_user_usage_feedback",
-  "status": "PUBLISHED",
+  "status": "WITHDRAWN_TO_DRAFT",
   "integration": {
     "old_head": "3cbdcdebbe5cc60b918fe10dee36bfa4047c156d",
     "new_head": "475026d8b652a9e02d311ed744ce5d83e420a6f5",
@@ -94,5 +94,15 @@
       "asset_digest_verified": true,
       "resolved_asset_host": "release-assets.githubusercontent.com"
     }
+  },
+  "latest_public_release": "p0.7.5-w0.2.5",
+  "release_scope_correction": {
+    "full_codex2_work_included": false,
+    "included_codex2_through": "3cbdcdebbe5cc60b918fe10dee36bfa4047c156d",
+    "pending_paths_preserved_locally_not_packaged": 13,
+    "textual_merge_conflicts": false,
+    "complete_functional_integration_verified": false,
+    "published_before_original_session_completion": true,
+    "new_public_release_requires_original_work_completion_and_integration": true
   }
 }
