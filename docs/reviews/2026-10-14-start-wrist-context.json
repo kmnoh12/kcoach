@@ -64,5 +64,9 @@
     "Service recreation preserves the original context",
     "Authoritative resting sync does not require working context",
     "Deferred/basic starts do not receive candidate conditions"
-  ]
+  ],
+  "sourceCommit": "b8c0a69",
+  "pendingBuildSessionId": 54890,
+  "wearOtaSignatureVerified": true,
+  "wearOtaCertificateSha256": "45130eab69678aeee288c565de466912b97dab48c317cbcf0983430a22c1da2c"
 }
