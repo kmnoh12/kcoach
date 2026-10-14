@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "checkedAtUtc": "2026-10-14T07:45:23.918046+00:00",
+  "scope": "PUBLISHED_GITHUB_UPDATE_DELIVERY",
+  "releaseTag": "p0.7.4-w0.2.5",
+  "releaseUrl": "https://github.com/kmnoh12/kcoach/releases/tag/p0.7.4-w0.2.5",
+  "publishedAt": "2026-10-14T07:44:09Z",
+  "sourceCommit": "61df084f56274dfece918338202c6a63662a9848",
+  "artifacts": {
+    "phone": {
+      "latestManifestUrl": "https://github.com/kmnoh12/kcoach/releases/latest/download/update-phone.json",
+      "manifest": {
+        "versionCode": 34,
+        "versionName": "0.7.4",
+        "apkUrl": "https://github.com/kmnoh12/kcoach/releases/download/p0.7.4-w0.2.5/kcoach-phone.apk",
+        "sha256": "35022b44a8bb291068b69b15c637a41243da6e8ef57423832af8db414ff5529a"
+      },
+      "remoteApkBytes": 59947200,
+      "remoteApkSha256": "35022b44a8bb291068b69b15c637a41243da6e8ef57423832af8db414ff5529a",
+      "matchesLocalReleaseApk": true,
+      "signatureVerified": true,
+      "certificateSha256": "45130eab69678aeee288c565de466912b97dab48c317cbcf0983430a22c1da2c",
+      "matchesPreviousPublishedCertificate": true,
+      "matchesPrepublicationApkHash": false,
+      "resolvedManifestHost": "release-assets.githubusercontent.com"
+    },
+    "watch": {
+      "latestManifestUrl": "https://github.com/kmnoh12/kcoach/releases/latest/download/update-watch.json",
+      "manifest": {
+        "versionCode": 33,
+        "versionName": "0.2.5",
+        "apkUrl": "https://github.com/kmnoh12/kcoach/releases/download/p0.7.4-w0.2.5/kcoach-watch.apk",
+        "sha256": "a17ce02ebe9f7a4f557e295457ca43087d1c01859f8a49c1efc3bba50aec8ee9"
+      },
+      "remoteApkBytes": 818372,
+      "remoteApkSha256": "a17ce02ebe9f7a4f557e295457ca43087d1c01859f8a49c1efc3bba50aec8ee9",
+      "matchesLocalReleaseApk": true,
+      "signatureVerified": true,
+      "certificateSha256": "45130eab69678aeee288c565de466912b97dab48c317cbcf0983430a22c1da2c",
+      "matchesPreviousPublishedCertificate": true,
+      "matchesPrepublicationApkHash": false,
+      "resolvedManifestHost": "release-assets.githubusercontent.com"
+    }
+  },
+  "userAuthorization": "기존 앱 업데이트로 먼저 배포",
+  "installedVerified": false,
+  "hardwareVerified": false,
+  "accuracyImprovementVerified": false,
+  "actualAiAccountInferenceVerified": false,
+  "entireGoalComplete": false,
+  "limits": [
+    "tools/release.sh repackaged both APKs from the verified source commit; final public hashes differ from the earlier preparation artifacts. Final public bytes and signing certificates were verified independently.",
+    "Publishing and download verification do not prove installation or record retention on a physical device.",
+    "Watch8 accuracy, camera timing, battery and real ChatGPT account inference remain unverified."
+  ]
+}
