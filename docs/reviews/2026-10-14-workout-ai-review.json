@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "checkedAtUtc": "2026-10-14T10:42:41.110566+00:00",
+  "scope": "MANUALLY_REQUESTED_WORKOUT_REVIEW_V2_AND_RESTORED_COACH_UI",
+  "baseCommit": "b02f99e",
+  "restoredCoachCommit": "9d557b8",
+  "phoneTests": {
+    "tests": 253,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "lint": {
+    "Error": 0,
+    "Fatal": 0,
+    "Warning": 154
+  },
+  "debugBuildSucceeded": true,
+  "automaticInferenceOnWorkoutFinish": false,
+  "requestsRequireExplicitUserAction": true,
+  "completedReviewDeduplication": true,
+  "cancelledAndInterruptedRequestsAreNotRetriedAutomatically": true,
+  "originalCoachStashPreserved": "f2c69de9ac2d6f262fc3310aa1060f8c93a90e5e",
+  "realAccountInferenceVerified": false,
+  "physicalDeviceVerified": false,
+  "published": false,
+  "entireGoalComplete": false,
+  "finalValidationLogSha256": "0f2d7d131a3fe063d91df04d0d385fbbe0847d8baaaf663be9442a4ff74db9be",
+  "officialRequestContract": "https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations"
+}
