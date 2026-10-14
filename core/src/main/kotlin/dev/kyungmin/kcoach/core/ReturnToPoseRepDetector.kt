@@ -35,7 +35,7 @@ internal class ReturnToPoseRepDetector(private val minimumRepMs: Long) {
         val t = sample.timestampNs
         val values = doubleArrayOf(sample.accelerationX.toDouble(), sample.accelerationY.toDouble(), sample.accelerationZ.toDouble())
         val gyro = doubleArrayOf(sample.gyroscopeX.toDouble(), sample.gyroscopeY.toDouble(), sample.gyroscopeZ.toDouble())
-        if (t <= 0L || values.any { !it.isFinite() } || gyro.any { !it.isFinite() }) {
+        if (t <= 0L || sample.sensorAccuracy == 0 || values.any { !it.isFinite() } || gyro.any { !it.isFinite() }) {
             resetCycle(); waitForBottom = true
             return null
         }

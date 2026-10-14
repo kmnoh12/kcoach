@@ -85,6 +85,7 @@ class ProfiledMotionRepDetector(
 
     fun add(sample: SensorSample): ProfiledMotionRepEvent? {
         poseCounter?.let { return it.add(sample) }
+        if (sample.sensorAccuracy == 0) { resetAll(); lastTimestampNs = 0L; return null }
         val timestampNs = sample.timestampNs
         if (lastTimestampNs > 0L && timestampNs <= lastTimestampNs) return null
         val dtMs = if (lastTimestampNs > 0L) {

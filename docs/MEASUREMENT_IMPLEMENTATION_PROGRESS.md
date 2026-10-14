@@ -15,9 +15,15 @@
 - 가속도 신뢰도 0을 자이로 신뢰도 3으로 가리는 원본에서 자동 3회를 확정하는 결함을 대상 검사로 재현했다.
   불량·오래된·미래 가속도를 확정 횟수/관측 지표/개인 패턴 학습/독립·고정 검증에서 제외한다.
   없는 구형 metadata를 정상 품질이나 실제 0회로 바꾸는 정책은 추가하지 않는다.
+- 워치 실시간 경로도 같은 원본 품질을 사용한다. 불량 구간은 미완료 판정 창을 끊고 정상 구간에서
+  다시 센다. 원본의 자이로/가속도 신뢰도는 변경하지 않으며, 폰 재분석도 같은 입력 정책을 사용한다.
+  전부 불량인 원본은 재분석 0회가 아닌 미확인이다. 개인 반복 엔진 선택이 별도 준비 방향 게이트를
+  지우는 조합 결함도 재현/수정했다.
 - 근거는 work/start-direction-runtime-focused.log, work/start-direction-recovery-focused.log,
   work/acceleration-quality-red.log, work/acceleration-quality-focused.log,
   work/acceleration-learning-focused.log, work/video-retention-focused.log의 대상 클래스 검사다.
+  후속 조합 검사는 work/start-direction-personal-red.log / work/start-direction-personal-focused.log,
+  work/wear-acceleration-quality-red.log / work/live-sensor-quality-core-focused.log를 따른다.
   합성 플랫폼·센서 자료 검사이며 실제 MediaPipe/Watch8 성공이나 정확도 향상 증거가 아니다.
 - 카메라 초기화 실패의 사용자 상세 오류, 실제 동작 확인, 코덱스1 후순위 인계 통합,
   나머지 전체 기획 대조 뒤 최종 전체 검사/lint/OTA/릴리스가 남아 있다.

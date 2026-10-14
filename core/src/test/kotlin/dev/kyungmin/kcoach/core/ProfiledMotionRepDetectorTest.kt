@@ -5,6 +5,19 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class ProfiledMotionRepDetectorTest {
+    @Test fun knownUnreliableSignedLobesCannotCompleteARep() {
+        val detector = ProfiledMotionRepDetector(testProfile(MotionFamily.PULL_RETURN, TrackingSignal.ROTATION_ENERGY))
+        var t = 1_000_000_000L
+        var count = 0
+        repeat(3) {
+            for (rate in listOf(1.25f, 0f, -1.25f, 0f)) repeat(20) {
+                if (detector.add(sample(t, rate, 0f).copy(sensorAccuracy = 0)) != null) count++
+                t += 50_000_000L
+            }
+        }
+        assertEquals(0, count)
+        assertTrue(detector.finish() == null)
+    }
     @Test
     fun countsOnlyCompletedFlexionExtensionCycles() {
         val detector = ProfiledMotionRepDetector(testProfile(MotionFamily.FLEXION_EXTENSION, TrackingSignal.ROTATION_ENERGY))

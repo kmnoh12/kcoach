@@ -95,6 +95,10 @@ class ForearmRotationRepDetector(
     }
 
     fun add(sample: SensorSample): ForearmRotationRepEvent? {
+        if (sample.sensorAccuracy == 0) {
+            resetMotion(releaseAxis = preferredAxis == null); lastTimestampNs = 0L
+            return null
+        }
         val timestampNs = sample.timestampNs
         if (lastTimestampNs > 0L && timestampNs <= lastTimestampNs) return null
         val dtMs = if (lastTimestampNs > 0L) {

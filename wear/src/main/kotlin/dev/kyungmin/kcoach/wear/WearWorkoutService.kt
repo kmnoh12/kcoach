@@ -650,7 +650,8 @@ class WearWorkoutService : Service(), SensorEventListener {
             if (activeDetector != null && captureSampleCount > 0)
                 readCaptureChunks(captureSampleCount).forEach { chunk -> chunk.records.filter {
                     startDirectionSnapshot.isEmpty() || countingStartNs?.let { start -> it.sample.timestampNs >= start } == true
-                }.forEach { activeDetector!!.add(it.sample) } }
+                }.forEach { record -> activeDetector!!.add(if (dev.kyungmin.kcoach.core.SensorRecordQuality.hasAccelerationFault(record))
+                    record.sample.copy(sensorAccuracy = 0) else record.sample) } }
             patternShadowCommandId = state.optString("patternShadowCommandId")
             shadowCount = state.optInt("shadowCount")
             shadowInterrupted = state.optBoolean("shadowInterrupted") || patternShadowCommandId.isNotEmpty()
@@ -664,7 +665,10 @@ class WearWorkoutService : Service(), SensorEventListener {
             }
             shadowUseConfirmed = state.optBoolean("shadowUseConfirmed")
             if (shadowDetector != null && captureSampleCount > 0)
-                readCaptureChunks(captureSampleCount).forEach { chunk -> chunk.records.forEach { shadowDetector!!.add(it.sample) } }
+                readCaptureChunks(captureSampleCount).forEach { chunk -> chunk.records.forEach { record ->
+                    shadowDetector!!.add(if (dev.kyungmin.kcoach.core.SensorRecordQuality.hasAccelerationFault(record))
+                        record.sample.copy(sensorAccuracy = 0) else record.sample)
+                } }
             if (pendingCompletion != null && captureSampleCount > 0) {
                 saveCapture()?.let { sendCaptureToPhone(it); resetCaptureBuffer(deleteChunks = true); persistRuntime() }
             }
@@ -948,8 +952,12 @@ class WearWorkoutService : Service(), SensorEventListener {
         activeDetector = dev.kyungmin.kcoach.core.ReviewedPatternDetector(exerciseId, key, selected.runtime)
         frozenActive = selected
         // A complete learned return supplies its own start/turn/end evidence. Do not run the legacy counter in parallel as primary.
-        forearmRotationDetector = null; profiledMotionDetector = null; startPoseGate = null
-        measurementReady = true; measurementArmed = true
+        forearmRotationDetector = null; profiledMotionDetector = null
+        // Repetition-pattern selection and wrist preparation are independent. Keep the frozen
+        // direction gate (or its restored ready state) when switching the primary counter.
+        if (startDirectionSnapshot.isEmpty()) {
+            startPoseGate = null; measurementReady = true; measurementArmed = true
+        }
     }
 
     private fun observeActive(sample: SensorSample): dev.kyungmin.kcoach.core.ReviewedPatternDetection? {
@@ -975,6 +983,7 @@ class WearWorkoutService : Service(), SensorEventListener {
     private fun observeShadow(sample: SensorSample) {
         val detector = shadowDetector ?: return
         if (dev.kyungmin.kcoach.core.SignalAxis.entries.any { !it.value(sample).isFinite() } || sample.sensorAccuracy == 0) {
+            detector.add(sample) // Reset its unfinished window; do not bridge a known invalid interval.
             shadowInterrupted = true; return
         }
         runCatching {
@@ -1219,8 +1228,10 @@ class WearWorkoutService : Service(), SensorEventListener {
                     sensorClockNeedsCheck = false
                 }
                 lastGyro = event.values.copyOf()
+                val accelerationFault = dev.kyungmin.kcoach.core.SensorRecordQuality.hasAccelerationFault(
+                    lastAccelerometerAccuracy, lastAccelerometerNs, event.timestamp)
                 if (running) observeShadow(SensorSample(event.timestamp, lastAccel[0], lastAccel[1], lastAccel[2],
-                    lastGyro[0], lastGyro[1], lastGyro[2], sensorAccuracy = event.accuracy))
+                    lastGyro[0], lastGyro[1], lastGyro[2], sensorAccuracy = if (accelerationFault) 0 else event.accuracy))
                 if (running && (dev.kyungmin.kcoach.core.CapturePurpose.forSession(sessionId).preservePreparation || startDirectionSnapshot.isNotEmpty())) {
                     captureSensorSample(SensorSample(event.timestamp, lastAccel[0], lastAccel[1], lastAccel[2],
                         lastGyro[0], lastGyro[1], lastGyro[2], sensorAccuracy = event.accuracy))
@@ -1261,10 +1272,11 @@ class WearWorkoutService : Service(), SensorEventListener {
                         // Persist the same sample used by the live detector before it can
                         // complete the set. Callback delivery time must not discard a batch.
                         captureSensorSample(sensorSample)
-                        val marker = if (activeDetector != null) observeActive(sensorSample)
-                            else forearmRotationDetector?.add(sensorSample) ?: profiledMotionDetector?.add(sensorSample)
+                        val countingSample = if (accelerationFault) sensorSample.copy(sensorAccuracy = 0) else sensorSample
+                        val marker = if (activeDetector != null) observeActive(countingSample)
+                            else forearmRotationDetector?.add(countingSample) ?: profiledMotionDetector?.add(countingSample)
                         if (activeDetector == null && patternBinding.isNotBlank() && !disableUseConfirmed &&
-                            (forearmRotationDetector != null || profiledMotionDetector != null) && sensorSample.sensorAccuracy != 0 &&
+                            (forearmRotationDetector != null || profiledMotionDetector != null) && countingSample.sensorAccuracy != 0 &&
                             dev.kyungmin.kcoach.core.SignalAxis.entries.all { it.value(sensorSample).isFinite() }) {
                             patternProfiles.confirmDisabled(dev.kyungmin.kcoach.core.PatternCompatibilityCodec.decode(patternBinding),
                                 sessionId, setId, attemptId, WearClockEpoch.current(this).id, sensorSample.timestampNs,

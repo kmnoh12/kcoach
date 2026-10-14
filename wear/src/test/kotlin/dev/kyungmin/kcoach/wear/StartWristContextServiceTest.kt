@@ -58,6 +58,30 @@ class StartWristContextServiceTest {
             .copy(requireSetupMotion = false, maxSampleGapMs = 60, maxAccelerationAgeMs = 40,
                 expectedGravity = StartWristGravityTarget(0.0, 0.0, -1.0, .1)))
 
+    @Test fun aSelectedPersonalCounterDoesNotSkipItsSeparateStartDirectionHold() {
+        val app = RuntimeEnvironment.getApplication()
+        val direction = target()
+        val key = PatternCompatibility("owner", ExerciseMeasurementContracts.resolve(declared.exerciseId).recipe,
+            "LEFT", "OUTSIDE", direction.key.deviceId, "watch-native-si-v1")
+        val counter = PatternRuntimeProfile("synthetic-counter", 1, "c".repeat(64), key,
+            List(33) { List(6) { 0.0 } }, List(6) { 1.0 }, listOf(0), 3_000_000_000, 1_800_000_000, 4_800_000_000, .2)
+        val operation = PatternProfileCommand("synthetic-activate", PatternProfileOperation.ACTIVATE, counter, 0,
+            PatternValidationEvidence("d".repeat(64), "e".repeat(64)))
+        val profiles = PatternProfileStore(app)
+        profiles.stage(operation).getOrThrow()
+        val service = Robolectric.buildService(WearWorkoutService::class.java).create()
+        try {
+            service.get().onStartCommand(command(direction = direction), 0, 1)
+            assertEquals("START_DIRECTION_WAITING", state().getStringExtra("phase"))
+            repeat(120) { sample(service.get()) }
+            assertEquals("START_DIRECTION_WAITING", state().getStringExtra("phase"))
+            assertEquals(PatternProfileStatus.STAGED, profiles.stage(operation).getOrThrow().status)
+            repeat(105) { sample(service.get(), z = -9.8f) }
+            assertEquals("WORKING_START_CONFIRMED", state().getStringExtra("phase"))
+            assertEquals(PatternProfileStatus.APPLIED, profiles.stage(operation).getOrThrow().status)
+        } finally { service.destroy() }
+    }
+
     @Test fun targetWaitsOnTheOppositeHoldAndDoesNotJoinPreparationAcrossServiceRecreation() {
         val app = RuntimeEnvironment.getApplication()
         val profile = target()

@@ -8,6 +8,20 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class ForearmRotationRepDetectorTest {
+    @Test fun knownUnreliableRotationsCannotCompleteARep() {
+        val detector = ForearmRotationRepDetector(ExerciseTrackingProfiles.resolve("external_rotation"))
+        var t = 1_000_000_000L
+        var count = 0
+        repeat(3) {
+            for (rate in listOf(1.45, -1.45)) repeat(36) { i ->
+                if (detector.add(naturalSample(t, rate, i).copy(sensorAccuracy = 0)) != null) count++
+                t += 20_000_000L
+            }
+            t += 180_000_000L
+        }
+        assertEquals(0, count)
+        assertTrue(detector.finish() == null)
+    }
     @Test
     fun countsNaturalSixtyDegreeRepsAtNormalTempo() {
         val profile = ExerciseTrackingProfiles.resolve("external_rotation")

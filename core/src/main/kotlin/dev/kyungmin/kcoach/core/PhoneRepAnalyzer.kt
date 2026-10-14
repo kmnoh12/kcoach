@@ -33,8 +33,10 @@ object PhoneRepAnalyzer {
         if (records.size !in 10..30_000 || !document.sampleRateRequestedHz.isFinite() || document.sampleRateRequestedHz <= 0 ||
             document.validateTimestamps().isNotEmpty() || records.any { record -> SignalAxis.entries.any { !it.value(record.sample).isFinite() } })
             return refused("센서 기록 부족/오류 · 횟수 확인 필요")
+        if (records.all { it.sample.sensorAccuracy == 0 || SensorRecordQuality.hasAccelerationFault(it) })
+            return refused("센서 품질 불량 · 횟수 확인 필요")
         val detector = ReviewedPatternDetector(exerciseId, compatibility, runtime)
-        val detections = records.mapNotNull { detector.add(it.sample) }
+        val detections = records.mapNotNull { detector.add(SensorRecordQuality.forCounting(it)) }
         var quality = calculateSignalQuality(records, document.sampleRateRequestedHz)
         if (records.zipWithNext().any { (a, b) -> b.sample.timestampNs - a.sample.timestampNs > 60_000_000 } ||
             records.any { it.sample.sensorAccuracy == 0 }) quality = quality.coerceAtMost(.70)
@@ -97,13 +99,17 @@ object PhoneRepAnalyzer {
             document.validateTimestamps().isNotEmpty()) return sanitizeOutput(emptyOutput(watchDetectedReps, profile))
         val records = document.records
         if (records.size < 3) return sanitizeOutput(emptyOutput(watchDetectedReps, profile))
+        if (records.all { it.sample.sensorAccuracy == 0 || SensorRecordQuality.hasAccelerationFault(it) })
+            return sanitizeOutput(emptyOutput(watchDetectedReps, profile).let {
+                it.copy(result = it.result.copy(trackingStatus = "센서 품질 불량 · 횟수 확인 필요"))
+            })
         if (profile.signal == TrackingSignal.FOREARM_ROTATION) {
             return analyzeExternalRotation(document, profile, watchDetectedReps)
         }
 
         val detector = ProfiledMotionRepDetector(profile)
         val motionEvents = buildList {
-            records.forEach { record -> detector.add(record.sample)?.let(::add) }
+            records.forEach { record -> detector.add(SensorRecordQuality.forCounting(record))?.let(::add) }
             detector.finish()?.let(::add)
         }
         val events = motionEvents.mapIndexed { index, event ->
@@ -196,7 +202,7 @@ object PhoneRepAnalyzer {
         val detector = ForearmRotationRepDetector(profile)
         val rotationEvents = buildList {
             document.records.forEach { record ->
-                detector.add(record.sample)?.let(::add)
+                detector.add(SensorRecordQuality.forCounting(record))?.let(::add)
             }
             detector.finish()?.let(::add)
         }
