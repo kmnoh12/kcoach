@@ -10,6 +10,11 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import android.os.Looper
+import org.robolectric.Shadows.shadowOf
+import org.robolectric.shadows.ShadowLooper
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -47,7 +52,21 @@ class FinishedRecoverySelectionTest {
         val activity = Robolectric.buildActivity(MainActivity::class.java).create()
         try { assertEquals("Recovery belongs to the listener worker, not onCreate", raw, prefs.getString("session:legacy", null)) }
         finally { activity.destroy() }
-        assertEquals(1, FinishedWorkoutStore(app).replay())
+        // The listener may already own recovery. Run this explicit replay on a worker too,
+        // while driving Robolectric's paused disk-write looper, rather than blocking its main
+        // thread on the analysis lock while the listener waits for SharedPreferences.commit.
+        val executor = Executors.newSingleThreadExecutor { Thread(it, "test-finished-recovery").apply { isDaemon = true } }
+        try {
+            val replay = executor.submit<Int> { FinishedWorkoutStore(app).replay() }
+            val until = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+            while (!replay.isDone && System.nanoTime() < until) {
+                ShadowLooper.getAllLoopers().filter { it != Looper.getMainLooper() && it.thread.name == "queued-work-looper" }
+                    .forEach { shadowOf(it).idle() }
+                Thread.sleep(5)
+            }
+            assertTrue("Recovery worker did not finish", replay.isDone)
+            assertTrue(replay.get(1, TimeUnit.SECONDS) in 0..1)
+        } finally { executor.shutdownNow() }
         assertEquals(20, WorkoutLogStore(app).load().single().volumeKg)
     }
 }
