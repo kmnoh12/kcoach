@@ -28,6 +28,8 @@ object ReviewedPatternAnalyzer {
             return result(emptyList(), "insufficient_or_invalid_samples", true)
         val runtime = PatternRuntimeProfile.from(profile)
         val records = document.records
+        if (records.any { it.sample.sensorAccuracy == 0 || SensorRecordQuality.hasAccelerationFault(it) })
+            return result(emptyList(), "invalid_sensor_quality", true)
         val first = records.first().sample.timestampNs
         val last = records.last().sample.timestampNs
         if (last - first > 300_000_000_000L) return result(emptyList(), "capture_too_long", true)

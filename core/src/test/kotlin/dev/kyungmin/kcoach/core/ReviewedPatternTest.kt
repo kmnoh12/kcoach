@@ -39,6 +39,28 @@ class ReviewedPatternTest {
         assertEquals(key, profile.compatibility)
         assertTrue(ReviewedPatternBuilder.build(listOf(training(ReferenceSource.WATCH_CANDIDATE)), "candidate-2", 1).isFailure)
     }
+    @Test fun humanVideoLabelsDoNotMakeUnreliableAccelerationEligibleForLearning() {
+        val original = training()
+        val profile = ReviewedPatternBuilder.build(listOf(original), "original", 1).getOrThrow()
+        for (kind in 0..2) {
+            val records = original.document.records.map { row -> when (kind) {
+                0 -> row.copy(accelerationAccuracy = 0)
+                1 -> row.copy(accelerationTimestampNs = row.sample.timestampNs - 200_000_000L)
+                else -> row.copy(accelerationTimestampNs = row.sample.timestampNs + 1_000_000L)
+            } }
+            val bytes = ByteArrayOutputStream().apply { SensorCaptureFormat.write(this, records, 50.0) }.toByteArray()
+            val changed = original.copy(document = original.document.copy(records = records), rawSha256 = SensorCaptureFormat.sha256(bytes))
+            assertTrue(ReviewedPatternBuilder.build(listOf(changed), "candidate", 1).isFailure,
+                "Human labels cannot erase acceleration fault $kind")
+            assertNull(ReviewedPatternAnalyzer.analyze(changed.document, changed.exerciseId, key, profile).estimatedCount)
+            val held = changed.copy(captureId = "fault-$kind", references = changed.references.map { it.copy(captureId = "fault-$kind") })
+            val validation = ReviewedPatternValidation.evaluate(profile, listOf(HeldOutPatternSet(held,
+                SetCountReference("set-A", "attempt-A", 0, 100)))).getOrThrow()
+            assertNull(validation.rows.single().candidateCount)
+            assertEquals("invalid_or_incomplete_signal", validation.rows.single().exclusionReason)
+            assertEquals(0, validation.exactSets)
+        }
+    }
 
     @Test fun aLearnedPatternCountsNewUnevenTempoCyclesAndDoesNotInventHalfDurationPhases() {
         val profile = ReviewedPatternBuilder.build(listOf(training()), "candidate-1", 1).getOrThrow()

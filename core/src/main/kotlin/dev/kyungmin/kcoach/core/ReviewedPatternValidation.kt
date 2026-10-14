@@ -124,7 +124,8 @@ internal object PatternValidationInputs {
     fun signalUsable(document: SensorCaptureDocument): Boolean = document.records.size in 10..30_000 &&
         document.sampleRateRequestedHz.isFinite() && document.sampleRateRequestedHz > 0 &&
         document.validateTimestamps().isEmpty() && document.records.all { record ->
-            record.sample.sensorAccuracy != 0 && SignalAxis.entries.all { it.value(record.sample).isFinite() }
+            record.sample.sensorAccuracy != 0 && !SensorRecordQuality.hasAccelerationFault(record) &&
+                SignalAxis.entries.all { it.value(record.sample).isFinite() }
         } && document.records.zipWithNext().all { (a, b) -> b.sample.timestampNs - a.sample.timestampNs <= 60_000_000 }
 
     fun boundariesEligible(held: HeldOutPatternSet): Boolean {

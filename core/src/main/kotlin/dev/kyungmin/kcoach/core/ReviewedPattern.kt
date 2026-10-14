@@ -120,6 +120,7 @@ internal object PatternSignal {
         if (selected.size < 10 || selected.first().sample.timestampNs - start > 60_000_000 || end - selected.last().sample.timestampNs > 60_000_000) return false
         if (records.zipWithNext().any { (a, b) -> b.sample.timestampNs > start && a.sample.timestampNs < end &&
                 b.sample.timestampNs - a.sample.timestampNs > 60_000_000 }) return false
+        if (selected.any { it.sample.sensorAccuracy == 0 || SensorRecordQuality.hasAccelerationFault(it) }) return false
         return !originalClocks || selected.all { r -> r.accelerationTimestampNs != null &&
             r.gyroscopeTimestampNs == r.sample.timestampNs && r.receivedElapsedNs != null &&
             r.receivedElapsedNs >= r.sample.timestampNs && r.sample.timestampNs - r.accelerationTimestampNs in 0..40_000_000 }

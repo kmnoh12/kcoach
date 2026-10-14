@@ -294,10 +294,14 @@ object PhoneRepAnalyzer {
         // Averaging also avoids treating ordinary short/long scheduling jitter as missing samples.
         val coverage = (intervalsNs.size * expectedIntervalNs / intervalsNs.sum()).coerceIn(0.0, 1.0)
         val gapRate = intervalsNs.count { it > expectedIntervalNs * 2.5 }.toDouble() / intervalsNs.size
-        val reliableFraction = 1.0 - records.count { it.sample.sensorAccuracy == 0 }.toDouble() / records.size
+        val accelerationFault = records.any(SensorRecordQuality::hasAccelerationFault)
+        val reliableFraction = 1.0 - records.count {
+            it.sample.sensorAccuracy == 0 || SensorRecordQuality.hasAccelerationFault(it)
+        }.toDouble() / records.size
         var quality = (coverage * (1.0 - gapRate) * reliableFraction).coerceIn(0.0, 1.0)
         // The motion detector resets across >450ms. Remaining clear reps cannot prove a complete set.
         if (intervalsNs.any { it > 450_000_000.0 }) quality = quality.coerceAtMost(0.70)
+        if (accelerationFault) quality = quality.coerceAtMost(0.70)
         return quality
     }
 

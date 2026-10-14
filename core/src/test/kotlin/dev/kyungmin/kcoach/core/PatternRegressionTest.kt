@@ -37,5 +37,13 @@ class PatternRegressionTest {
         assertEquals(0, worse.rows.single().candidateCount)
         assertEquals(3, worse.rows.single().previousCount)
         assertFalse(PatternRegressionValidation.compare(previous, previous, emptyList()).getOrThrow().passed)
+        val badRecords = records.map { it.copy(accelerationAccuracy = 0) }
+        val badBytes = ByteArrayOutputStream().apply { SensorCaptureFormat.write(this, badRecords, 50.0) }.toByteArray()
+        val bad = set.copy(document = set.document.copy(records = badRecords), rawSha256 = SensorCaptureFormat.sha256(badBytes))
+        val faulty = PatternRegressionValidation.compare(previous, previous,
+            listOf(HeldOutPatternSet(bad, SetCountReference("set", "attempt", 0, 100)))).getOrThrow()
+        assertFalse(faulty.passed)
+        assertNull(faulty.rows.single().candidateCount)
+        assertNull(faulty.rows.single().previousCount)
     }
 }

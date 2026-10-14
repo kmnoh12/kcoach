@@ -33,7 +33,8 @@ object PatternRegressionValidation {
             val records = set.document.records
             val usable = records.size in 10..30_000 && set.document.sampleRateRequestedHz.isFinite() &&
                 set.document.sampleRateRequestedHz > 0 && set.document.validateTimestamps().isEmpty() &&
-                records.all { record -> record.sample.sensorAccuracy != 0 && SignalAxis.entries.all { it.value(record.sample).isFinite() } } &&
+                records.all { record -> record.sample.sensorAccuracy != 0 && !SensorRecordQuality.hasAccelerationFault(record) &&
+                    SignalAxis.entries.all { it.value(record.sample).isFinite() } } &&
                 records.zipWithNext().all { (a, b) -> b.sample.timestampNs - a.sample.timestampNs <= 60_000_000 }
             fun replay(profile: PatternRuntimeProfile): List<RepCycle> {
                 val detector = ReviewedPatternDetector(set.exerciseId, set.compatibility, profile)

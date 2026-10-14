@@ -76,7 +76,8 @@ object ObservedMotionAnalyzer {
             (records.last().sample.timestampNs - records.first().sample.timestampNs)
         if (coverage < .85) return null
         val maxGapNs = minOf(60_000_000.0, 2.5e9 / document.sampleRateRequestedHz)
-        if (records.any { it.sample.sensorAccuracy == 0 || SignalAxis.entries.any { axis -> !axis.value(it.sample).isFinite() } } ||
+        if (records.any { it.sample.sensorAccuracy == 0 || SensorRecordQuality.hasAccelerationFault(it) ||
+                SignalAxis.entries.any { axis -> !axis.value(it.sample).isFinite() } } ||
             records.zipWithNext().any { (a, b) -> b.sample.timestampNs - a.sample.timestampNs > maxGapNs }) return null
         if (cycles.zipWithNext().any { (a, b) -> a.endNs > b.startNs }) return null
         fun rate(sample: SensorSample): Double = sqrt(sample.gyroscopeX.toDouble() * sample.gyroscopeX +

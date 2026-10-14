@@ -47,6 +47,22 @@ class AnalysisSignalQualityTest {
         assertNull(result.confirmedReps)
         assertEquals(0.0, result.signalQuality)
     }
+    @Test fun unreliableStaleOrFutureAccelerationCannotBeHiddenByReliableGyroscopeSamples() {
+        val good = records().map { r -> r.copy(sample = r.sample.copy(sensorAccuracy = 3),
+            accelerationTimestampNs = r.sample.timestampNs, gyroscopeTimestampNs = r.sample.timestampNs,
+            receivedElapsedNs = r.sample.timestampNs + 1_000_000, accelerationAccuracy = 3) }
+        fun result(rows: List<SensorCaptureRecord>) = PhoneRepAnalyzer.analyze(SensorCaptureDocument(2, 20.0, rows),
+            "lat_pull_down", watchDetectedReps = 3).result
+        assertEquals(3, result(good).confirmedReps)
+        for (damaged in listOf(good.map { it.copy(accelerationAccuracy = 0) },
+            good.map { it.copy(accelerationTimestampNs = it.sample.timestampNs - 200_000_000L) },
+            good.map { it.copy(accelerationTimestampNs = it.sample.timestampNs + 1_000_000L) })) {
+            val measured = result(damaged)
+            assertNull(measured.confirmedReps, "A reliable gyro must not hide invalid acceleration")
+            assertTrue(measured.signalQuality!! < .85)
+            assertNull(measured.motionMetrics)
+        }
+    }
     @Test fun ordinarySchedulingJitterDoesNotDiscardACompleteSignal() {
         var t = 1_000_000L
         val jittered = records().mapIndexed { i, row ->
