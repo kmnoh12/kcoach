@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -287,11 +288,16 @@ class MenuActions(
     val openCalibration: () -> Unit,
     val openSettings: () -> Unit = {},
     val openCoach: () -> Unit = {},
+    val observeUpdate: (((UpdateUi) -> Unit) -> (() -> Unit))? = null,
 )
 
 @Composable
 fun MenuScreen(version: String, actions: MenuActions, wearing: dev.kyungmin.kcoach.phone.WorkoutWearingSelection? = null) {
     var state by remember { mutableStateOf(UpdateUi("업데이트를 확인할 수 있어요", false)) }
+    DisposableEffect(actions.observeUpdate) {
+        val unsubscribe = actions.observeUpdate?.invoke { state = it }
+        onDispose { unsubscribe?.invoke() }
+    }
     TabPage("메뉴", "", KIcon.Settings, actions.openSettings) {
         Spacer(Modifier.height(28.dp))
         SectionCard("기기", listOf("워치 연결" to "운동 화면에서 확인",

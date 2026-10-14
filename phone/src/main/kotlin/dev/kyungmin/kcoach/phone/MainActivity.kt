@@ -446,7 +446,7 @@ class MainActivity : ComponentActivity() {
     private val historyStore by lazy { ExerciseHistoryStore(applicationContext) }
     private var historyCache: ExerciseHistory? = null
     private val history: ExerciseHistory get() = historyCache ?: historyStore.load().also { historyCache = it }
-    private lateinit var updateManager: UpdateManager
+    private lateinit var otaCoordinator: dev.kyungmin.kcoach.updates.OtaCoordinator
     private lateinit var sessionStore: SessionStore
     private var currentTab = RootTab.HOME
     private var currentScreen = Screen.ROOT
@@ -473,7 +473,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         window.statusBarColor = bg
         window.navigationBarColor = bg
-        updateManager = UpdateManager(this, BuildConfig.UPDATE_MANIFEST_URL)
+        otaCoordinator = dev.kyungmin.kcoach.updates.OtaCoordinator.get(this)
         sessionStore = SessionStore(this)
         lastWorkoutResult = restoreLastWorkoutResult()
         activeWorkout = restoreActiveWorkout()
@@ -545,6 +545,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        if (::otaCoordinator.isInitialized) otaCoordinator.detach(this)
         calibrationSaveTimeoutTask?.let(handler::removeCallbacks)
         calibrationSaveTimeoutTask = null
         super.onDestroy()
@@ -552,9 +553,12 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        updateManager.resumePendingInstall()?.let {
-            Toast.makeText(this, it, Toast.LENGTH_LONG).show()
-        }
+        otaCoordinator.attach(this)
+    }
+
+    override fun onPause() {
+        otaCoordinator.detach(this)
+        super.onPause()
     }
 
     @Deprecated("Screen stack is managed manually; Compose BackHandlers still get first say.")
@@ -1136,14 +1140,15 @@ class MainActivity : ComponentActivity() {
         currentScreen = Screen.ROOT
         val actions = MenuActions(
             checkUpdate = { report ->
-                updateManager.checkAndDownload { state ->
-                    runOnUiThread { report(UpdateUi(state.message, state.readyToInstall, state.busy)) }
-                }
+                otaCoordinator.checkBoth()
+                val state = otaCoordinator.ui()
+                report(UpdateUi(state.message, state.readyToInstall, state.busy))
             },
-            install = { updateManager.requestInstall() },
+            install = { otaCoordinator.installBoth(this) },
             openCalibration = ::showCalibration,
             openSettings = { startActivity(Intent(this, SettingsActivity::class.java)) },
             openCoach = { startActivity(Intent(this, AiCoachActivity::class.java)) },
+            observeUpdate = { report -> otaCoordinator.observe { state -> report(UpdateUi(state.message, state.readyToInstall, state.busy)) } },
         )
         showScaffold(ComposeView(this).apply {
             setContent {

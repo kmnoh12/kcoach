@@ -65,6 +65,7 @@ class PhoneWearListenerService : WearableListenerService() {
 
     override fun onCreate() {
         super.onCreate()
+        dev.kyungmin.kcoach.updates.OtaCoordinator.get(this).recover()
         captureInbox = CaptureInbox(this, prefs)
         if (Build.FINGERPRINT.contains("generic", true) || Build.MODEL.contains("sdk", true)) emulatorBridge = EmulatorBridgeClient(::handlePayload).also { it.start() }
         inboxExecutor.execute {
@@ -106,13 +107,20 @@ class PhoneWearListenerService : WearableListenerService() {
     }
 
     override fun onMessageReceived(event: MessageEvent) {
+        if (dev.kyungmin.kcoach.updates.OtaDataLayer.receive(this, event.path, String(event.data), event.sourceNodeId)) return
         handlePayload(event.path, String(event.data))
     }
 
     override fun onDataChanged(dataEvents: DataEventBuffer) {
+        dev.kyungmin.kcoach.updates.OtaDataLayer.receive(this, dataEvents)
         if (dataEvents.any { it.type == DataEvent.TYPE_CHANGED && it.dataItem.uri.path.orEmpty().startsWith(WearSync.PATH_CAPTURE_ASSET_V3) }) {
             recoverCachedAssets()
         }
+    }
+
+    override fun onPeerConnected(peer: com.google.android.gms.wearable.Node) {
+        super.onPeerConnected(peer)
+        dev.kyungmin.kcoach.updates.OtaCoordinator.get(this).recover()
     }
 
     /** Identical retransmissions need not produce another change event; also inspect the cache on restart. */

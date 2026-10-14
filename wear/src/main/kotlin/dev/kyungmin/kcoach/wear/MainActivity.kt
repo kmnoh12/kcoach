@@ -45,10 +45,9 @@ import dev.kyungmin.kcoach.core.WireCodec
 class MainActivity : Activity() {
     private val handler = Handler(Looper.getMainLooper())
     private val emulatorBridge = EmulatorBridgeClient { _, _ -> }
-    private lateinit var updateManager: WearUpdateManager
-    private var updateInProgress = false
-    private var updateReadyToInstall = false
-    private var updateButton: TextView? = null
+    private lateinit var otaCoordinator: dev.kyungmin.kcoach.updates.OtaCoordinator
+    private var unsubscribeUpdates: (() -> Unit)? = null
+    private var updateStateText: TextView? = null
     private val isEmulator: Boolean
         get() = Build.FINGERPRINT.contains("generic", ignoreCase = true) ||
             Build.MODEL.contains("sdk_gwear", ignoreCase = true)
@@ -120,8 +119,9 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        updateManager = WearUpdateManager(this, BuildConfig.UPDATE_MANIFEST_URL)
+        otaCoordinator = dev.kyungmin.kcoach.updates.OtaCoordinator.get(this)
         setContentView(buildUi())
+        unsubscribeUpdates = otaCoordinator.observe { state -> updateStateText?.text = state.message }
         emulatorBridge.start()
         startService(Intent(this, WearCommandService::class.java))
         startService(Intent(this, WearWorkoutService::class.java))
@@ -202,7 +202,12 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         updateScreenPolicy()
-        updateManager.resumePendingInstall()?.let { Toast.makeText(this, it, Toast.LENGTH_LONG).show() }
+        otaCoordinator.attach(this)
+    }
+
+    override fun onPause() {
+        otaCoordinator.detach(this)
+        super.onPause()
     }
 
     override fun onStop() {
@@ -213,6 +218,7 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        unsubscribeUpdates?.invoke()
         handler.removeCallbacks(restUiTicker)
         runCatching { unregisterReceiver(runtimeStateReceiver) }
         emulatorBridge.stop()
@@ -323,23 +329,16 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER
             setPadding(0, 18, 0, 0)
         })
-        updateButton = label("업데이트 확인", 11f, Color.WHITE, true).apply {
+        updateStateText = label("업데이트는 폰 앱에서 확인해 주세요", 11f, Color.WHITE).apply {
             gravity = Gravity.CENTER
             setPadding(18, 10, 18, 10)
-            background = rounded(Color.rgb(35, 58, 72), 18)
-            isClickable = true
+            // Only resume an OS confirmation for a phone-requested transaction; never check independently.
             setOnClickListener {
-                if (updateReadyToInstall) {
-                    updateReadyToInstall = false
-                    text = "업데이트 확인"
-                    updateScreenPolicy()
-                    updateManager.requestInstall()?.let { Toast.makeText(this@MainActivity, it, Toast.LENGTH_LONG).show() }
-                } else {
-                    checkForUpdate()
-                }
+                if (otaCoordinator.store.local()?.phase == dev.kyungmin.kcoach.updates.OtaPhase.USER_ACTION_REQUIRED)
+                    otaCoordinator.confirmInstall(this@MainActivity)
             }
         }
-        details.addView(updateButton, LinearLayout.LayoutParams(-2, -2).apply {
+        details.addView(updateStateText, LinearLayout.LayoutParams(-2, -2).apply {
             topMargin = 18
             bottomMargin = 8
         })
@@ -358,26 +357,10 @@ class MainActivity : Activity() {
         return frame
     }
 
-    private fun checkForUpdate() {
-        val button = updateButton ?: return
-        updateInProgress = true
-        updateScreenPolicy()
-        button.isEnabled = false
-        button.text = "업데이트 확인 중…"
-        updateManager.checkAndDownload { state ->
-            handler.post {
-                updateInProgress = state.busy
-                button.isEnabled = !state.busy
-                updateReadyToInstall = state.readyToInstall
-                button.text = if (state.readyToInstall) "업데이트 설치" else "업데이트 확인"
-                updateScreenPolicy()
-                Toast.makeText(this, state.message, Toast.LENGTH_LONG).show()
-            }
-        }
-    }
-
     private fun requestPermissionsIfNeeded() {
-        val missing = arrayOf(Manifest.permission.BODY_SENSORS, Manifest.permission.ACTIVITY_RECOGNITION)
+        val permissions = listOf(Manifest.permission.BODY_SENSORS, Manifest.permission.ACTIVITY_RECOGNITION) +
+            if (Build.VERSION.SDK_INT >= 33) listOf(Manifest.permission.POST_NOTIFICATIONS) else emptyList()
+        val missing = permissions
             .filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
         if (missing.isNotEmpty()) ActivityCompat.requestPermissions(this, missing.toTypedArray(), 42)
     }

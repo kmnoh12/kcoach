@@ -39,6 +39,7 @@ android {
         // Shrunk build for in-app updates: same debug key, so it installs over debug builds.
         create("ota") {
             initWith(getByName("debug"))
+            matchingFallbacks += "debug"
             signingConfig = signingConfigs.getByName("debug")
             isDebuggable = false
             isMinifyEnabled = true
@@ -52,6 +53,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":updates"))
     implementation(project(":core"))
     implementation("androidx.core:core-ktx:1.16.0")
     implementation(platform("androidx.compose:compose-bom:2024.12.01"))

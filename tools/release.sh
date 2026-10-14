@@ -15,7 +15,7 @@ if [ -n "$(git status --porcelain)" ]; then
     exit 1
 fi
 
-"$TOOLS/gradle-8.11.1/bin/gradle" :core:test :phone:assembleOta :wear:assembleOta
+"$TOOLS/gradle-8.11.1/bin/gradle" :core:test :updates:testDebugUnitTest :phone:assembleOta :wear:assembleOta
 
 version() { sed -n "s/.*$2 = \"\{0,1\}\([^\"]*\)\"\{0,1\}$/\1/p" "$1/build.gradle.kts" | head -1; }
 PHONE_CODE=$(version phone versionCode)

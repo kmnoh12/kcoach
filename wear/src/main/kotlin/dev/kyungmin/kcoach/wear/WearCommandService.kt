@@ -20,6 +20,7 @@ class WearCommandService : WearableListenerService() {
 
     override fun onCreate() {
         super.onCreate()
+        dev.kyungmin.kcoach.updates.OtaCoordinator.get(this).recover()
         if (Build.FINGERPRINT.contains("generic", true) || Build.MODEL.contains("sdk_gwear", true)) emulatorBridge = EmulatorBridgeClient(::handlePayload).also { it.start() }
         sendPairHello()
     }
@@ -31,11 +32,21 @@ class WearCommandService : WearableListenerService() {
     }
 
     override fun onMessageReceived(event: MessageEvent) {
+        if (dev.kyungmin.kcoach.updates.OtaDataLayer.receive(this, event.path, String(event.data), event.sourceNodeId)) return
         if (event.path == WearSync.PATH_PATTERN_PROFILE) {
             receivePatternProfile(String(event.data), event.sourceNodeId)
             return
         }
         handlePayload(event.path, String(event.data))
+    }
+
+    override fun onDataChanged(events: com.google.android.gms.wearable.DataEventBuffer) {
+        dev.kyungmin.kcoach.updates.OtaDataLayer.receive(this, events)
+    }
+
+    override fun onPeerConnected(peer: com.google.android.gms.wearable.Node) {
+        super.onPeerConnected(peer)
+        dev.kyungmin.kcoach.updates.OtaCoordinator.get(this).recover()
     }
 
     private fun handlePayload(path: String, payload: String) {

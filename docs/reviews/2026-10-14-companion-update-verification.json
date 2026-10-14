@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 1,
+  "checkedAtUtc": "2026-10-14T12:47:33.772087+00:00",
+  "scope": "PHONE_CONTROLS_BOTH_APP_UPDATES_SOFTWARE",
+  "tests": {
+    "core": {
+      "tests": 217,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "updates": {
+      "tests": 14,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "phone": {
+      "tests": 256,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "wear": {
+      "tests": 67,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "totalTests": 554,
+  "lint": {
+    "updates": {
+      "Error": 0,
+      "Fatal": 0,
+      "Warning": 14
+    },
+    "phone": {
+      "Error": 0,
+      "Fatal": 0,
+      "Warning": 154
+    },
+    "wear": {
+      "Error": 0,
+      "Fatal": 0,
+      "Warning": 35
+    }
+  },
+  "debugAndOtaBuildsVerified": [
+    "phone",
+    "wear"
+  ],
+  "otaApks": {
+    "phone": {
+      "apkSha256": "4fb04056b0dfd01cd89bc24858ee1110cd289f953f2153d62014f5a3efca0694",
+      "certificateSha256": "45130eab69678aeee288c565de466912b97dab48c317cbcf0983430a22c1da2c",
+      "stableWorkerClassAndConstructorVerified": true,
+      "roleMetadataVerified": "PHONE",
+      "bytes": 60500331
+    },
+    "wear": {
+      "apkSha256": "8e74662263288aa8947ba709ba60230d67428c17f9641b8a515ca07fcdc009c8",
+      "certificateSha256": "45130eab69678aeee288c565de466912b97dab48c317cbcf0983430a22c1da2c",
+      "stableWorkerClassAndConstructorVerified": true,
+      "roleMetadataVerified": "WATCH",
+      "bytes": 1219886
+    }
+  },
+  "mediaPipeJniInspection": {
+    "apk": "phone/build/outputs/apk/ota/phone-ota.apk",
+    "apkSha256": "4fb04056b0dfd01cd89bc24858ee1110cd289f953f2153d62014f5a3efca0694",
+    "jniDeclarations": {
+      "com.google.mediapipe.framework.MediaPipeException": {
+        "constructor(I,byte[])": true
+      },
+      "com.google.mediapipe.framework.Packet": {
+        "static create(long)": true
+      },
+      "com.google.mediapipe.framework.ProtoUtil$SerializedMessage": {
+        "String typeName": true,
+        "byte[] value": true
+      }
+    },
+    "allRequiredDeclarationsPresent": true,
+    "nativeInitializationVerified": false,
+    "poseDetectionVerified": false
+  },
+  "verificationLog": "work/companion-update-final.log",
+  "verificationLogSha256": "277ad36e8c4786ce943fb85b8aa090c1f5d7cce80b00cb7594ca99f08ffcc75b",
+  "fourVersionCombinationsVerifiedWithControlledInputs": true,
+  "actualAppListenerEntryPointsVerified": true,
+  "watchReceiptRequiredBeforeBothDevicePhoneInstall": true,
+  "staleWrongPeerAndDuplicateRequestRegressionVerified": true,
+  "actualInstalledVersionRequiredToClaimInstalled": true,
+  "newInstallerPermissionRecreationAndFileReverificationRegressionVerified": true,
+  "oldIndependentManagersAndWatchCheckButtonRemoved": true,
+  "workManagerAndDataItemPersistenceImplemented": true,
+  "realDeviceBackgroundReconnectionDownloadInstallationVerified": false,
+  "firstUnifiedVersionRequiresBothAppsToBeUpdatedOnce": true,
+  "published": false,
+  "versionNumbersChanged": false,
+  "cameraInitializationFixedOnPhysicalDeviceVerified": false,
+  "startDirectionVariantWearingProfileBindingRemaining": true,
+  "realAccountAiInferenceVerified": false,
+  "entireGoalComplete": false
+}

@@ -18,5 +18,5 @@ rootProject.name = "KCoach"
 include(":core")
 
 if (!providers.gradleProperty("coreOnly").isPresent) {
-    include(":phone", ":wear")
+    include(":phone", ":wear", ":updates")
 }
