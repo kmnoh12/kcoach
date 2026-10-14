@@ -7,13 +7,15 @@ import kotlin.math.sqrt
 enum class CameraMotion(val restDegrees: Double, val excursionDegrees: Double, val increasing: Boolean) {
     ELBOW_FOLD(145.0, 85.0, false),
     ELBOW_PRESS(100.0, 150.0, true),
-    SHOULDER_RAISE(25.0, 65.0, true);
+    SHOULDER_RAISE(25.0, 65.0, true),
+    SQUAT_KNEE_FLEXION(160.0, 110.0, false);
 
     fun atRest(angle: Double) = if (increasing) angle <= restDegrees else angle >= restDegrees
     fun departed(angle: Double) = if (increasing) angle >= excursionDegrees else angle <= excursionDegrees
 
     companion object {
         fun forExercise(exerciseId: String, name: String = ""): CameraMotion? {
+            if (ExerciseMeasurementContracts.resolve(exerciseId).recipe == MeasurementRecipe.SQUAT) return SQUAT_KNEE_FLEXION
             val profile = ExerciseTrackingProfiles.resolve(exerciseId, name)
             if (profile.mode == TrackingMode.MANUAL_REQUIRED) return null
             return when (profile.family) {
@@ -34,7 +36,20 @@ object UpperBodyPoseGeometry {
         val elbow = if (left) 13 else 14
         val wrist = if (left) 15 else 16
         val hip = if (left) 23 else 24
-        val indices = if (motion == CameraMotion.SHOULDER_RAISE) listOf(elbow, shoulder, hip) else listOf(shoulder, elbow, wrist)
+        val knee = if (left) 25 else 26; val ankle = if (left) 27 else 28
+        val indices = when (motion) {
+            CameraMotion.SHOULDER_RAISE -> listOf(elbow, shoulder, hip)
+            CameraMotion.SQUAT_KNEE_FLEXION -> listOf(hip, knee, ankle)
+            else -> listOf(shoulder, elbow, wrist)
+        }
+        val value = angle(points, indices[0], indices[1], indices[2]) ?: return null
+        if (motion == CameraMotion.SQUAT_KNEE_FLEXION && motion.atRest(value) &&
+            (angle(points, shoulder, hip, knee) ?: return null) < 150.0) return null
+        return value
+    }
+
+    fun angle(points: List<PosePoint>, first: Int, vertex: Int, last: Int): Double? {
+        val indices = listOf(first, vertex, last)
         val p = indices.map { points.getOrNull(it) ?: return null }
         if (p.any { it.visibility < 0.65 || !listOf(it.x, it.y, it.z, it.visibility).all(Double::isFinite) }) return null
         val a = doubleArrayOf(p[0].x - p[1].x, p[0].y - p[1].y, p[0].z - p[1].z)

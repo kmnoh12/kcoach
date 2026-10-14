@@ -7,6 +7,21 @@ data class CameraCaptureGuide(val id: String, val direction: String, val framing
         val point = points.getOrNull(index) ?: return@all false
         minOf(point.visibility ?: 0.0, point.presence ?: 0.0) >= 0.65 && point.x in 0.02..0.98 && point.y in 0.02..0.98
     }
+    fun observedMetric(image: List<CameraLandmark>, world: List<CameraLandmark>, left: Boolean): Double? {
+        val motion = metric ?: return null
+        if (image.size != 33 || world.size != 33 || !visible(image)) return null
+        val points = world.mapIndexed { i, p -> PosePoint(p.x, p.y, p.z,
+            minOf(image[i].visibility ?: 0.0, image[i].presence ?: 0.0,
+                p.visibility ?: 1.0, p.presence ?: 1.0)) }
+        val value = UpperBodyPoseGeometry.metric(points, motion, left) ?: return null
+        if (motion == CameraMotion.SQUAT_KNEE_FLEXION && motion.atRest(value)) {
+            val shoulderY = (image[11].y + image[12].y) / 2
+            val hipY = (image[23].y + image[24].y) / 2
+            if (!(image[0].y < shoulderY && shoulderY < hipY &&
+                hipY < image[if (left) 25 else 26].y && image[if (left) 25 else 26].y < image[if (left) 27 else 28].y)) return null
+        }
+        return value
+    }
     companion object {
         fun forExercise(id: String, left: Boolean): CameraCaptureGuide {
             val contract = ExerciseMeasurementContracts.resolve(id)
@@ -18,7 +33,7 @@ data class CameraCaptureGuide(val id: String, val direction: String, val framing
                 recipe == MeasurementRecipe.MANUAL && id in setOf("leg_press", "seated_leg_curl", "leg_extension") -> setOf(hip, if (left) 25 else 26, if (left) 27 else 28)
                 recipe == MeasurementRecipe.MANUAL && id in setOf("hip_adduction", "hip_abduction") -> setOf(23, 24, 25, 26, 27, 28)
                 recipe == MeasurementRecipe.MANUAL -> setOf(11, 12, 15, 16, 23, 24, 27, 28)
-                recipe == MeasurementRecipe.SQUAT -> setOf(shoulder, hip, if (left) 25 else 26, if (left) 27 else 28)
+                recipe == MeasurementRecipe.SQUAT -> recipe.cameraLandmarks + 0
                 else -> setOf(shoulder, elbow, wrist, hip)
             }
             val direction = when (recipe) {
@@ -33,6 +48,7 @@ data class CameraCaptureGuide(val id: String, val direction: String, val framing
                 MeasurementRecipe.SHOULDER_PRESS, MeasurementRecipe.TRICEPS_EXTENSION -> CameraMotion.ELBOW_PRESS
                 MeasurementRecipe.CHEST_PRESS -> if (id == "chest_press") CameraMotion.ELBOW_PRESS else CameraMotion.ELBOW_FOLD
                 MeasurementRecipe.LATERAL_RAISE -> CameraMotion.SHOULDER_RAISE
+                MeasurementRecipe.SQUAT -> CameraMotion.SQUAT_KNEE_FLEXION
                 else -> null
             }
             return CameraCaptureGuide("camera-$id-v1", direction,
@@ -58,8 +74,7 @@ object CameraRepProposals {
             val image = frame.imageLandmarks.singleOrNull()
             val world = frame.worldLandmarks.singleOrNull()
             if (!frame.uniquelyVisible || !frame.videoFrameWritten || image == null || world == null || !guide.visible(image)) { reset(); return@forEach }
-            val value = UpperBodyPoseGeometry.metric(world.mapIndexed { i, p -> PosePoint(p.x, p.y, p.z,
-                minOf(image[i].visibility ?: 0.0, image[i].presence ?: 0.0)) }, motion, left) ?: run { reset(); return@forEach }
+            val value = guide.observedMetric(image, world, left) ?: run { reset(); return@forEach }
             if (start == null) {
                 if (motion.atRest(value)) {
                     if (stableSince == null) stableSince = ns

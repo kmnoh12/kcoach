@@ -239,7 +239,10 @@ class CalibrationCameraActivity : ComponentActivity() {
         if (!cameraReady || capture != null || starting) return
         if (!poseReady) { status.text = "필수 관절과 시작 위치가 보이게 맞춘 뒤 촬영해 주세요."; return }
         if (orientation.selectedItemPosition == 0) { status.text = "워치 화면이 손등 쪽인지 손바닥 쪽인지 선택해 주세요."; return }
-        if (CameraCaptureGuide.forExercise(exerciseId, hand.isChecked).metric == null && !startReviewed.isChecked) { status.text = "이 동작의 시작 자세는 안내와 영상을 직접 확인해 주세요."; return }
+        if ((CameraCaptureGuide.forExercise(exerciseId, hand.isChecked).metric == null ||
+                ExerciseMeasurementContracts.resolve(exerciseId).recipe == MeasurementRecipe.SQUAT) && !startReviewed.isChecked) {
+            status.text = "이 동작의 시작 자세는 안내와 영상을 직접 확인해 주세요."; return
+        }
         starting = true; start.isEnabled = false
         Wearable.getNodeClient(this).connectedNodes.addOnSuccessListener { nodes ->
             if (nodes.isEmpty()) { starting = false; start.isEnabled = true; status.text = "워치를 연결한 뒤 함께 촬영해 주세요."; return@addOnSuccessListener }
@@ -349,13 +352,14 @@ class CalibrationCameraActivity : ComponentActivity() {
             val guide = CameraCaptureGuide.forExercise(exerciseId, previewLeft)
             val pose = normalized.singleOrNull()
             val worldPose = world.singleOrNull()
-            val readyMetric = if (pose != null && worldPose != null) guide.metric?.let { motion -> UpperBodyPoseGeometry.metric(worldPose.mapIndexed { i, p -> PosePoint(p.x, p.y, p.z, minOf(pose[i].visibility ?: 0.0, pose[i].presence ?: 0.0)) }, motion, previewLeft) } else null
+            val readyMetric = if (pose != null && worldPose != null) guide.observedMetric(pose, worldPose, previewLeft) else null
             val poseCandidate = pose != null && guide.visible(pose) && (guide.metric == null || readyMetric?.let { guide.metric!!.atRest(it) } == true)
             if (poseCandidate) { if (poseReadySinceNs == null) poseReadySinceNs = cameraNs } else poseReadySinceNs = null
             poseReady = poseReadySinceNs?.let { cameraNs - it >= 200_000_000L } == true
             if (capture == null && !starting) main.post { if (cameraReady) status.text = when {
                 normalized.size > 1 -> "여러 사람이 보여요. 한 사람만 화면에 들어오게 맞춰 주세요."
-                poseReady -> if (guide.metric == null) "필수 관절 확인 · 안내의 시작 자세를 직접 확인해 주세요" else "관절과 시작 위치 확인 · 촬영을 시작할 수 있어요"
+                poseReady -> if (guide.metric == CameraMotion.SQUAT_KNEE_FLEXION) "전신 선 자세 후보 · 시작 자세를 직접 확인하고 촬영해 주세요"
+                    else if (guide.metric == null) "필수 관절 확인 · 안내의 시작 자세를 직접 확인해 주세요" else "관절과 시작 위치 확인 · 촬영을 시작할 수 있어요"
                 else -> "필수 관절과 시작 위치가 보이게 맞춰 주세요"
             } }
             val active = capture
@@ -369,12 +373,9 @@ class CalibrationCameraActivity : ComponentActivity() {
                 frameIndex++
                 val now = SystemClock.elapsedRealtime()
                 if (now - lastClockWindowAtMs >= 20_000) { lastClockWindowAtMs = now; probe(active.id, "MIDDLE") }
-                val metric = if (world.size == 1 && normalized.size == 1) CameraCaptureGuide.forExercise(exerciseId, active.watchOnLeft).metric?.let { motion ->
-                    UpperBodyPoseGeometry.metric(world.single().mapIndexed { index, point ->
-                        val confidence = normalized.single()[index]
-                        PosePoint(point.x, point.y, point.z, minOf(confidence.visibility ?: 0.0, confidence.presence ?: 0.0))
-                    }, motion, active.watchOnLeft)
-                } else null
+                val metric = if (world.size == 1 && normalized.size == 1)
+                    CameraCaptureGuide.forExercise(exerciseId, active.watchOnLeft).observedMetric(normalized.single(), world.single(), active.watchOnLeft)
+                else null
                 counter?.observe(modelMs, metric)
                 val message = when {
                     normalized.size > 1 -> "여러 사람이 보여요. 혼자 화면에 들어와 주세요."

@@ -9,7 +9,7 @@ import java.io.FileOutputStream
 
 data class CalibrationReview(val captureId: String, val revision: Long, val countReference: SetCountReference?,
     val references: List<RepReference>, val cameraMetrics: CameraObservedMetrics? = null,
-    val nonRepIntervals: List<NonRepInterval> = emptyList())
+    val nonRepIntervals: List<NonRepInterval> = emptyList(), val squatMetrics: CameraSquatMetrics? = null)
 
 /** Manual totals and reviewed video boundaries have different evidential meaning. */
 class CalibrationReviewStore(private val context: Context) {
@@ -121,9 +121,11 @@ class CalibrationReviewStore(private val context: Context) {
                 ref.eligibleForLearning || ref.exclusionReason == "paused_template_not_supported" &&
                     ref.copy(exclusionReason = null).eligibleForLearning
             } }
-            val metrics = CameraObservedAnalyzer.analyze(frames, eligibleCameraCycles, capture.watchOnLeft, simultaneousArmsReviewed)
+            val squat = contract.recipe == MeasurementRecipe.SQUAT
+            val metrics = if (squat) null else CameraObservedAnalyzer.analyze(frames, eligibleCameraCycles, capture.watchOnLeft, simultaneousArmsReviewed)
+            val squatMetrics = if (squat) CameraSquatAnalyzer.analyze(frames, eligibleCameraCycles, capture.watchOnLeft) else null
             val next = current.copy(revision = current.revision + 1, references = references, cameraMetrics = metrics,
-                nonRepIntervals = excluded)
+                nonRepIntervals = excluded, squatMetrics = squatMetrics)
             write(next, cycles)
             next
         }
@@ -145,6 +147,7 @@ class CalibrationReviewStore(private val context: Context) {
             .put("nonRepIntervals", JSONArray(review.nonRepIntervals.map { interval -> JSONObject()
                 .put("startNs", interval.startNs).put("endNs", interval.endNs).put("reason", interval.reason.name) }))
             .put("cameraObservedMetrics", review.cameraMetrics?.let(::encodeMetrics) ?: JSONObject.NULL)
+            .put("cameraSquatMetrics", review.squatMetrics?.let(::encodeSquatMetrics) ?: JSONObject.NULL)
             .put("cameraProposalOrigin", context.getSharedPreferences("camera-rep-proposals", Context.MODE_PRIVATE).getString(review.captureId, null)?.let(::JSONArray) ?: JSONObject.NULL)
             .put("confirmationSource", "USER_REVIEWED_VIDEO")
             .put("references", JSONArray(review.references.map { reference -> JSONObject()
@@ -178,7 +181,31 @@ class CalibrationReviewStore(private val context: Context) {
                 List(rows.length()) { index -> rows.getJSONObject(index).let {
                     NonRepInterval(it.getLong("startNs"), it.getLong("endNs"), NonRepReason.valueOf(it.getString("reason")))
                 } }
-            })
+            }, if (json.isNull("cameraSquatMetrics") || !json.has("cameraSquatMetrics")) null else decodeSquatMetrics(json.getJSONObject("cameraSquatMetrics")))
+    }
+
+    private fun encodeSquatMetrics(metrics: CameraSquatMetrics) = JSONObject().put("schemaVersion", 1)
+        .put("source", "REVIEWED_SQUAT_CAMERA").put("watchOnLeft", metrics.watchOnLeft)
+        .put("coordinateBasis", "RELATIVE_WORLD_JOINT_ANGLES_AND_FIXED_IMAGE_INITIAL_TORSO_LENGTH")
+        .put("cycles", JSONArray(metrics.cycles.map { row -> JSONObject()
+            .put("startNs", row.startNs).put("turnNs", row.turnaroundNs).put("endNs", row.endNs).put("frames", row.frames)
+            .put("kneeMin", row.minimumKneeDegrees).put("kneeMax", row.maximumKneeDegrees)
+            .put("hipMin", row.minimumHipDegrees).put("hipMax", row.maximumHipDegrees)
+            .put("torsoTiltChange", row.torsoTiltVariationDegrees).put("pelvisSideways", row.pelvisSidewaysTorsoLengths)
+            .put("pelvisDrop", row.pelvisDropTorsoLengths).put("returnOffset", row.returnOffsetTorsoLengths)
+            .put("descendingMs", row.descendingMs).put("ascendingMs", row.ascendingMs)
+            .put("markedPauseMs", row.markedPauseMs ?: JSONObject.NULL) }))
+
+    private fun decodeSquatMetrics(json: JSONObject): CameraSquatMetrics {
+        require(json.getInt("schemaVersion") == 1 && json.getString("source") == "REVIEWED_SQUAT_CAMERA" &&
+            json.getString("coordinateBasis") == "RELATIVE_WORLD_JOINT_ANGLES_AND_FIXED_IMAGE_INITIAL_TORSO_LENGTH")
+        val rows = json.getJSONArray("cycles"); require(rows.length() in 1..600)
+        return CameraSquatMetrics(json.getBoolean("watchOnLeft"), List(rows.length()) { index -> rows.getJSONObject(index).let {
+            CameraSquatCycle(it.getLong("startNs"), it.getLong("turnNs"), it.getLong("endNs"), it.getInt("frames"),
+                it.getDouble("kneeMin"), it.getDouble("kneeMax"), it.getDouble("hipMin"), it.getDouble("hipMax"),
+                it.getDouble("torsoTiltChange"), it.getDouble("pelvisSideways"), it.getDouble("pelvisDrop"), it.getDouble("returnOffset"),
+                it.getLong("descendingMs"), it.getLong("ascendingMs"), if (it.isNull("markedPauseMs")) null else it.getLong("markedPauseMs"))
+        } })
     }
 
     private fun encodeMetrics(metrics: CameraObservedMetrics) = JSONObject().put("schemaVersion", 1)

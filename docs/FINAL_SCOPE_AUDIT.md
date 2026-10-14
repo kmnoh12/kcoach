@@ -20,7 +20,7 @@ START_WRIST_ORIENTATION_PLAN.md, AI_COACH_PLAN.md, WORKOUT_RESULT_UX.md와 이�
 | 워치 실제 실행·지연 기준과 채택/롤백 | PatternNativeValidation, PatternAdoptionController/PatternTransferOutbox | 실제 센서 trace/동결 설정/피드백 시각을 요구하고 채택 직전 재검증. 실물 통과 후보 없음 |
 | 개인 엔진 버전·현재 세트 고정·다음 시도 적용 | WorkoutWearingStore, WearWorkoutService, PatternActiveServiceTest | 경로 있음. 현재 활성화와 다음 세트 적용을 ACK로 구분. 물리 기기 적용은 미확인 |
 | 지정 변형 3종만 손목 방향 2초 | START_DIRECTION_IMPLEMENTATION.md의 저장소·전송·서비스 경로 | 33종 보류/7종 수동 유지. 맞는/반대/일상 독립 자료로 검증한 조건만 사용. 실제 방향 분리 자료 없음 |
-| 템포·각속도·움직임 변화·가림/단위/미측정 | ObservedMotionMetrics, ReviewedMotionBaseline, CameraObservedAnalyzer, 결과 패널 | 손목·상체 촬영 관측 경로 있음. 스쿼트 전신 관측 구현은 아래 미완료 |
+| 템포·각속도·움직임 변화·가림/단위/미측정 | ObservedMotionMetrics, ReviewedMotionBaseline, CameraObservedAnalyzer/CameraSquatAnalyzer, 결과 패널 | 손목·상체와 추가 전신 영상 관측 소프트웨어 연결. 실제 관측 성능은 미확인 |
 | 선택적 워치 템포 알림·연속 조건·빈도·즉시 끄기 | TempoFeedbackPolicy/WorkoutTempoSettings/WorkoutTempoServiceTest | 연결됨. 기본 OFF, 검증 개인 엔진에서만 실행. 실제 진동/체감은 미확인 |
 | 즉시 결과·이전 동일 루틴 비교·웜업·수동 우선·늦은 원본 | WorkoutSummaryPanel/WorkoutReviewContext, FinishedWorkoutStore | 연결됨. 기존 결과/요약 UI 대상 검사 있음. 사용자 폰 1초 표시 목표는 미계측 |
 | 심박 시계열·결측·추정 칼로리/프로필 | GPT_IMPLEMENTATION_STATUS.md의 구현 경로 | 신선도/간격/입력 조건과 추정 표시 연결됨. 실측 칼로리로 표시하지 않음 |
@@ -35,11 +35,9 @@ START_WRIST_ORIENTATION_PLAN.md, AI_COACH_PLAN.md, WORKOUT_RESULT_UX.md와 이�
 1. **반복 내부 정지 라벨 UI — 후속 소프트웨어 연결됨.** 정지 시작/끝·수정/삭제·반복 분할/합치기 보존과
    실제 프레임 대응을 연결하고 대상 검사했다. 미표시 정지는 미확인이며 정지 반복은 현재 DTW의 양성 학습에서
    제외한다. work/reviewed-pause-focused.log. 실물 관측 검증은 아직 별도다.
-2. **추가 G12 스쿼트 카메라 계약.** MeasurementRecipe.SQUAT/전신 안내는 있지만
-   CameraCaptureGuide.metric은 null이고 CameraObservedAnalyzer는 상체 관측만 구현돼 있다.
-   전신 선 자세 후보→내려감→하단 전환→선 자세 복귀의 영상 관측과 골반 이미지 이동/무릎·고관절 각도를
-   구현해 명세와 연결해야 한다. 손목 수동 정책은 유지한다. world 골반 y를 전신 높이로 쓰거나
-   가상 IMU 경로의 비수직성을 자세 정확도로 표시하면 안 된다. 사용자 진입점/변형도 포함해 확인한다.
+2. **추가 G12 스쿼트 카메라 계약 — 후속 소프트웨어 연결됨.** [G12 구현](G12_CAMERA_IMPLEMENTATION.md)은
+   5개 촬영 진입 항목/공통 레시피·선 자세/완전 왕복 후보·상대 관절각·골반 영상 이동·영속 저장/ZIP을 연결했다.
+   워치 수동 정책과 기존 43종은 유지한다. 대상 검사 통과이며 사용자 폰 초기화/실제 전신 관측은 미확인이다.
 3. **사용자 폰 관절 엔진 초기화 실패.** POSE_INIT 내부 오류를 아직 받지 못했다.
    기존 APK의 JNI 선언/라이브러리/모델 존재가 사용자 폰 실행 성공을 증명하지 않는다.
    오류 정보가 없는 동안 근거 없는 SDK/R8/자세 임계값 변경으로 해결 처리하지 않는다.

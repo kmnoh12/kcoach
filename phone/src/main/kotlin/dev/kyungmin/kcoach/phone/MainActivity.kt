@@ -142,6 +142,7 @@ import dev.kyungmin.kcoach.core.SetIdentity
 import dev.kyungmin.kcoach.core.SetRepSource
 import dev.kyungmin.kcoach.core.SetCompletionResult
 import dev.kyungmin.kcoach.core.ExerciseTrackingProfiles
+import dev.kyungmin.kcoach.core.ExerciseMeasurementContracts
 import dev.kyungmin.kcoach.core.PersonalCalibrationBuilder
 import dev.kyungmin.kcoach.core.PersonalCalibrationProfileCodec
 import dev.kyungmin.kcoach.core.TrackingMode
@@ -978,7 +979,7 @@ class MainActivity : ComponentActivity() {
             Toast.makeText(this, "진행 중인 운동을 종료한 뒤 함께 촬영해 주세요", Toast.LENGTH_LONG).show()
             return
         }
-        val selected = WorkoutData.catalog.firstOrNull { it.id == selectedCalibrationExerciseId } ?: return
+        val selected = calibrationExercises().firstOrNull { it.id == selectedCalibrationExerciseId } ?: return
         startActivity(Intent(this, CalibrationCameraActivity::class.java).putExtra("exerciseId", selected.id).putExtra("exerciseName", selected.name))
     }
 
@@ -1001,12 +1002,22 @@ class MainActivity : ComponentActivity() {
         calibrationSaveTimeoutTask = null
     }
 
+    private fun calibrationExercises(): List<ExerciseDefinition> {
+        val additional = listOf(
+            ExerciseDefinition("squat", "스쿼트 · 전신 촬영", "대퇴, 둔근", "하체", "맨몸"),
+            ExerciseDefinition("barbell_squat", "백 스쿼트 · 전신 촬영", "대퇴, 둔근", "하체", "바벨"),
+            ExerciseDefinition("front_squat", "프런트 스쿼트 · 전신 촬영", "대퇴, 둔근", "하체", "바벨"),
+            ExerciseDefinition("goblet_squat", "고블릿 스쿼트 · 전신 촬영", "대퇴, 둔근", "하체", "덤벨"),
+            ExerciseDefinition("smith_squat", "스미스 스쿼트 · 전신 촬영", "대퇴, 둔근", "하체", "머신"))
+        return WorkoutData.catalog + additional.filter { extra -> WorkoutData.catalog.none { it.id == extra.id } }
+    }
+
     private fun showCalibration() {
         stopTicker()
         currentTab = RootTab.CALIBRATION
         currentScreen = Screen.ROOT
-        val selected = WorkoutData.catalog.firstOrNull { it.id == selectedCalibrationExerciseId }
-            ?: WorkoutData.catalog.first()
+        val selectable = calibrationExercises()
+        val selected = selectable.firstOrNull { it.id == selectedCalibrationExerciseId } ?: selectable.first()
         val selectedProfile = ExerciseTrackingProfiles.resolve(selected.id, selected.name)
         val manualRequired = selectedProfile.mode == TrackingMode.MANUAL_REQUIRED
         val calibrationPrefs = getSharedPreferences("wear-sync", MODE_PRIVATE)
@@ -1023,7 +1034,7 @@ class MainActivity : ComponentActivity() {
             }
         }
         val instructions = "1. 운동과 워치를 착용한 손·화면 방향 선택\n" +
-            "2. 폰을 고정하고 팔·몸통이 보이게 촬영\n" +
+            "2. 폰을 고정하고 필요한 관절이 보이게 촬영 (스쿼트는 머리부터 발까지 전신)\n" +
             "3. 평소 동작으로 6~8회부터 수행한 뒤 촬영 종료\n" +
             "4. 영상과 워치 움직임의 시점·반복 구간 확인\n" +
             "5. 확인 자료를 보관하고 별도 세트에서 개인 설정 검증"
@@ -1046,19 +1057,22 @@ class MainActivity : ComponentActivity() {
         }
         val ui = CalibrationUi(
             selectedName = selected.name,
-            status = if (manualRequired) "손목 센서 직접 관측 불가 · 수동 기록" else calibrationLabel(selected.id),
+            status = if (ExerciseMeasurementContracts.resolve(selected.id).recipe == dev.kyungmin.kcoach.core.MeasurementRecipe.SQUAT)
+                "전신 영상 관측 · 워치 단독 횟수는 수동 입력" else if (manualRequired) "손목 센서 직접 관측 불가 · 수동 기록" else calibrationLabel(selected.id),
             statusAmber = manualRequired,
             instructions = instructions,
             manualRequired = manualRequired,
+            cameraObservationAvailable = ExerciseMeasurementContracts.resolve(selected.id).recipe == dev.kyungmin.kcoach.core.MeasurementRecipe.SQUAT,
             profile = profileUi,
-            rows = WorkoutData.catalog.map { exercise ->
+            rows = selectable.map { exercise ->
                 val profile = ExerciseTrackingProfiles.resolve(exercise.id, exercise.name)
                 CalibrationRowUi(
                     id = exercise.id,
                     name = exercise.name,
                     muscles = exercise.muscles,
                     status = if (profile.mode == TrackingMode.MANUAL_REQUIRED) {
-                        "수동 기록만"
+                        if (ExerciseMeasurementContracts.resolve(exercise.id).recipe == dev.kyungmin.kcoach.core.MeasurementRecipe.SQUAT)
+                            "전신 영상 관측 · 워치 횟수는 수동" else "수동 기록만"
                     } else {
                         val status = calibrationLabel(exercise.id)
                         if (exercise.id == selectedCalibrationExerciseId) "선택됨 · $status" else status
@@ -1085,7 +1099,8 @@ class MainActivity : ComponentActivity() {
                     sessionActive = { calibrationSessionId != null },
                     button = {
                         calibrationButtonOverride.value ?: CalibrationButtonUi(
-                            if (manualRequired) "이 운동은 수동 기록만 지원"
+                            if (ui.cameraObservationAvailable) "워치와 함께 전신 영상 촬영"
+                            else if (manualRequired) "이 운동은 수동 기록만 지원"
                             else if (calibrationSessionId == null) "워치와 함께 영상 촬영"
                             else if (calibrationStopRequested) "보정 원본 저장 중…"
                             else "보정 종료·저장",

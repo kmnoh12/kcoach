@@ -80,6 +80,7 @@ class CalibrationUi(
     val manualRequired: Boolean,
     val profile: CalibrationProfileUi?,
     val rows: List<CalibrationRowUi>,
+    val cameraObservationAvailable: Boolean = false,
 )
 
 /** Live state of the main button, driven by watch events. */
@@ -118,7 +119,7 @@ fun CalibrationScreen(
             if (active) KColors.Accent else KColors.SurfaceRaised,
             if (state.textAmber) KColors.Accent else if (active) KColors.OnAccent else KColors.Muted,
             58,
-            enabled = state.enabled && !ui.manualRequired,
+            enabled = state.enabled && (!ui.manualRequired || ui.cameraObservationAvailable),
             onClick = actions.toggle,
         )
         actions.openSensorView?.let { open ->

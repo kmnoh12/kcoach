@@ -84,6 +84,9 @@ class CalibrationReviewActivity : ComponentActivity() {
     }
     private fun text(value: String, size: Float = 14f) = TextView(this).apply { text = value; textSize = size; setTextColor(Color.LTGRAY); setPadding(0, 6, 0, 6) }
     private fun button(title: String, action: () -> Unit) = Button(this).apply { text = title; setOnClickListener { action() } }
+    private fun observedText(value: CalibrationReview?): String = if (capture?.exerciseId?.let {
+        ExerciseMeasurementContracts.resolve(it).recipe == MeasurementRecipe.SQUAT } == true)
+        cameraSquatMetricsText(value?.squatMetrics) else cameraObservedMetricsText(value?.cameraMetrics)
     private fun showList() {
         root(); content.addView(text("저장한 촬영", 24f))
         content.addView(button("개인 패턴·검증 현황") { startActivity(Intent(this, PatternCandidatesActivity::class.java)) })
@@ -141,7 +144,7 @@ class CalibrationReviewActivity : ComponentActivity() {
             content.addView(text(if (CalibrationVideoRetention(this).logsOnly(id))
                 "로그만 보관 중이에요. 센서·관절·기존 확인 라벨은 남아 있으며 실제 영상으로 동작을 다시 확인하거나 새 영상 라벨을 만들 수는 없어요."
                 else "원본 영상을 찾지 못했어요. 기존 로그와 라벨은 보관하지만 영상 재확인은 할 수 없어요."))
-            content.addView(text(cameraObservedMetricsText(review?.cameraMetrics)))
+            content.addView(text(observedText(review)))
             cycleRows = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
             content.addView(cycleRows)
             cycles.forEachIndexed { index, cycle ->
@@ -213,7 +216,7 @@ class CalibrationReviewActivity : ComponentActivity() {
             setTextColor(Color.WHITE); isChecked = review?.cameraMetrics?.simultaneousArmsReviewed == true
         }
         content.addView(simultaneous)
-        observedMetricsText = text(cameraObservedMetricsText(review?.cameraMetrics))
+        observedMetricsText = text(observedText(review))
         content.addView(observedMetricsText)
         markerButtons = listOf(button("시작 위치 지정") { startMark = currentNs(); toast("첫 위치를 지정했어요.") },
             button("전환 위치 지정") { turnMark = currentNs(); toast("전환 위치를 지정했어요.") },
@@ -229,8 +232,10 @@ class CalibrationReviewActivity : ComponentActivity() {
             if (pauseStart != null) { toast("표시하던 정지의 끝을 지정하거나 구간 표시를 취소해 주세요."); return@button }
             reviews.saveCycles(id, cycles, alignment.isChecked, review?.revision ?: 0, simultaneous.isChecked, nonRepIntervals).onSuccess {
                 review = it
-                observedMetricsText?.text = cameraObservedMetricsText(it.cameraMetrics)
-                toast("완전 반복 ${it.references.size}개 · 제외 구간 ${it.nonRepIntervals.size}개 저장 · 보정 자료 조건 통과 ${it.references.count { ref -> ref.eligibleForLearning }}개")
+                observedMetricsText?.text = observedText(it)
+                toast(if (ExerciseMeasurementContracts.resolve(selected.exerciseId).recipe == MeasurementRecipe.SQUAT)
+                    "영상 확인 반복 ${it.references.size}개 저장 · 워치 단독 횟수는 수동 입력이에요."
+                    else "완전 반복 ${it.references.size}개 · 제외 구간 ${it.nonRepIntervals.size}개 저장 · 보정 자료 조건 통과 ${it.references.count { ref -> ref.eligibleForLearning }}개")
             }.onFailure { toast("구간·총 횟수 또는 영상 상태를 다시 확인해 주세요.") }
         })
         content.addView(button("원본 수신 상태 새로고침") { showCapture(id) })
