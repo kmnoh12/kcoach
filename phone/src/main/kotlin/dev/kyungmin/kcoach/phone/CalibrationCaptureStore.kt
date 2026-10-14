@@ -143,7 +143,13 @@ class CalibrationCaptureStore(private val context: Context) {
     fun finish(id: String, videoComplete: Boolean, reason: String? = null): Result<CalibrationCapture> = synchronized(lock) {
         runCatching {
             val capture = load(id).getOrThrow()
-            require(capture.status == CalibrationCaptureStatus.RECORDING)
+            if (capture.status != CalibrationCaptureStatus.RECORDING) {
+                // Metadata may have committed before clearing the active receipt failed.
+                // Complete cleanup without changing the already-saved video status or reason.
+                if (prefs.getString("active", null) == id) check(prefs.edit().remove("active").commit())
+                cursors.remove(File(directory(id), "frames.jsonl").absolutePath)
+                return@runCatching capture
+            }
             val video = if (videoComplete && reason == null) ReferenceVideoEvidence.inspect(videoFile(id)).getOrNull() else null
             val capturedFrames = if (video != null) frames(id).getOrNull() else null
             val recorded = capturedFrames?.filter { it.videoFrameWritten }.orEmpty()

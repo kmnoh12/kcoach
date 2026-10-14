@@ -75,6 +75,7 @@ class CalibrationCameraActivity : ComponentActivity() {
     private var frameIndex = 0L
     private var timestampSource = CameraTimestampSource.UNKNOWN
     private var counter: UpperBodyPoseCounter? = null
+    private val finalizer by lazy { CalibrationCaptureFinalizer(store) }
     private var lastClockWindowAtMs = 0L
     private val clockReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -148,7 +149,9 @@ class CalibrationCameraActivity : ComponentActivity() {
         }
         addView(copyError)
         addView(LinearLayout(this@CalibrationCameraActivity).apply {
-            start = Button(this@CalibrationCameraActivity).apply { text = "워치와 함께 촬영 시작"; isEnabled = false; setOnClickListener { beginCapture() } }
+            start = Button(this@CalibrationCameraActivity).apply { text = "워치와 함께 촬영 시작"; isEnabled = false; setOnClickListener {
+                if (finalizer.pending != null) { isEnabled = false; worker.execute { saveStoppedCapture() } } else beginCapture()
+            } }
             stop = Button(this@CalibrationCameraActivity).apply { text = "촬영 종료 · 저장"; isEnabled = false; setOnClickListener { stopCapture(null) } }
             addView(start, LinearLayout.LayoutParams(0, -2, 1f)); addView(stop, LinearLayout.LayoutParams(0, -2, 1f))
         })
@@ -385,8 +388,20 @@ class CalibrationCameraActivity : ComponentActivity() {
             val frameWidth = bitmap.width; val frameHeight = bitmap.height
             main.post { overlay.points = normalized.singleOrNull().orEmpty(); overlay.frameWidth = frameWidth; overlay.frameHeight = frameHeight; overlay.invalidate() }
         } catch (error: Throwable) {
-            if (capture != null) stopCapture("Camera frame processing failed: ${error.javaClass.simpleName}")
-            main.post { status.text = "촬영이 중단됐어요. 받은 영상과 관절 자료는 보관해요." }
+            val storageFull = captureStorageFull(error)
+            val hadCapture = capture != null || preparedCapture != null
+            if (hadCapture) stopCapture(if (storageFull) "Storage full while recording reference frames"
+                else "Camera frame processing failed: ${error.javaClass.simpleName}")
+            else poseReady = false
+            val report = CameraInitializationFailure.report("FRAME_PROCESSING", error)
+            main.post {
+                failureReport = report; copyError.visibility = View.VISIBLE
+                status.text = when {
+                    !hadCapture -> "카메라 프레임을 처리하지 못했어요. 오류 정보를 확인해 주세요."
+                    storageFull -> "저장 공간이 부족해 촬영을 멈췄어요. 이미 받은 자료의 종료 상태를 저장하는 중이에요."
+                    else -> "촬영이 중단됐어요. 받은 자료의 종료 상태를 저장하는 중이에요."
+                }
+            }
         } finally { bitmap?.recycle(); image.close() }
     }
 
@@ -406,13 +421,29 @@ class CalibrationCameraActivity : ComponentActivity() {
         worker.execute {
             val videoFinished = runCatching { encoder?.finish() == true }.getOrDefault(false)
             encoder = null
-            val saved = store.finish(active.id, videoFinished, reason)
+            finalizer.prepare(active, videoFinished, reason)
+            saveStoppedCapture()
+        }
+    }
+
+    private fun saveStoppedCapture() {
+        val pending = finalizer.pending ?: return
+        val active = pending.capture
+        val saved = finalizer.save()
+        if (saved.isSuccess) {
             capture = null; preparedCapture = null; counter = null; stopping = false
-            main.post {
-                starting = false; start.isEnabled = cameraReady; hand.isEnabled = true; orientation.isEnabled = true; startConditions?.isEnabled = true
-                status.text = if (saved.getOrNull()?.status == CalibrationCaptureStatus.REVIEW_PENDING)
+        }
+        main.post {
+            if (saved.isFailure) {
+                // Keep stopping=true: retry writes metadata only, never resumes/overwrites the video.
+                start.text = "저장 다시 시도"; start.isEnabled = true
+                status.text = captureSaveFailureText(requireNotNull(saved.exceptionOrNull()))
+            } else {
+                starting = false; start.text = "워치와 함께 촬영 시작"; start.isEnabled = cameraReady
+                hand.isEnabled = true; orientation.isEnabled = true; startConditions?.isEnabled = true
+                status.text = if (saved.getOrThrow().status == CalibrationCaptureStatus.REVIEW_PENDING)
                     "영상 저장 완료 · 워치 원본 수신 후 동작을 확인해 주세요." else "중단 자료를 보관했어요. 새 촬영에서 이어갈 수 있어요."
-                if (reason == null && saved.isSuccess && !isFinishing && lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED))
+                if (pending.reason == null && !isFinishing && lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED))
                     startActivity(Intent(this, CalibrationReviewActivity::class.java).putExtra("captureId", active.id))
             }
         }
