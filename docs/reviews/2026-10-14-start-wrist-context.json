@@ -1,0 +1,68 @@
+{
+  "createdAt": "2026-10-14T13:33:25.495656+00:00",
+  "baseCommit": "dcf0b62ec804575bc1b762a2459ac735ca466a60",
+  "scope": "User-declared start wrist context for three specified variants; no sensor-confirmed direction profile yet",
+  "tests": {
+    "core": {
+      "tests": 226,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "updates": {
+      "tests": 14,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "phone": {
+      "tests": 273,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "wear": {
+      "tests": 69,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "lint": {
+    "updates": {
+      "Error": 0,
+      "Warning": 14
+    },
+    "phone": {
+      "Error": 0,
+      "Warning": 154
+    },
+    "wear": {
+      "Error": 0,
+      "Warning": 35
+    }
+  },
+  "buildLog": "work/start-context-full-check.log",
+  "apkBuildStatus": "RUNNING",
+  "physicalDirectionValidationVerified": false,
+  "cameraInitializationVerified": false,
+  "publicationChanged": false,
+  "remaining": [
+    "Reviewed target direction profile construction and storage",
+    "Transfer and freeze a validated direction profile in the watch runtime",
+    "Preparation interval capture and raw replay",
+    "Watch8 correct/opposite/everyday posture controls",
+    "Actual camera error and initialization validation",
+    "Remaining original measurement and AI completion gates"
+  ],
+  "verifiedCases": [
+    "Legacy wearing schema preserves unknown mount/variant and frozen absence",
+    "Command keeps legacy fields and appends index 19",
+    "Owned candidate conditions persist in phone store and actual outbox",
+    "Listener and workout service preserve context/device in raw manifest",
+    "Paused same-attempt context changes are rejected",
+    "Service recreation preserves the original context",
+    "Authoritative resting sync does not require working context",
+    "Deferred/basic starts do not receive candidate conditions"
+  ]
+}

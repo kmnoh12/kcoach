@@ -1223,7 +1223,8 @@ class MainActivity : ComponentActivity() {
         showSheet { dismiss ->
             dev.kyungmin.kcoach.phone.ui.WorkoutWearingStartSheet(
                 previous = WorkoutWearingStore(this).lastSelection().getOrNull(), cancel = dismiss,
-                start = { selection -> dismiss(); start(selection) }, startBasic = { dismiss(); start(null) })
+                start = { selection -> dismiss(); start(selection) }, startBasic = { dismiss(); start(null) },
+                exerciseIds = routine.exercises.map { it.exercise.id })
         }
     }
 

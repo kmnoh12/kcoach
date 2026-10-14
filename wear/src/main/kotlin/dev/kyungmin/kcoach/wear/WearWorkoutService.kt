@@ -168,6 +168,8 @@ class WearWorkoutService : Service(), SensorEventListener {
     private val shadowEvents = mutableListOf<dev.kyungmin.kcoach.core.PatternTrialEvent>()
     private var patternBinding = ""
     private var patternWearing = ""
+    private var startWristContext = ""
+    private var startWristDeviceId = ""
     private var patternSelectionMode = ""
     private var frozenActive: FrozenPatternProfile? = null
     private var activeDetector: dev.kyungmin.kcoach.core.ReviewedPatternDetector? = null
@@ -371,7 +373,19 @@ class WearWorkoutService : Service(), SensorEventListener {
         if (incoming != sessionId && sessionId.isNotBlank() && revision == 0L && lastCommandRevision > 0) return "STALE"
         if (type == "SYNC" && intent.getStringExtra("syncPhase") !in setOf("WORKING", "RESTING", "PAUSED")) return "INVALID"
         val requestedShadow = intent.getStringExtra("patternShadowCommandId").orEmpty()
+        val workingRequest = type in setOf("START", "SET") || type == "SYNC" &&
+            (intent.getStringExtra("syncPhase") == "WORKING" || intent.getStringExtra("syncPhase") == "PAUSED" &&
+                intent.getLongExtra("pausedRestRemainingMs", 0L) == 0L)
         if (intent.getStringExtra("patternSelectionMode").orEmpty() !in setOf("", "VERIFIED_PATTERN")) return "INVALID"
+        val requestedStart = intent.getStringExtra("startWristContext").orEmpty()
+        if (requestedStart.isNotEmpty()) {
+            val context = runCatching { dev.kyungmin.kcoach.core.StartWristContextCodec.decode(requestedStart) }.getOrNull() ?: return "INVALID"
+            val wearing = runCatching { dev.kyungmin.kcoach.core.PatternWearingContext.decode(intent.getStringExtra("patternWearing").orEmpty()) }.getOrNull() ?: return "INVALID"
+            if (context.exerciseId != dev.kyungmin.kcoach.core.ExerciseMotionCatalog.normalizeExerciseId(intent.getStringExtra("exerciseId").orEmpty()) ||
+                context.owner != wearing.owner || context.side != wearing.side || context.placement != wearing.placement) return "INVALID"
+        }
+        if ((running || paused && pausedRestRemainingMs == 0L) && incoming == sessionId && sameSet(intent) &&
+            workingRequest && requestedStart != startWristContext) return "START_CONTEXT_CHANGED"
         val binding = if (type in setOf("START", "SET", "SYNC")) runCatching { incomingPatternBinding(intent) }.getOrElse { return "INVALID" }
             else intent.getStringExtra("patternBinding").orEmpty()
         if (binding.isNotEmpty() && type in setOf("START", "SET", "SYNC")) {
@@ -380,7 +394,7 @@ class WearWorkoutService : Service(), SensorEventListener {
                 key.recipe != dev.kyungmin.kcoach.core.ExerciseMeasurementContracts.resolve(intent.getStringExtra("exerciseId").orEmpty()).recipe)
                 return "INVALID"
         }
-        if (running && incoming == sessionId && sameSet(intent) && type in setOf("START", "SET", "SYNC") && binding != patternBinding)
+        if (running && incoming == sessionId && sameSet(intent) && workingRequest && binding != patternBinding)
             return "PATTERN_BINDING_CHANGED"
         if (requestedShadow.isNotEmpty() && type in setOf("START", "SET", "SYNC")) {
             val profile = patternProfiles.requestedShadow(requestedShadow).getOrNull()?.runtime ?: return "PATTERN_NOT_READY"
@@ -408,6 +422,7 @@ class WearWorkoutService : Service(), SensorEventListener {
         var boundFields = intent.getStringExtra("patternBinding")?.takeIf { it.isNotEmpty() }?.let { fields + it } ?: fields
         intent.getStringExtra("patternWearing")?.takeIf { it.isNotEmpty() }?.let { boundFields = boundFields + it }
         intent.getStringExtra("patternSelectionMode")?.takeIf { it.isNotEmpty() }?.let { boundFields = boundFields + it }
+        intent.getStringExtra("startWristContext")?.takeIf { it.isNotEmpty() }?.let { boundFields = boundFields + it }
         return SensorCaptureFormat.sha256(JSONArray(boundFields).toString().toByteArray(Charsets.UTF_8))
     }
 
@@ -522,6 +537,7 @@ class WearWorkoutService : Service(), SensorEventListener {
             .put("patternBinding", patternBinding).put("activeUseConfirmed", activeUseConfirmed)
             .put("patternWearing", patternWearing)
             .put("patternSelectionMode", patternSelectionMode)
+            .put("startWristContext", startWristContext).put("startWristDeviceId", startWristDeviceId)
             .put("activeInterrupted", activeInterrupted)
             .put("activeSampleCalls", activeSampleCalls)
         runtimePrefs.edit().putString("state", state.toString()).putLong("commandRevision", lastCommandRevision).putString("lastAppliedCommand", lastAppliedCommand).commit()
@@ -569,6 +585,14 @@ class WearWorkoutService : Service(), SensorEventListener {
             configureTracking(state.optString("trackingProfileSnapshot").takeIf { it.isNotBlank() && ownsWorkingSet })
             patternBinding = state.optString("patternBinding")
             patternWearing = state.optString("patternWearing")
+            startWristContext = state.optString("startWristContext")
+            startWristDeviceId = state.optString("startWristDeviceId")
+            if (startWristContext.isNotEmpty()) {
+                val start = dev.kyungmin.kcoach.core.StartWristContextCodec.decode(startWristContext)
+                val wearing = dev.kyungmin.kcoach.core.PatternWearingContext.decode(patternWearing)
+                require(start.owner == wearing.owner && start.side == wearing.side && start.placement == wearing.placement)
+                require(startWristDeviceId == WearClockEpoch.current(this).deviceId)
+            }
             configureActive()
             activeUseConfirmed = state.optBoolean("activeUseConfirmed")
             activeInterrupted = state.optBoolean("activeInterrupted")
@@ -803,6 +827,8 @@ class WearWorkoutService : Service(), SensorEventListener {
         // when a replacement set starts.
         resetCaptureBuffer(deleteChunks = false)
         patternWearing = intent.getStringExtra("patternWearing").orEmpty()
+        startWristContext = intent.getStringExtra("startWristContext").orEmpty()
+        startWristDeviceId = if (startWristContext.isEmpty()) "" else WearClockEpoch.current(this).deviceId
         patternBinding = incomingPatternBinding(intent)
         configureActive()
         patternShadowCommandId = intent.getStringExtra("patternShadowCommandId").orEmpty()
@@ -1443,6 +1469,8 @@ class WearWorkoutService : Service(), SensorEventListener {
                     "patternSelectionMode" to patternSelectionMode,
                     "startDirectionStatus" to dev.kyungmin.kcoach.core.StartWristOrientationPolicy.uncheckedStartStatus(exerciseId),
                     "startDirectionCandidate" to dev.kyungmin.kcoach.core.StartWristOrientationPolicy.candidate(exerciseId).name,
+                    "startWristContext" to startWristContext,
+                    "startWristDeviceId" to startWristDeviceId,
                     "patternActiveCommandId" to frozenActive?.commandId.orEmpty(),
                     "patternBaselineCount" to reps.toString(),
                     "patternBaselineSampleCalls" to activeSampleCalls.toString(),
@@ -1696,6 +1724,7 @@ class WearWorkoutService : Service(), SensorEventListener {
         shadowSampleCalls = 0L; shadowProcessingHistogram.fill(0); shadowEvents.clear()
         patternShadowCommandId = ""; frozenShadow = null; shadowDetector = null; shadowUseConfirmed = false; shadowCount = 0; shadowInterrupted = false
         patternBinding = ""; patternWearing = ""; patternSelectionMode = ""; frozenActive = null; activeDetector = null; activeUseConfirmed = false; activeInterrupted = false
+        startWristContext = ""; startWristDeviceId = ""
         sessionId = ""
         setId = ""; attemptId = ""
         exerciseId = ""

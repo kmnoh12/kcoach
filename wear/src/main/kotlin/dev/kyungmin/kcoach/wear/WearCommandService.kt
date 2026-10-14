@@ -187,6 +187,7 @@ class WearCommandService : WearableListenerService() {
                 putExtra("patternBinding", fields.getOrNull(16).orEmpty())
                 putExtra("patternWearing", fields.getOrNull(17).orEmpty())
                 putExtra("patternSelectionMode", fields.getOrNull(18).orEmpty())
+                putExtra("startWristContext", fields.getOrNull(19).orEmpty())
             } else {
                 putExtra("session", fields.getOrNull(2).orEmpty())
                 putExtra("exerciseId", fields.getOrNull(3).orEmpty())

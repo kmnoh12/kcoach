@@ -14,6 +14,26 @@ import org.robolectric.annotation.Config
 @Config(sdk = [34], qualifiers = "w360dp-h800dp-xxhdpi")
 class WorkoutWearingUiTest {
     @get:Rule val compose = createComposeRule()
+    @Test fun candidateSetupStoresExplicitVariantAndMountWhileRemainingOptional() {
+        var choice: WorkoutWearingSelection? = null
+        compose.setContent {
+            WorkoutWearingStartSheet(WorkoutWearingSelection("LEFT", "OUTSIDE"), {}, { choice = it }, {}, listOf("external_rotation"))
+        }
+        compose.onNodeWithText("팔꿈치 쪽").performScrollTo().performClick()
+        compose.onNodeWithText("손바닥 위 · 전완 수평").performScrollTo().performClick()
+        compose.onNodeWithText("이 착용 상태로 시작").performScrollTo().performClick()
+        assertEquals(WorkoutWearingSelection("LEFT", "OUTSIDE", "ELBOW", mapOf("external_rotation" to "PALM_UP_HORIZONTAL")), choice)
+    }
+    @Test fun deferredExercisesDoNotShowOrRequireCandidateSetup() {
+        var choice: WorkoutWearingSelection? = null
+        compose.setContent {
+            WorkoutWearingStartSheet(WorkoutWearingSelection("LEFT", "OUTSIDE"), {}, { choice = it }, {}, listOf("lat_pull_down", "barbell_row"))
+        }
+        compose.onNodeWithText("본체 위쪽이 향하는 곳").assertDoesNotExist()
+        compose.onNodeWithText("케이블 익스터널 로테이션 시작").assertDoesNotExist()
+        compose.onNodeWithText("이 착용 상태로 시작").performClick()
+        assertEquals(WorkoutWearingSelection("LEFT", "OUTSIDE"), choice)
+    }
     @Test fun theMenuShowsConfirmedWearingInsteadOfAStaticLeftHandLabel() {
         compose.setContent { MenuScreen("test", MenuActions({}, { null }, {}), WorkoutWearingSelection("RIGHT", "INSIDE")) }
         compose.onNodeWithText("오른손").assertExists()

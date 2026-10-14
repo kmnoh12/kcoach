@@ -108,6 +108,18 @@ object WearSync {
         return fields.joinToString("|")
     }
 
+    /** Additive field: older watch readers ignore it and never assume direction confirmation. */
+    fun withStartWristContext(payload: String, context: StartWristContext): String {
+        val fields = parse(payload).toMutableList()
+        require(fields.firstOrNull() == "2")
+        require(ExerciseMotionCatalog.normalizeExerciseId(fields[3]) == context.exerciseId)
+        val wearing = PatternWearingContext.decode(fields.getOrNull(17).orEmpty())
+        require(wearing.owner == context.owner && wearing.side == context.side && wearing.placement == context.placement)
+        while (fields.size < 20) fields.add("")
+        fields[19] = StartWristContextCodec.encode(context)
+        return fields.joinToString("|")
+    }
+
     fun hello(device: String): String = listOf("1", device, System.currentTimeMillis()).joinToString("|")
 
     fun heartbeat(device: String): String = listOf("1", device, System.currentTimeMillis()).joinToString("|")
