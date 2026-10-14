@@ -132,6 +132,7 @@ class AiCalibrationTest {
                 ChatGptResponseResult("complete", "actual", answer(input, true).toString())
         }
         val controller = AiCalibrationController(app, auth, transport, inputLoader = { _, check -> check(); input }, variantSaver = { material, proposal, id ->
+            assertNotEquals(Looper.getMainLooper(), Looper.myLooper())
             saves.incrementAndGet(); PatternCandidateStore(app).saveCandidate(PatternCalibrationParameters.apply(material.candidate.profile, proposal.changes, id, 2)).getOrThrow()
         })
         controller.bind("fixture-a", "base"); await("Input did not load") { controller.state.value.loaded }

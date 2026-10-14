@@ -132,10 +132,7 @@ internal class AiCalibrationController(
                                             answer to variants
                                         }
                                         val replayFinished = System.nanoTime()
-                                        handler.post finish@ {
-                                            if (ticket != generation) return@finish
-                                            compared.onFailure { fail(generation, it) }.onSuccess { (answer, variants) ->
-                                                try {
+                                        val completed = compared.mapCatching { (answer, variants) ->
                                                     checkpoint(generation, deadline)
                                                     val saved = variants.map { (proposal, expected, replay) ->
                                                         val candidate = variantSaver(input, proposal, expected.id)
@@ -148,10 +145,14 @@ internal class AiCalibrationController(
                                                         .put("local_replay", (replayFinished - modelFinished) / 1e6)
                                                         .put("save", (System.nanoTime() - replayFinished) / 1e6).put("total", (System.nanoTime() - started) / 1e6)
                                                     val complete = store.complete(key, row.getString("run_id"), answer, response, saved, timing)
+                                                    complete
+                                        }
+                                        handler.post finish@ {
+                                            if (ticket != generation) return@finish
+                                            completed.onFailure { fail(generation, it) }.onSuccess { complete ->
                                                     cancellation = null; pending = null
                                                     state.value = state.value.copy(busy = false, resultJson = complete.toString(), stage = "COMPLETED",
-                                                        message = if (saved.isEmpty()) "검토 결과를 저장했어요. 기존 설정은 유지돼요" else "보정 후보를 저장했어요 · 독립 검증 대기 · 워치 설정은 유지돼요")
-                                                } catch (error: Exception) { fail(generation, error) }
+                                                        message = if (complete.getJSONArray("candidates").length() == 0) "검토 결과를 저장했어요. 기존 설정은 유지돼요" else "보정 후보를 저장했어요 · 독립 검증 대기 · 워치 설정은 유지돼요")
                                             }
                                         }
                                     }

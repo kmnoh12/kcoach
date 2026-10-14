@@ -52,7 +52,10 @@ class AiCalibrationUiTest {
                     message = "GPT가 보정 후보를 검토하고 있어요"), "Fixture model", false, {}, { cancel++ }, {}, {})
             }
         }
+        compose.onNodeWithText("GPT 보정 도움").assertIsDisplayed()
         compose.onNodeWithText("보정 도움 요청 취소").performClick(); assertEquals(1, cancel)
+        compose.waitForIdle()
+        compose.onNodeWithText("GPT 보정 도움").assertIsDisplayed()
         compose.onNodeWithText("확인한 원본으로 보정 도움 요청").assertDoesNotExist()
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/ai_calibration_running.png")
     }
