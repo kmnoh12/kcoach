@@ -69,7 +69,7 @@ internal fun WorkoutSummaryContent(read: WorkoutSummaryRead) {
         Text("추정 활동 칼로리 · ${kcal?.let { "약 ${it.toDouble().toInt()} kcal" } ?: read.energy.getString("reason")}", color = KColors.Soft, fontSize = 16.sp)
         if (kcal != null) Text(read.energy.getString("method"), color = KColors.Muted, fontSize = 12.sp)
         Text("평균 심박 ${read.heart.average?.let { n(it) } ?: "미측정"} · 최고 ${read.heart.maximum?.toString() ?: "미측정"} bpm", color = KColors.Soft, fontSize = 15.sp)
-        HeartRateGraph(read.heart.points, read.record.snapshot.startedAtMs, read.record.finishedAtMs)
+        if (read.heart.points.isNotEmpty()) HeartRateGraph(read.heart.points, read.record.snapshot.startedAtMs, read.record.finishedAtMs)
         Text(if (read.heart.hasGaps) "심박 일부 미측정 · 공백은 연결하지 않아요" else "운동 중 심박 · 폰 수신 시각 기준", color = KColors.Muted, fontSize = 12.sp)
         Text("운동별 기록", color = KColors.White, fontSize = 20.sp)
         done.groupBy { it.exerciseId }.forEach { (id, sets) ->

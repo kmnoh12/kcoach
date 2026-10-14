@@ -71,7 +71,7 @@ internal fun WorkoutReviewContent(ui: WorkoutReviewUi, canStart: Boolean, modelL
             result.getJSONArray("exercise_analyses").objects().forEach { row ->
                 val id = row.getString("exercise_id")
                 HorizontalDivider(color = KColors.Hairline)
-                TextButton(onClick = { expanded = if (expanded == id) null else id }, contentPadding = PaddingValues(0.dp)) {
+                TextButton(onClick = { expanded = if (expanded == id) null else id }, contentPadding = PaddingValues(0.dp), shape = androidx.compose.foundation.shape.RoundedCornerShape(6.dp)) {
                     Row(Modifier.fillMaxWidth()) {
                         ResultExerciseAnimation(id)
                         Spacer(Modifier.width(12.dp))

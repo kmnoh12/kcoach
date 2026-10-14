@@ -40,9 +40,26 @@ class WorkoutSummaryUiTest {
         compose.onNodeWithText("30분 · 1세트").assertIsDisplayed()
         compose.onNodeWithText("추정 활동 칼로리 · 프로필 입력 후 확인").assertIsDisplayed()
         compose.onNodeWithText("평균 심박 미측정 · 최고 미측정 bpm").assertIsDisplayed()
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/workout_summary_top.png")
         compose.onNodeWithText("덤벨 컬").performScrollTo().performClick()
         compose.onNodeWithText("1세트 · 10.0 kg × 9회").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("이 기록에서 확인된 센서 원본이 없어요").performScrollTo().assertIsDisplayed()
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/workout_summary_missing.png")
+    }
+    @Test fun summarySupportsLargeTextWithoutLosingTheRecordAction() {
+        compose.setContent {
+            val density = androidx.compose.ui.platform.LocalDensity.current
+            androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density, 1.5f)) {
+                Column(Modifier.fillMaxSize().background(KColors.Bg).verticalScroll(rememberScrollState()).padding(20.dp)) { WorkoutSummaryContent(fixture()) }
+            }
+        }
+        compose.onNodeWithText("30분 · 1세트").assertIsDisplayed()
+        compose.onNodeWithText("30분 · 1세트").performScrollTo()
+        compose.waitForIdle()
+        org.junit.Assert.assertTrue(compose.onNodeWithText("30분 · 1세트").fetchSemanticsNode().boundsInRoot.top >= 0)
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/workout_summary_large_text.png")
+        compose.onNodeWithText("30분 · 1세트").assertIsDisplayed()
+        compose.onNodeWithText("덤벨 컬").performScrollTo().performClick()
+        compose.onNodeWithText("1세트 · 10.0 kg × 9회").performScrollTo().assertIsDisplayed()
     }
 }
