@@ -270,7 +270,7 @@ class CalibrationCameraActivity : ComponentActivity() {
                     }
                     val next = store.begin(exerciseId, exerciseName, onLeft, epoch.id, wearing, declared).getOrThrow()
                     frameIndex = 0; firstCameraNs = null; stopping = false; watchStartScheduled = false; encoder = null
-                    val motion = cameraMotion(exerciseId)
+                    val motion = CameraCaptureGuide.forExercise(exerciseId, onLeft).metric
                     counter = motion?.let(::UpperBodyPoseCounter)
                     preparedCapture = next
                     lastClockWindowAtMs = SystemClock.elapsedRealtime()
@@ -369,7 +369,7 @@ class CalibrationCameraActivity : ComponentActivity() {
                 frameIndex++
                 val now = SystemClock.elapsedRealtime()
                 if (now - lastClockWindowAtMs >= 20_000) { lastClockWindowAtMs = now; probe(active.id, "MIDDLE") }
-                val metric = if (world.size == 1 && normalized.size == 1) cameraMotion(exerciseId)?.let { motion ->
+                val metric = if (world.size == 1 && normalized.size == 1) CameraCaptureGuide.forExercise(exerciseId, active.watchOnLeft).metric?.let { motion ->
                     UpperBodyPoseGeometry.metric(world.single().mapIndexed { index, point ->
                         val confidence = normalized.single()[index]
                         PosePoint(point.x, point.y, point.z, minOf(confidence.visibility ?: 0.0, confidence.presence ?: 0.0))
@@ -456,13 +456,6 @@ class CalibrationCameraActivity : ComponentActivity() {
         worker.execute { pose?.close(); pose = null }
         worker.shutdown()
         super.onDestroy()
-    }
-
-    private fun cameraMotion(id: String): CameraMotion? = when (ExerciseMeasurementContracts.resolve(id).recipe) {
-        MeasurementRecipe.CURL -> CameraMotion.ELBOW_FOLD
-        MeasurementRecipe.LATERAL_RAISE -> CameraMotion.SHOULDER_RAISE
-        MeasurementRecipe.TRICEPS_EXTENSION, MeasurementRecipe.SHOULDER_PRESS -> CameraMotion.ELBOW_PRESS
-        else -> null
     }
 
     private inner class PoseOverlay : View(this@CalibrationCameraActivity) {

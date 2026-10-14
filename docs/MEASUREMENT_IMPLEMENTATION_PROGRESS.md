@@ -13,6 +13,10 @@
 - work/capture-finalization-red.log의 저장 실패 후 시도 유실 재현과 work/capture-finalization-focused.log의
   Finalizer 3건/CameraInitializationFailure 2건이 근거다. 중간 수정 때 CalibrationCaptureStoreTest도 통과했다.
   실제 공간이 찬 사용자 폰/MediaPipe 초기화 성공 검증은 아니다. 전체 테스트/lint/OTA/공개는 실행하지 않았다.
+- 촬영 중 카운터의 별도 3종 매핑을 제거했다. 준비 안내·촬영 중 관측·저장 후 제안이 동일한
+  CameraCaptureGuide.metric을 사용한다. 로우·랫풀·프레스의 이미 정의된 관측을 촬영 중에 빠뜨리지 않는다.
+  guide.metric이 없는 운동은 자동 영상 카운터로 승격하지 않는다. work/capture-guide-live-focused.log의
+  CameraCaptureGuideTest/UpperBodyPoseCounterTest/폰 Finalizer 대상 검사가 통과했다.
 
 ## 2026-10-15 기획 대조 후속 — 제외 구간과 불완전 종료
 
