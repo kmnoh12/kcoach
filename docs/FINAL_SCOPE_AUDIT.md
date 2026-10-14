@@ -43,7 +43,10 @@ START_WRIST_ORIENTATION_PLAN.md, AI_COACH_PLAN.md, WORKOUT_RESULT_UX.md와 이�
    오류 정보가 없는 동안 근거 없는 SDK/R8/자세 임계값 변경으로 해결 처리하지 않는다.
 4. 위 구현 뒤 최종 전체 테스트/lint/OTA를 tools/release.sh의 한 실행에서 진행한다.
    공개됐다 초안으로 돌린 phone code 36/watch code 34는 재사용하지 않는다.
-   기존 미커밋 reviews/2026-10-14-start-wrist-context.json은 보존 중이며 최종 트리 정리 때 출처를 대조한다.
+   새 소스 버전은 phone 0.7.7(code 37)/watch 0.2.7(code 35)로 준비했다. 아직 새 APK 빌드·공개는 아니다.
+   기존 reviews/2026-10-14-start-wrist-context.json은 그때 작성된 미커밋 기록을 재생성 없이 보존했다.
+   기록된 옛 APK SHA 두 개는 현재 남은 옛 OTA 파일과 일치하며 artifactScope도 그 당시 조건 전달에 한정돼 있다.
+   이 기록을 새 통합 검사나 관절 초기화 성공 증거로 사용하지 않는다.
 
 ## 실측/계정 확인의 완료 조건
 

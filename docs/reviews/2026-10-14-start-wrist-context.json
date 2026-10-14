@@ -43,7 +43,7 @@
     }
   },
   "buildLog": "work/start-context-full-check.log",
-  "apkBuildStatus": "RUNNING",
+  "apkBuildStatus": "BUILD_SUCCESSFUL",
   "physicalDirectionValidationVerified": false,
   "cameraInitializationVerified": false,
   "publicationChanged": false,
@@ -66,7 +66,39 @@
     "Deferred/basic starts do not receive candidate conditions"
   ],
   "sourceCommit": "b8c0a69",
-  "pendingBuildSessionId": 54890,
   "wearOtaSignatureVerified": true,
-  "wearOtaCertificateSha256": "45130eab69678aeee288c565de466912b97dab48c317cbcf0983430a22c1da2c"
+  "wearOtaCertificateSha256": "45130eab69678aeee288c565de466912b97dab48c317cbcf0983430a22c1da2c",
+  "buildDuration": "31m 34s",
+  "phoneOtaCertificateSha256": "45130eab69678aeee288c565de466912b97dab48c317cbcf0983430a22c1da2c",
+  "phoneOtaSignatureVerified": true,
+  "mediapipeJni": {
+    "apk": "phone/build/outputs/apk/ota/phone-ota.apk",
+    "apkSha256": "9d8ee53e0b501fb123bc6cd73cb2fa9551d8afe0f15f19247c43a7f6b1293678",
+    "jniDeclarations": {
+      "com.google.mediapipe.framework.MediaPipeException": {
+        "constructor(I,byte[])": true
+      },
+      "com.google.mediapipe.framework.Packet": {
+        "static create(long)": true
+      },
+      "com.google.mediapipe.framework.ProtoUtil$SerializedMessage": {
+        "String typeName": true,
+        "byte[] value": true
+      }
+    },
+    "allRequiredDeclarationsPresent": true,
+    "nativeInitializationVerified": false,
+    "poseDetectionVerified": false
+  },
+  "artifacts": {
+    "phone/build/outputs/apk/ota/phone-ota.apk": {
+      "bytes": 60552046,
+      "sha256": "9d8ee53e0b501fb123bc6cd73cb2fa9551d8afe0f15f19247c43a7f6b1293678"
+    },
+    "wear/build/outputs/apk/ota/wear-ota.apk": {
+      "bytes": 1223238,
+      "sha256": "e0db374aa4b8cd3eb12548bdba4fe1897c250bbf77f4242ef2656ede319dd2bf"
+    }
+  },
+  "artifactScope": "Built source for b8c0a69 start-condition wiring before subsequent direction-evidence changes; not published or installed"
 }
