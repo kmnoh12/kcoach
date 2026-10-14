@@ -26,11 +26,30 @@ internal class AiCoachController(
     @Volatile private var ticket = 0L
     @Volatile private var accountId: String? = null
     private var cancellation: ChatGptWorkCancellation? = null
+    private val taskPreferences = app.getSharedPreferences("ai-task-settings", Context.MODE_PRIVATE)
+    private var settingsListener: android.content.SharedPreferences.OnSharedPreferenceChangeListener? = null
     val state = mutableStateOf(AiCoachUi())
+
+    private fun stopWatchingSettings() {
+        settingsListener?.let(taskPreferences::unregisterOnSharedPreferenceChangeListener)
+        settingsListener = null
+    }
+    private fun watchSettings(id: String, generation: Long) {
+        stopWatchingSettings()
+        settingsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == "$id:chat-enabled" && !AiTaskSettings(app).read(id).chatEnabled) handler.post {
+                if (current(id, generation)) {
+                    cancel()
+                    state.value = state.value.copy(message = "운동 상담을 꺼서 요청을 취소했어요")
+                }
+            }
+        }.also(taskPreferences::registerOnSharedPreferenceChangeListener)
+    }
 
     fun bindAccount(id: String?, force: Boolean = false) {
         if (id == accountId && state.value.loaded && !force) return
         if (id == accountId && state.value.busy) return
+        stopWatchingSettings()
         synchronized(guard) {
             cancellation?.cancel(); cancellation = null
             ticket++; accountId = id
@@ -95,6 +114,7 @@ internal class AiCoachController(
         }
         if (auth.state.value.activeProfileId != id || !auth.state.value.connected) return
         state.value = state.value.copy(busy = true, pendingQuestion = trimmed, message = "기록을 읽는 중…")
+        watchSettings(id, generation)
         worker.execute {
             val prepared = runCatching {
                 val context = AiCoachContextBuilder(app).build(id, trimmed)
@@ -107,6 +127,7 @@ internal class AiCoachController(
             }
             handler.post {
                 if (!current(id, generation)) return@post
+                if (!AiTaskSettings(app).read(id).chatEnabled) { cancel(); return@post }
                 prepared.onFailure { fail(id, generation, "상담에 필요한 기록을 준비하지 못했어요. 프로필과 연결 기록을 확인해 주세요") }
                     .onSuccess { (context, instructions, messages, reads) ->
                         state.value = state.value.copy(message = "답변을 생성하는 중…")
@@ -149,6 +170,7 @@ internal class AiCoachController(
                     options.optJSONObject("reasoning")?.optString("effort"), response.responseId, System.currentTimeMillis(), context.json)
                 synchronized(guard) {
                     check(current(id, generation)); cancellation?.check()
+                    check(AiTaskSettings(app).read(id).chatEnabled && auth.state.value.connected && auth.state.value.activeProfileId == id)
                     store.appendTurn(id, context.profileId, turn)
                     AiCoachInterpretationStore(app).save(id, AiCoachHistoryReader(app).read(id), answer.memoryProposals, response)
                 }
@@ -156,6 +178,7 @@ internal class AiCoachController(
             }
             handler.post {
                 if (current(id, generation)) {
+                    stopWatchingSettings()
                     cancellation = null
                     state.value = result.getOrElse { state.value.copy(busy = false, pendingQuestion = "",
                         message = "답변 형식·근거 또는 저장을 확인하지 못했어요. 이 답변은 표시하지 않아요") }
@@ -164,9 +187,10 @@ internal class AiCoachController(
         }
     }
     private fun fail(id: String, generation: Long, message: String) {
-        if (current(id, generation)) { cancellation = null; state.value = state.value.copy(busy = false, pendingQuestion = "", message = message) }
+        if (current(id, generation)) { stopWatchingSettings(); cancellation = null; state.value = state.value.copy(busy = false, pendingQuestion = "", message = message) }
     }
     fun cancel() {
+        stopWatchingSettings()
         synchronized(guard) {
             ticket++; cancellation?.cancel(); cancellation = null
         }

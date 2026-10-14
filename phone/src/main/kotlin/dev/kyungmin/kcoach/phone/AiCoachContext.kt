@@ -25,6 +25,7 @@ internal data class AiCoachAnswer(val text: String, val citations: List<String>,
                 require(row.getString("text").isNotBlank() && row.getString("text").length <= 800)
                 val refs = row.getJSONArray("citations")
                 require(refs.length() in 1..20 && (0 until refs.length()).all { refs.get(it) is String && refs.getString(it) in context.evidenceIds })
+                require((0 until refs.length()).map { refs.getString(it) }.distinct().size == refs.length())
             }
             return AiCoachAnswer(answer, citations, proposals)
         }

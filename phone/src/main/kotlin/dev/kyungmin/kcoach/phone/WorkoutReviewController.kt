@@ -24,6 +24,26 @@ internal class WorkoutReviewController(context: Context, private val auth: ChatG
     private var ticket = 0L
     private var cancellation: ChatGptWorkCancellation? = null
     private var request: JSONObject? = null
+    private val taskPreferences = app.getSharedPreferences("ai-task-settings", Context.MODE_PRIVATE)
+    private var settingsListener: android.content.SharedPreferences.OnSharedPreferenceChangeListener? = null
+    private fun stopWatchingSettings() {
+        settingsListener?.let(taskPreferences::unregisterOnSharedPreferenceChangeListener)
+        settingsListener = null
+    }
+    private fun enabled(accountId: String, automatic: Boolean): Boolean = AiTaskSettings(app).read(accountId).let {
+        it.reviewEnabled && (!automatic || it.automaticReview)
+    }
+    private fun watchSettings(accountId: String, generation: Long, automatic: Boolean) {
+        stopWatchingSettings()
+        settingsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key in setOf("$accountId:review-enabled", "$accountId:review") && !enabled(accountId, automatic)) handler.post {
+                if (ticket == generation) {
+                    cancel()
+                    state.value = state.value.copy(message = "운동 리뷰를 꺼서 요청을 취소했어요")
+                }
+            }
+        }.also(taskPreferences::registerOnSharedPreferenceChangeListener)
+    }
     private fun instructions(): String = app.assets.open("ai-coach/coach-skill.md").bufferedReader().use { it.readText() } + "\n\n" +
         app.assets.open("ai-coach/workout-review.prompt.md").bufferedReader().use { it.readText() }
 
@@ -68,22 +88,23 @@ internal class WorkoutReviewController(context: Context, private val auth: ChatG
                 state.value = prepared.getOrElse { state.value.copy(loaded = true, message = "운동 프로필에 이 기록을 연결한 뒤 다시 열어 주세요") }
                 if (automaticSession == sessionId) {
                     automaticSession = null
-                    if (state.value.context != null && state.value.answerJson == null) start() else drainAutomatic()
+                    if (state.value.context != null && state.value.answerJson == null) start(automatic = true) else drainAutomatic()
                 }
             }
         }
     }
 
-    fun start() {
+    fun start(automatic: Boolean = false) {
         if (state.value.busy || !state.value.loaded) return
         val accountId = state.value.accountId ?: return
-        if (!AiTaskSettings(app).read(accountId).reviewEnabled) { state.value = state.value.copy(message = "설정에서 운동 리뷰를 켜 주세요"); return }
+        if (!enabled(accountId, automatic)) { state.value = state.value.copy(message = "설정에서 운동 리뷰를 켜 주세요"); drainAutomatic(); return }
         val sessionId = state.value.sessionId
         val options = try { auth.selectedWorkRequestOptions() } catch (_: Exception) {
             state.value = state.value.copy(message = "설정에서 계정 연결·한도 사용·모델 선택을 확인해 주세요"); return
         }
         val generation = ++ticket
         state.value = state.value.copy(busy = true, answerJson = null, message = "리뷰 근거를 확인하는 중…")
+        watchSettings(accountId, generation, automatic)
         worker.execute {
             val prepared = runCatching {
                 val context = WorkoutReviewContextBuilder(app).build(accountId, sessionId)
@@ -93,12 +114,14 @@ internal class WorkoutReviewController(context: Context, private val auth: ChatG
             }
             handler.post {
                 if (ticket != generation) return@post
+                if (!enabled(accountId, automatic)) { cancel(); return@post }
                 prepared.onFailure { failure(generation, "리뷰 근거를 준비하지 못했어요. 프로필과 연결 기록을 확인해 주세요", "context_failed") }
                     .onSuccess { (context, instructions, key) ->
                         try {
                             val saved = store.lookup(key)
                             if (saved?.optString("status") == "COMPLETED") {
                                 WorkoutReviewAnswer.parse(saved.getJSONObject("answer").toString(), context)
+                                stopWatchingSettings()
                                 state.value = state.value.copy(
                                     busy = false, context = context, answerJson = saved.getJSONObject("answer").toString(),
                                     model = saved.getString("actual_model"), message = "같은 기록·모델의 저장된 리뷰를 불러왔어요", stale = false,
@@ -125,9 +148,12 @@ internal class WorkoutReviewController(context: Context, private val auth: ChatG
                                                     completed.onFailure { failure(generation, "기록이 바뀌었거나 리뷰 근거를 확인하지 못했어요. 응답은 표시하지 않아요", "invalid_or_stale_review") }
                                                         .onSuccess {
                                                             try {
+                                                                check(enabled(accountId, automatic) && auth.state.value.connected && auth.state.value.activeProfileId == accountId)
+                                                                cancellation?.check()
                                                                 val row = requireNotNull(request)
                                                                 store.complete(row.getString("key"), row.getString("request_id"), context, response)
                                                                 cancellation = null; request = null
+                                                                stopWatchingSettings()
                                                                 state.value = state.value.copy(busy = false, answerJson = response.text, model = response.model, message = "리뷰를 저장했어요", stale = false)
                                                                 drainAutomatic()
                                                             } catch (_: Exception) { failure(generation, "리뷰를 저장하지 못했어요. 운동 기록은 유지돼요", "save_failed") }
@@ -144,12 +170,14 @@ internal class WorkoutReviewController(context: Context, private val auth: ChatG
 
     private fun failure(generation: Long, message: String, code: String) {
         if (ticket != generation) return
+        stopWatchingSettings()
         request?.let { row -> runCatching { store.end(row.getString("key"), row.getString("request_id"), "FAILED", code) } }
         cancellation = null; request = null
         state.value = state.value.copy(busy = false, answerJson = null, message = message)
         drainAutomatic()
     }
     fun cancel() {
+        stopWatchingSettings()
         automaticSession = null
         ++ticket; cancellation?.cancel(); cancellation = null
         request?.let { row -> runCatching { store.end(row.getString("key"), row.getString("request_id"), "CANCELLED", "cancelled") } }
