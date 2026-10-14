@@ -45,6 +45,13 @@ def _sensor(data):
         raise ValueError("KCS byte length does not match its declared sample count")
     times = []
     unreliable = missing_clocks = callback_before_sample = 0
+    join_ages = []
+    missing_accel = missing_gyro = missing_callback = future_accel = stale_accel = 0
+    gyro_accuracy = {-1: 0, 0: 0, 1: 0, 2: 0, 3: 0}
+    accel_accuracy = gyro_accuracy.copy()
+    invalid_gyro_accuracy = invalid_accel_accuracy = 0
+    # Same explicit freshness boundary as the app's SensorRecordQuality. No inferred clocks.
+    stale_threshold_ms = 40
     for index in range(count):
         offset = 20 + size * index
         timestamp, *rest = struct.unpack_from(">q6fii", data, offset)
@@ -52,21 +59,69 @@ def _sensor(data):
             raise ValueError("Invalid sensor values or non-increasing sensor time")
         times.append(timestamp)
         unreliable += rest[6] == 0
+        if rest[6] in gyro_accuracy:
+            gyro_accuracy[rest[6]] += 1
+        else:
+            invalid_gyro_accuracy += 1
         if version == 2:
             accel, gyro, received, accuracy, heart_time = struct.unpack_from(">qqqiq", data, offset + 40)
             if any(t < -1 for t in [accel, gyro, received, heart_time]) or gyro not in (-1, timestamp):
                 raise ValueError("Invalid original sensor clock")
             missing_clocks += any(t == -1 for t in [accel, gyro, received])
             callback_before_sample += received != -1 and received < timestamp
+            missing_accel += accel == -1
+            missing_gyro += gyro == -1
+            missing_callback += received == -1
+            future_accel += accel != -1 and accel > timestamp
+            if accel != -1 and gyro != -1:
+                age_ms = (gyro - accel) / 1e6
+                join_ages.append(age_ms)
+                stale_accel += age_ms > stale_threshold_ms
+            if accuracy in accel_accuracy:
+                accel_accuracy[accuracy] += 1
+            else:
+                invalid_accel_accuracy += 1
         else:
             missing_clocks += 1
+            missing_accel += 1
+            missing_gyro += 1
+            missing_callback += 1
+            accel_accuracy[-1] += 1
     duration = (times[-1] - times[0]) / 1e9
+    def accuracy_report(values, invalid):
+        return {"unknownSamples": values[-1], "unreliableSamples": values[0],
+                "lowAccuracySamples": values[1], "mediumAccuracySamples": values[2],
+                "highAccuracySamples": values[3], "unrecognizedAccuracySamples": invalid}
+    issues = []
+    for number, reason in [(version == 1, "legacy_original_metadata_unavailable"),
+                           (missing_accel, "acceleration_clock_missing"), (missing_gyro, "gyroscope_clock_missing"),
+                           (missing_callback, "callback_clock_missing"), (callback_before_sample, "callback_before_sample"),
+                           (future_accel, "acceleration_from_future"), (stale_accel, "acceleration_stale_at_join"),
+                           (gyro_accuracy[-1], "gyroscope_accuracy_unknown"), (accel_accuracy[-1], "acceleration_accuracy_unknown"),
+                           (gyro_accuracy[0], "gyroscope_unreliable"), (accel_accuracy[0], "acceleration_unreliable"),
+                           (gyro_accuracy[1], "gyroscope_accuracy_low"), (accel_accuracy[1], "acceleration_accuracy_low"),
+                           (invalid_gyro_accuracy, "gyroscope_accuracy_unrecognized"),
+                           (invalid_accel_accuracy, "acceleration_accuracy_unrecognized")]:
+        if number:
+            issues.append(reason)
     return {"formatVersion": version, "sampleCount": count, "requestedHz": requested,
             "observedHz": (count - 1) / duration if duration > 0 else None,
             "durationSeconds": duration,
             "longestGapMs": max((b - a for a, b in zip(times, times[1:])), default=0) / 1e6,
             "unreliableSamples": unreliable, "samplesMissingOriginalClocks": missing_clocks,
-            "callbacksBeforeSample": callback_before_sample}
+            "callbacksBeforeSample": callback_before_sample,
+            "accelerationJoin": {"ageBasis": "original_gyroscope_ns_minus_original_acceleration_ns",
+                                 "ageObservedSamples": len(join_ages),
+                                 "minimumAgeMs": min(join_ages) if join_ages else None,
+                                 "maximumAgeMs": max(join_ages) if join_ages else None,
+                                 "staleThresholdMs": stale_threshold_ms, "staleSamples": stale_accel,
+                                 "futureAccelerationSamples": future_accel,
+                                 "missingAccelerationClockSamples": missing_accel,
+                                 "missingGyroscopeClockSamples": missing_gyro,
+                                 "missingCallbackClockSamples": missing_callback},
+            "gyroscopeAccuracy": accuracy_report(gyro_accuracy, invalid_gyro_accuracy),
+            "accelerationAccuracy": accuracy_report(accel_accuracy, invalid_accel_accuracy),
+            "eligibleForSensorMetadataReview": not issues, "sensorMetadataIssues": issues}
 
 
 def inspect_archive(path):
@@ -152,6 +207,8 @@ def inspect_archive(path):
         windows = {w: len(clocks.get(w, [])) for w in ["START", "MIDDLE", "END"]}
         if any(n == 0 for n in windows.values()):
             reasons.append("clock_alignment_windows_missing")
+        if sensor["sensorMetadataIssues"]:
+            reasons.append("sensor_metadata_incomplete_or_degraded")
         return {"schemaVersion": 1, "scope": "EXPORT_INTEGRITY_AND_OBSERVED_SENSOR_METADATA_ONLY",
                 "captureId": session, "integrityVerified": True, "rawSha256": raw_hash,
                 "reviewedReps": actual_reps, "reviewedBoundaryCount": len(review.get("references", [])),
