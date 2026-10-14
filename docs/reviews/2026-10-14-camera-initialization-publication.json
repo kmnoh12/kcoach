@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "checkedAtUtc": "2026-10-14T08:43:51.556901+00:00",
+  "releaseTag": "p0.7.5-w0.2.5",
+  "releaseUrl": "https://github.com/kmnoh12/kcoach/releases/tag/p0.7.5-w0.2.5",
+  "sourceCommit": "9a8a50975a991057e1eda4bb099c60664123d024",
+  "latestPhoneManifest": {
+    "versionCode": 35,
+    "versionName": "0.7.5",
+    "apkUrl": "https://github.com/kmnoh12/kcoach/releases/download/p0.7.5-w0.2.5/kcoach-phone.apk",
+    "sha256": "9758a5f70b1419ba6f7c1d95034352ddc52e551d561cb0d40e913a9896432c00"
+  },
+  "remoteApkBytes": 60029120,
+  "remoteApkSha256": "9758a5f70b1419ba6f7c1d95034352ddc52e551d561cb0d40e913a9896432c00",
+  "matchesLocalRelease": true,
+  "certificateSha256": "45130eab69678aeee288c565de466912b97dab48c317cbcf0983430a22c1da2c",
+  "signatureVerified": true,
+  "actualPublishedApkJniInspection": {
+    "apk": "build/release/p0.7.5-w0.2.5/kcoach-phone.apk",
+    "apkSha256": "9758a5f70b1419ba6f7c1d95034352ddc52e551d561cb0d40e913a9896432c00",
+    "jniDeclarations": {
+      "com.google.mediapipe.framework.MediaPipeException": {
+        "constructor(I,byte[])": true
+      },
+      "com.google.mediapipe.framework.Packet": {
+        "static create(long)": true
+      },
+      "com.google.mediapipe.framework.ProtoUtil$SerializedMessage": {
+        "String typeName": true,
+        "byte[] value": true
+      }
+    },
+    "allRequiredDeclarationsPresent": true,
+    "nativeInitializationVerified": false,
+    "poseDetectionVerified": false
+  },
+  "fixedOnPhysicalDeviceVerified": false,
+  "poseDetectionVerified": false,
+  "entireGoalComplete": false
+}
