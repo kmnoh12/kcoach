@@ -223,7 +223,7 @@ class ResultUi(
 )
 
 @Composable
-fun WorkoutResultScreen(result: ResultUi, back: () -> Unit, toRecords: () -> Unit) {
+fun WorkoutResultScreen(result: ResultUi, back: () -> Unit, toRecords: () -> Unit, aiReview: (@Composable () -> Unit)? = null) {
     Column(Modifier.fillMaxSize().background(KColors.Bg).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 20.dp)) {
         DetailHeader("운동 완료 결과", back)
         Spacer(Modifier.height(24.dp))
@@ -249,6 +249,7 @@ fun WorkoutResultScreen(result: ResultUi, back: () -> Unit, toRecords: () -> Uni
         }
         Spacer(Modifier.height(8.dp))
         Text(result.footnote, color = KColors.Muted, fontSize = 13.sp)
+        aiReview?.invoke()
         Spacer(Modifier.height(18.dp))
         WideButton("운동 기록으로 돌아가기", KColors.SurfaceRaised, KColors.White, 58, onClick = toRecords)
     }

@@ -943,7 +943,8 @@ class MainActivity : ComponentActivity() {
             footnote = ANALYSIS_ESTIMATE_NOTE,
         )
         showStandalone(ComposeView(this).apply {
-            setContent { WorkoutResultScreen(ui, back = { onBackPressed() }, toRecords = { showRecords() }) }
+            setContent { WorkoutResultScreen(ui, back = { onBackPressed() }, toRecords = { showRecords() },
+                aiReview = { dev.kyungmin.kcoach.phone.ui.WorkoutReviewPanel(result.sessionId) }) }
         })
         visibleWorkoutResultSessionId = result.sessionId
     }
