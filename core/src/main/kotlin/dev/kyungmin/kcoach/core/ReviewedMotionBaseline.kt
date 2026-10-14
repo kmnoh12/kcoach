@@ -42,7 +42,8 @@ object ReviewedMotionBaseline {
             }.toByteArray()
             require(SensorCaptureFormat.sha256(raw) == source.rawSha256) { "Baseline raw hash changed" }
             require(refs.all { PatternSignal.covered(set.document.records, it.cycle.startNs, it.cycle.endNs, originalClocks = true) })
-            requireNotNull(ObservedMotionAnalyzer.analyze(set.document, refs.map { it.cycle }, "REVIEWED_WRIST_REFERENCE", true))
+            // These sources establish angular travel, not independently reviewed absence of pauses.
+            requireNotNull(ObservedMotionAnalyzer.analyze(set.document, refs.map { it.cycle }, "REVIEWED_WRIST_REFERENCE"))
                 .reps.map { it.angularTravelRad }
         }
         require(travel.size == profile.trainingRepCount) { "Baseline reviewed repetition count changed" }
