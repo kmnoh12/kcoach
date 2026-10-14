@@ -43,6 +43,18 @@ data class RepCycle(
         MusclePhase.ECCENTRIC -> departureNs / 1_000_000L
         MusclePhase.UNKNOWN -> null
     }
+    fun split(firstTurnNs: Long, betweenNs: Long, secondTurnNs: Long): List<RepCycle> {
+        fun within(from: Long, until: Long) = pauses.mapNotNull { pause ->
+            val start = maxOf(from, pause.startNs); val end = minOf(until, pause.endNs)
+            if (start < end) RepPause(start, end) else null
+        }
+        return listOf(RepCycle(startNs, firstTurnNs, betweenNs, departurePhase, within(startNs, betweenNs)),
+            RepCycle(betweenNs, secondTurnNs, endNs, departurePhase, within(betweenNs, endNs)))
+    }
+    fun merge(next: RepCycle, turnNs: Long): RepCycle {
+        require(endNs <= next.startNs && departurePhase == next.departurePhase)
+        return RepCycle(startNs, turnNs, next.endNs, departurePhase, pauses + next.pauses)
+    }
     private fun pausedNs(from: Long, until: Long): Long = pauses.sumOf {
         (minOf(it.endNs, until) - maxOf(it.startNs, from)).coerceAtLeast(0L)
     }

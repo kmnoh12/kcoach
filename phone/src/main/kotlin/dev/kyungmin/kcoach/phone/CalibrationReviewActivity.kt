@@ -35,6 +35,7 @@ class CalibrationReviewActivity : ComponentActivity() {
     private var startMark: Long? = null
     private var turnMark: Long? = null
     private var splitIndex: Int? = null
+    private var pauseStart: Pair<RepCycle, Long>? = null
     private lateinit var content: LinearLayout
     private var image: ImageView? = null
     private var time: TextView? = null
@@ -104,6 +105,7 @@ class CalibrationReviewActivity : ComponentActivity() {
         nonRepIntervals = review?.nonRepIntervals.orEmpty().toMutableList()
         nonRepStart = null
         startMark = null; turnMark = null; splitIndex = null; position = 0
+        pauseStart = null
         root()
         content.addView(text("${selected.exerciseName}\n반복 구간 확인", 24f))
         content.addView(text(if (selected.videoComplete) "영상에서 실제 동작을 확인하고 시작·전환·복귀 위치를 표시해 주세요."
@@ -142,7 +144,11 @@ class CalibrationReviewActivity : ComponentActivity() {
             content.addView(text(cameraObservedMetricsText(review?.cameraMetrics)))
             cycleRows = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
             content.addView(cycleRows)
-            cycles.forEachIndexed { index, cycle -> cycleRows?.addView(text("확인한 ${index + 1}회 · ${"%.2f".format(cycle.durationMs / 1000.0)}초")) }
+            cycles.forEachIndexed { index, cycle ->
+                cycleRows?.addView(text("확인한 ${index + 1}회 · ${"%.2f".format(cycle.durationMs / 1000.0)}초"))
+                cycleRows?.addView(text(if (cycle.pauses.isEmpty()) "정지 구간 미확인 · 0초로 간주하지 않아요."
+                    else "표시한 정지 합계 ${"%.2f".format(cycle.pauseMs / 1000.0)}초 · 영상 없이 새 정지 표시는 만들 수 없어요."))
+            }
             nonRepIntervals.forEach { interval -> cycleRows?.addView(text("횟수 제외 · ${interval.reason.label} · ${"%.2f".format((interval.endNs - interval.startNs) / 1e9)}초")) }
             content.addView(button("개인 패턴·검증 현황") { startActivity(Intent(this, PatternCandidatesActivity::class.java)) })
             content.addView(button("촬영 목록") { showList() }); return
@@ -215,11 +221,12 @@ class CalibrationReviewActivity : ComponentActivity() {
             button("횟수 제외 구간 · 시작 지정") { nonRepStart = currentNs(); toast("제외할 동작의 끝으로 이동해 주세요.") },
             button("횟수 제외 구간 · 끝과 이유 지정") { addNonRepInterval() })
         markerButtons.forEach { content.addView(it) }
-        content.addView(text("준비·멈춤·끝에 남은 반 반복·내려놓기·가림은 따로 표시해 주세요. 제외 구간은 횟수·학습 정답에 들어가지 않아요."))
-        content.addView(button("표시하던 구간 취소") { splitIndex = null; startMark = null; turnMark = null; nonRepStart = null; updateMarkerTitles() })
+        content.addView(text("반복 사이 준비·멈춤·끝에 남은 반 반복·내려놓기·가림은 제외 구간으로 표시해 주세요. 완전 반복 안의 멈춤은 아래 반복 행에서 따로 표시해요."))
+        content.addView(button("표시하던 구간 취소") { splitIndex = null; startMark = null; turnMark = null; nonRepStart = null; pauseStart = null; updateMarkerTitles() })
         cycleRows = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         content.addView(cycleRows); renderCycles()
         content.addView(button("확인한 구간 저장") {
+            if (pauseStart != null) { toast("표시하던 정지의 끝을 지정하거나 구간 표시를 취소해 주세요."); return@button }
             reviews.saveCycles(id, cycles, alignment.isChecked, review?.revision ?: 0, simultaneous.isChecked, nonRepIntervals).onSuccess {
                 review = it
                 observedMetricsText?.text = cameraObservedMetricsText(it.cameraMetrics)
@@ -382,9 +389,8 @@ class CalibrationReviewActivity : ComponentActivity() {
                 cycles.add(cycle); cycles.sortBy { it.startNs }
             } else {
                 val old = cycles[index]
-                val a = RepCycle(old.startNs, first, turn, phase)
-                val b = RepCycle(turn, end, old.endNs, phase)
-                cycles.removeAt(index); cycles.addAll(index, listOf(a, b))
+                val replacements = old.split(first, turn, end)
+                cycles.removeAt(index); cycles.addAll(index, replacements)
             }
             splitIndex = null; startMark = null; turnMark = null; updateMarkerTitles(); renderCycles()
         }.onFailure { toast("시작 → 전환 → 복귀 순서와 겹치는 구간을 확인해 주세요.") }
@@ -396,6 +402,42 @@ class CalibrationReviewActivity : ComponentActivity() {
         val origin = frames.firstOrNull()?.cameraTimestampNs ?: 0
         cycles.forEachIndexed { index, cycle ->
             rows.addView(text("${index + 1}회 · ${"%.2f".format((cycle.startNs - origin) / 1e9)} → ${"%.2f".format((cycle.turnaroundNs - origin) / 1e9)} → ${"%.2f".format((cycle.endNs - origin) / 1e9)}초"))
+            rows.addView(text(if (cycle.pauses.isEmpty()) "정지 구간 미확인 · 0초로 간주하지 않아요."
+                else "표시한 정지 합계 ${"%.2f".format(cycle.pauseMs / 1000.0)}초 · 이 반복은 현재 개인 패턴 학습에서 제외해요."))
+            rows.addView(LinearLayout(this).apply {
+                addView(button("정지 시작 지정") {
+                    val at = currentNs()
+                    if (at == null || at !in cycle.startNs until cycle.endNs) toast("이 반복 안의 정지 시작 프레임을 선택해 주세요.")
+                    else { pauseStart = cycle to at; toast("정지의 끝 프레임을 선택해 주세요.") }
+                }, LinearLayout.LayoutParams(0, -2, 1f))
+                addView(button("정지 끝 · 추가") {
+                    runCatching {
+                        val mark = requireNotNull(pauseStart); require(mark.first == cycle)
+                        val pause = RepPause(mark.second, currentNs() ?: error("No frame"))
+                        cycles[index] = cycle.copy(pauses = (cycle.pauses + pause).sortedBy { it.startNs })
+                        pauseStart = null; renderCycles()
+                    }.onFailure { toast("같은 반복의 시작·끝 프레임을 순서대로 선택하고 기존 정지와 겹치지 않게 해 주세요.") }
+                }, LinearLayout.LayoutParams(0, -2, 1f))
+            })
+            cycle.pauses.forEachIndexed { pauseIndex, pause ->
+                rows.addView(text("표시한 정지 ${pauseIndex + 1} · ${"%.2f".format((pause.startNs - origin) / 1e9)} → ${"%.2f".format((pause.endNs - origin) / 1e9)}초"))
+                rows.addView(LinearLayout(this).apply {
+                    addView(button("정지 경계 수정") {
+                        AlertDialog.Builder(this@CalibrationReviewActivity).setItems(arrayOf("현재 프레임을 정지 시작으로", "현재 프레임을 정지 끝으로")) { _, field ->
+                            runCatching {
+                                val at = currentNs() ?: error("No frame")
+                                val edit = if (field == 0) pause.copy(startNs = at) else pause.copy(endNs = at)
+                                val updated = cycle.pauses.toMutableList().apply { this[pauseIndex] = edit }.sortedBy { it.startNs }
+                                cycles[index] = cycle.copy(pauses = updated); pauseStart = null; renderCycles()
+                            }.onFailure { toast("반복 안의 실제 프레임으로, 정지 구간끼리 겹치지 않게 수정해 주세요.") }
+                        }.show()
+                    }, LinearLayout.LayoutParams(0, -2, 1f))
+                    addView(button("정지 표시 지우기") {
+                        cycles[index] = cycle.copy(pauses = cycle.pauses.filterIndexed { at, _ -> at != pauseIndex })
+                        pauseStart = null; renderCycles()
+                    }, LinearLayout.LayoutParams(0, -2, 1f))
+                })
+            }
             rows.addView(LinearLayout(this).apply {
                 addView(button("경계 수정") {
                     AlertDialog.Builder(this@CalibrationReviewActivity).setItems(arrayOf("현재 화면을 시작으로", "현재 화면을 전환으로", "현재 화면을 복귀로")) { _, field ->
@@ -407,15 +449,18 @@ class CalibrationReviewActivity : ComponentActivity() {
                         }.onFailure { toast("다른 구간과 겹치거나 순서가 바뀌었어요.") }
                     }.show()
                 }, LinearLayout.LayoutParams(0, -2, 1f))
-                addView(button("제외") { cycles.removeAt(index); splitIndex = null; renderCycles(); updateMarkerTitles() }, LinearLayout.LayoutParams(0, -2, 1f))
+                addView(button("제외") { cycles.removeAt(index); splitIndex = null; pauseStart = null; renderCycles(); updateMarkerTitles() }, LinearLayout.LayoutParams(0, -2, 1f))
             })
             rows.addView(LinearLayout(this).apply {
-                addView(button("두 반복으로 분할") { splitIndex = index; startMark = null; turnMark = null; updateMarkerTitles(); toast("영상에서 첫 전환·나눌 복귀·둘째 전환을 차례로 지정해 주세요.") }, LinearLayout.LayoutParams(0, -2, 1f))
+                addView(button("두 반복으로 분할") {
+                    splitIndex = index; startMark = null; turnMark = null; pauseStart = null; updateMarkerTitles()
+                    toast("첫 전환·나눌 복귀·둘째 전환을 차례로 지정해 주세요. 기존 정지 표시는 보존돼요.")
+                }, LinearLayout.LayoutParams(0, -2, 1f))
                 if (index < cycles.lastIndex) addView(button("다음과 합치기") {
                     runCatching {
-                        val combined = RepCycle(cycle.startNs, currentNs() ?: error("No frame"), cycles[index + 1].endNs, cycle.departurePhase)
-                        cycles[index] = combined; cycles.removeAt(index + 1); renderCycles()
-                    }.onFailure { toast("합칠 반복의 전환 위치를 영상에서 선택해 주세요.") }
+                        val combined = cycle.merge(cycles[index + 1], currentNs() ?: error("No frame"))
+                        cycles[index] = combined; cycles.removeAt(index + 1); pauseStart = null; renderCycles()
+                    }.onFailure { toast("합칠 반복 안의 전환 프레임을 선택해 주세요. 기존 정지 표시는 보존돼요.") }
                 }, LinearLayout.LayoutParams(0, -2, 1f))
             })
         }

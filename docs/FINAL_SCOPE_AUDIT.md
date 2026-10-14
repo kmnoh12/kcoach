@@ -13,7 +13,7 @@ START_WRIST_ORIENTATION_PLAN.md, AI_COACH_PLAN.md, WORKOUT_RESULT_UX.md와 이�
 | 손목 관측 불가 7종·추가 미등록 운동 수동 | ManualSetCommand, phone ManualSetIntegrationTest, wear ManualWatchFlowTest/ManualWatchUiTest | 0회/목표와 실제 분리/영속 요청/ACK/중복/충돌 경로 있음. 실기 오프라인 전달은 미확인 |
 | 원본 수집·검증 저장·ACK·시도/설정 보존 | WearWorkoutService, CaptureInbox, SetAnalysisStore, AnalysisRecoveryTest | 폰/워치 경로와 품질/복구 대상 검사 있음. 실제 절전·재부팅·센서율/전력 수치는 미확인 |
 | 폰 영상/관절/워치 원본·시계 연결 | CalibrationCameraActivity/CalibrationCaptureStore/CaptureClockStore, CaptureClockStoreTest | 연결 코드 있음. 사용자 폰 0.7.5의 POSE_INIT 실패가 해결되지 않아 실제 수집 성공을 주장할 수 없음 |
-| 사람 반복 라벨·제외/분할/합치기·출처/revision | CalibrationReviewActivity/CalibrationReviewStore, CalibrationReviewStoreTest | 실제 프레임 구간·완전 반복과 준비/불완전 등 제외 구간을 별도 보존. 반복 내부 정지 표시 UI는 아래 미완료 |
+| 사람 반복 라벨·제외/분할/합치기·출처/revision | CalibrationReviewActivity/CalibrationReviewStore, CalibrationReviewStoreTest | 실제 프레임 구간·완전 반복과 준비/불완전 등 제외 구간을 별도 보존. 내부 정지 UI와 편집 보존도 후속 연결·대상 검사됨 |
 | 촬영 저장 실패·영상만 삭제·선택 ZIP | CalibrationCaptureFinalizer/CalibrationVideoRetention/CalibrationEvidenceExport | 같은 시도 재시도/영상·로그 보존/출처 유지/선택 원본 내보내기 대상 검사 있음 |
 | 기존/논문 피크/개인 패턴 비교 | PaperPeakRepAnalyzer, ReviewedPatternAnalyzer/Detector, ReviewedPatternValidation | 후보/비교 경로 있음. 실제 Watch8 정답 자료가 없어 최적 후보 선정·정확도 개선은 미완료 |
 | 여러 확인 자료 누적·독립/고정 회귀 검증 | ReviewedPatternBuilder, PatternCandidateStore, PatternBenchmarkStore | 소스 조건/원본 중복·학습 재사용 차단·직전 엔진 비교 있음. 실제 다음 날짜 개선은 미확인 |
@@ -32,10 +32,9 @@ START_WRIST_ORIENTATION_PLAN.md, AI_COACH_PLAN.md, WORKOUT_RESULT_UX.md와 이�
 
 ## 확인된 구현 잔여 — 완료를 기기 확인으로만 축소하지 않는다
 
-1. **반복 내부 정지 라벨 UI.** RepCycle.pauses/저장/위상 시간 분리는 있지만 현재 영상 UI는
-   완전 반복과 그 바깥 제외 구간만 표시한다. 완전 반복 안의 멈춤을 프레임으로 표시/수정할 수 있어야 한다.
-   미표시 정지를 0초로 만들지 않는다. 현재 DTW 후보는 정지 반복용 별도 템플릿이 없으므로
-   확인된 정지 반복을 해당 패턴의 양성 학습에 조용히 섞지 않는다.
+1. **반복 내부 정지 라벨 UI — 후속 소프트웨어 연결됨.** 정지 시작/끝·수정/삭제·반복 분할/합치기 보존과
+   실제 프레임 대응을 연결하고 대상 검사했다. 미표시 정지는 미확인이며 정지 반복은 현재 DTW의 양성 학습에서
+   제외한다. work/reviewed-pause-focused.log. 실물 관측 검증은 아직 별도다.
 2. **추가 G12 스쿼트 카메라 계약.** MeasurementRecipe.SQUAT/전신 안내는 있지만
    CameraCaptureGuide.metric은 null이고 CameraObservedAnalyzer는 상체 관측만 구현돼 있다.
    전신 선 자세 후보→내려감→하단 전환→선 자세 복귀의 영상 관측과 골반 이미지 이동/무릎·고관절 각도를

@@ -11,18 +11,78 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], shadows = [RetentionFixtureExtractor::class])
 class CalibrationReviewStoreTest {
-    private fun finalizedClip(): CalibrationCapture {
+    @Test fun pauseBoundariesMustBeObservedVideoFramesAndOneHeldRepetitionRemainsOne() {
+        val app = RuntimeEnvironment.getApplication()
+        val clip = finalizedClip()
+        val frames = CalibrationCaptureStore(app).frames(clip.id).getOrThrow()
+        val times = frames.map { it.cameraTimestampNs }
+        val pause = RepPause(times[1], times[3])
+        val cycle = RepCycle(times[0], times[2], times[4], MusclePhase.CONCENTRIC, listOf(pause))
+        val store = CalibrationReviewStore(app)
+        val saved = store.saveCycles(clip.id, listOf(cycle), false, 0).getOrThrow()
+        assertEquals(listOf(cycle), store.cameraCycles(clip.id).getOrThrow())
+        assertEquals(1, saved.references.size)
+        val invalid = cycle.copy(pauses = listOf(pause.copy(startNs = times[1] + 1)))
+        assertTrue(store.saveCycles(clip.id, listOf(invalid), false, saved.revision).isFailure)
+        assertEquals(saved, store.load(clip.id).getOrThrow())
+        assertEquals(frames, CalibrationCaptureStore(app).frames(clip.id).getOrThrow())
+    }
+
+    private fun finalizedClip(frameCount: Int = 5): CalibrationCapture {
         val captures = CalibrationCaptureStore(RuntimeEnvironment.getApplication())
         val clip = captures.begin("dumbbell_curl", "컬", true, "phone").getOrThrow()
         val points = List(33) { CameraLandmark(.5, .4, .01, .9, .9) }
-        repeat(5) { index ->
+        repeat(frameCount) { index ->
             val ns = 1_000_000_000L + index * 33_333_000L
             captures.appendFrame(clip.id, CameraPoseFrame(index.toLong(), ns, ns + 1_000_000, ns / 1_000_000,
                 ns + 2_000_000, index * 33_333L, 640, 480, 0, false, CameraTimestampSource.PHONE_ELAPSED_REALTIME,
                 "phone", listOf(points), listOf(points), true)).getOrThrow()
         }
-        captures.videoFile(clip.id).writeText("synthetic-finalized-video frames=5")
+        captures.videoFile(clip.id).writeText("synthetic-finalized-video frames=$frameCount")
         return captures.finish(clip.id, true).getOrThrow()
+    }
+
+    @Test fun aFullyAlignedHumanPauseKeepsItsCountAndClockButIsNotASupportedPositivePatternTemplate() {
+        val app = RuntimeEnvironment.getApplication()
+        val captures = CalibrationCaptureStore(app)
+        val clip = finalizedClip(17)
+        val records = (0..60).map { i ->
+            val ns = 900_000_000L + i * 20_000_000L
+            SensorCaptureRecord(SensorSample(ns, 0f, 0f, 9.8f, 0f, 0f, 0f, sensorAccuracy = 3),
+                accelerationTimestampNs = ns, gyroscopeTimestampNs = ns, receivedElapsedNs = ns + 1_000_000, accelerationAccuracy = 3)
+        }
+        val raw = java.io.ByteArrayOutputStream().apply { SensorCaptureFormat.write(this, records, 50.0) }.toByteArray()
+        val manifest = WireMessages.captureManifest(clip.id, clip.exerciseId, clip.setId, "raw-pause-reference",
+            SensorCaptureFormat.FORMAT_VERSION, "NONE", records.size, 50.0, 50.0, records.first().sample.timestampNs,
+            records.last().sample.timestampNs, SensorCaptureFormat.sha256(raw), raw.size.toLong(), 0,
+            clip.exerciseId, clip.exerciseName, attemptId = clip.attemptId).let {
+                it.copy(payload = it.payload + mapOf("capturePurpose" to "PAIRED_REFERENCE", "watchClockId" to "watch", "watchEpochVerified" to "true"))
+            }
+        captures.attachSensor(CaptureInbox(app, app.getSharedPreferences("wear-sync", 0)).receive(manifest, raw).getOrThrow()).getOrThrow()
+        val clocks = CaptureClockStore(app)
+        listOf("START" to 900_000_000L, "END" to 2_000_000_000L).forEach { (window, sent) ->
+            val request = clocks.prepareProbe(clip.id, window, sent, "phone", true).getOrThrow()
+            clocks.acceptReply(ClockProbeProtocol.reply(request, sent + 10_000_000, sent + 12_000_000, "watch", true),
+                sent + 22_000_000, "phone").getOrThrow()
+        }
+        val times = captures.frames(clip.id).getOrThrow().map { it.cameraTimestampNs }
+        val cycle = RepCycle(times[0], times[8], times[16], MusclePhase.CONCENTRIC, listOf(RepPause(times[7], times[9])))
+        val store = CalibrationReviewStore(app)
+        val paused = store.saveCycles(clip.id, listOf(cycle), true, 0).getOrThrow()
+        assertTrue(paused.references.single().alignmentVerified)
+        assertTrue(paused.references.single().sensorCoverageComplete)
+        assertEquals("paused_template_not_supported", paused.references.single().exclusionReason)
+        assertFalse(paused.references.single().eligibleForLearning)
+        assertEquals(cycle, paused.references.single().cycle)
+        val unpaused = store.saveCycles(clip.id, listOf(cycle.copy(pauses = emptyList())), true, paused.revision).getOrThrow()
+        assertTrue(unpaused.references.single().eligibleForLearning)
+        val restored = store.saveCycles(clip.id, listOf(cycle), true, unpaused.revision).getOrThrow()
+        assertFalse(restored.references.single().eligibleForLearning)
+        val count = store.saveCount(clip.id, 1, restored.revision).getOrThrow()
+        CalibrationVideoRetention(app).discardVideo(clip.id, count.revision, 0).getOrThrow()
+        assertEquals(listOf(cycle), CalibrationReviewStore(app).cameraCycles(clip.id).getOrThrow())
+        assertEquals(1, store.load(clip.id).getOrThrow().countReference!!.reps)
+        assertArrayEquals(raw, captures.sensor(clip.id).getOrThrow().rawFile.readBytes())
     }
 
     @Test fun reviewedPreparationAndPartialMovementSurviveCountUpdatesAndVideoDeletionWithoutBecomingReps() {

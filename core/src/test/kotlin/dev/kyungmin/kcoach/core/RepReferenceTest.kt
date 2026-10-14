@@ -7,6 +7,22 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class RepReferenceTest {
+    @Test fun splittingAcrossAPauseAndMergingPreserveTheObservedPauseTime() {
+        val original = RepCycle(1_000_000_000, 1_800_000_000, 3_000_000_000, MusclePhase.CONCENTRIC,
+            listOf(RepPause(1_300_000_000, 1_400_000_000), RepPause(1_900_000_000, 2_100_000_000)))
+        val split = original.split(1_500_000_000, 2_000_000_000, 2_500_000_000)
+        assertEquals(200L, split[0].pauseMs)
+        assertEquals(100L, split[1].pauseMs)
+        assertEquals(original.pauseMs, split.sumOf { it.pauseMs })
+        assertEquals(original.durationMs, split.sumOf { it.durationMs })
+        val merged = split[0].merge(split[1], original.turnaroundNs)
+        assertEquals(original.pauseMs, merged.pauseMs)
+        assertEquals(original.concentricMs, merged.concentricMs)
+        assertEquals(original.eccentricMs, merged.eccentricMs)
+        assertEquals(original.startNs, merged.startNs)
+        assertEquals(original.endNs, merged.endNs)
+    }
+
     @Test
     fun measuredPhaseTimesAreNotHalfOfTheWholeRepetition() {
         val cycle = RepCycle(1_000_000_000L, 1_300_000_000L, 2_000_000_000L, MusclePhase.CONCENTRIC)

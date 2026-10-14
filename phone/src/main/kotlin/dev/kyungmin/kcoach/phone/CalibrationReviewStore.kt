@@ -79,7 +79,8 @@ class CalibrationReviewStore(private val context: Context) {
                 cycles.none { it.startNs < interval.endNs && interval.startNs < it.endNs } })
             val contract = ExerciseMeasurementContracts.resolve(capture.exerciseId)
             require(cycles.all { it.departurePhase == contract.departurePhase &&
-                it.startNs in frameTimes && it.turnaroundNs in frameTimes && it.endNs in frameTimes })
+                it.startNs in frameTimes && it.turnaroundNs in frameTimes && it.endNs in frameTimes &&
+                it.pauses.all { pause -> pause.startNs in frameTimes && pause.endNs in frameTimes } })
             val mapping = alignment(id).getOrNull()
             val sensor = captures.sensor(id).getOrNull()
             val reviewAt = System.currentTimeMillis()
@@ -113,9 +114,13 @@ class CalibrationReviewStore(private val context: Context) {
                 RepReference(id, capture.setId, capture.attemptId, sensorCycle ?: cycle, ReferenceSource.REVIEWED_VIDEO,
                     mapping?.uncertaintyNs?.plus(1_000_000L), alignmentReviewed && mapping != null && cameraGood,
                     covered, reviewAt, when { !cameraGood -> "camera_quality"; sensorCycle == null -> "alignment_missing";
-                        !alignmentReviewed -> "alignment_not_reviewed"; !covered -> "sensor_gap"; else -> null }, current.revision + 1)
+                        !alignmentReviewed -> "alignment_not_reviewed"; !covered -> "sensor_gap";
+                        cycle.pauses.isNotEmpty() -> "paused_template_not_supported"; else -> null }, current.revision + 1)
             }
-            val eligibleCameraCycles = cycles.filterIndexed { index, _ -> references[index].eligibleForLearning }
+            val eligibleCameraCycles = cycles.filterIndexed { index, _ -> references[index].let { ref ->
+                ref.eligibleForLearning || ref.exclusionReason == "paused_template_not_supported" &&
+                    ref.copy(exclusionReason = null).eligibleForLearning
+            } }
             val metrics = CameraObservedAnalyzer.analyze(frames, eligibleCameraCycles, capture.watchOnLeft, simultaneousArmsReviewed)
             val next = current.copy(revision = current.revision + 1, references = references, cameraMetrics = metrics,
                 nonRepIntervals = excluded)
