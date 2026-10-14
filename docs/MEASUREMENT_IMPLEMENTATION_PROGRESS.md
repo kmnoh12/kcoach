@@ -1,5 +1,27 @@
 # 측정 개편 구현 진행
 
+## 2026-10-15 원래 작업 후속 — 현재 소프트웨어 상태
+
+아래 오래된 미구현/검사/배포 문구는 각 시점의 이력이다. 병행 GPT 완료 범위는
+[GPT 이식 상태](GPT_IMPLEMENTATION_STATUS.md), 원래 시작 방향 후속은
+[준비 방향 구현 인계](START_DIRECTION_IMPLEMENTATION.md)를 따른다.
+현재 전체 목표 완료/최종 공개는 아니다. 새 중간 단계에서는 대상 --tests만 실행한다.
+
+- 사람 확인 방향 구간/영상·센서 시계 연결/별도 대조 검증/다음 새 시도 기준 동결/정확한 워치 저장 SHA/
+  조건부 준비 2초·직접 시작/준비 원본과 측정 구간 분리를 연결했다. 33종 보류/7종 수동은 유지한다.
+- 영상 보관 또는 확인 후 로그만 보관을 선택한다. 삭제 전 관측 hash·프레임 대응과 선택을 영속 저장하고
+  영상만 삭제한다. 센서/관절/기존 확인 라벨은 남고, 영상 없는 새 영상 라벨은 거절한다.
+  폰 촬영 ID와 워치 원본 ID가 다른 실제 연결을 따라 방향 라벨을 저장한다.
+- 가속도 신뢰도 0을 자이로 신뢰도 3으로 가리는 원본에서 자동 3회를 확정하는 결함을 대상 검사로 재현했다.
+  불량·오래된·미래 가속도를 확정 횟수/관측 지표/개인 패턴 학습/독립·고정 검증에서 제외한다.
+  없는 구형 metadata를 정상 품질이나 실제 0회로 바꾸는 정책은 추가하지 않는다.
+- 근거는 work/start-direction-runtime-focused.log, work/start-direction-recovery-focused.log,
+  work/acceleration-quality-red.log, work/acceleration-quality-focused.log,
+  work/acceleration-learning-focused.log, work/video-retention-focused.log의 대상 클래스 검사다.
+  합성 플랫폼·센서 자료 검사이며 실제 MediaPipe/Watch8 성공이나 정확도 향상 증거가 아니다.
+- 카메라 초기화 실패의 사용자 상세 오류, 실제 동작 확인, 코덱스1 후순위 인계 통합,
+  나머지 전체 기획 대조 뒤 최종 전체 검사/lint/OTA/릴리스가 남아 있다.
+
 2026-10-13. 사용자 목표: 모든 단계를 순서대로 완료한 뒤 GitHub 배포.
 기준: MEASUREMENT_REDESIGN_PLAN.md 1.2, EXERCISE_MEASUREMENT_MATRIX.md.
 

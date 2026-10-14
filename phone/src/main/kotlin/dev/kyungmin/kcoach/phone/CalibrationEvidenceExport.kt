@@ -64,6 +64,7 @@ class CalibrationEvidenceExport(private val context: Context) {
             json("capture.json", JSONObject().put("schemaVersion", 1).put("id", capture.id).put("exerciseId", capture.exerciseId)
                 .put("exerciseName", capture.exerciseName).put("setId", capture.setId).put("attemptId", capture.attemptId)
                 .put("createdAtMs", capture.createdAtMs).put("status", capture.status.name).put("videoComplete", capture.videoComplete)
+                .put("videoRetained", video.isFile).put("logsOnlyChosen", CalibrationVideoRetention(context).logsOnly(captureId))
                 .put("interruptionReason", capture.interruptionReason ?: JSONObject.NULL).put("watchOnLeft", capture.watchOnLeft)
                 .put("watchOrientation", capture.watchOrientation).put("phoneClockId", capture.phoneClockId))
             entry("camera-frames.jsonl", 120_000_000) { sink -> frames.forEach {
@@ -110,6 +111,7 @@ class CalibrationEvidenceExport(private val context: Context) {
             WirePayloadKeys.END_MONOTONIC_NS, WirePayloadKeys.SHA256, WirePayloadKeys.ASSET_SIZE_BYTES, WirePayloadKeys.WATCH_REPS,
             WirePayloadKeys.TRACKING_PROFILE_ID, WirePayloadKeys.TRACKING_PROFILE_SNAPSHOT,
             "capturePurpose", "watchClockId", "watchDeviceId", "watchEpochVerified", "watchOnLeft", "watchOrientation",
+            "startWristContext", "startWristDeviceId", "startDirectionStatus", "startDirectionCandidate", "startDirectionSnapshot", "countingStartNs",
             "patternBinding", "patternWearing", "patternSelectionMode", "patternActiveCommandId", "patternActiveCandidateHash",
             "patternActiveSnapshot", "patternActiveUsed", "patternActiveInterrupted", "patternBaselineCount", "patternBaselineSampleCalls",
             "patternShadowSnapshot", "patternShadowCommandId", "patternShadowCount", "patternShadowUsed", "patternShadowInterrupted", "patternShadowTrace")

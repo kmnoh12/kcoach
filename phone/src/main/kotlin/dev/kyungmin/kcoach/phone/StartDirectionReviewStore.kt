@@ -48,7 +48,7 @@ internal class StartDirectionReviewStore(context: Context) {
     fun captureInfo(id: String): Result<StartDirectionCaptureInfo> = runCatching {
         val received = source(id)
         val document = received.validated.document
-        StartDirectionCaptureInfo(id, received.manifest.payload["exerciseName"].orEmpty().ifBlank {
+        StartDirectionCaptureInfo(id, received.manifest.payload[WirePayloadKeys.EXERCISE_NAME].orEmpty().ifBlank {
             received.manifest.payload.getValue(WirePayloadKeys.EXERCISE_ID)
         }, StartWristDirectionKey(StartWristContextCodec.decode(received.manifest.payload.getValue("startWristContext")),
             received.manifest.payload.getValue("startWristDeviceId")), requireNotNull(document.startMonotonicNs), requireNotNull(document.endMonotonicNs))
@@ -73,9 +73,12 @@ internal class StartDirectionReviewStore(context: Context) {
             StartDirectionCandidateInfo(it.getString("id"), it.getLong("version"))
         }.toList()
     } }
-    fun reviewRevision(id: String): Result<Long> = synchronized(lock) { runCatching {
-        read().getJSONObject("reviews").optJSONObject(id)?.getLong("revision") ?: 0L
-    } }
+    private fun reviewId(id: String): String = if (id.startsWith("paired-"))
+        CalibrationCaptureStore(app).sensor(id).getOrNull()?.validated?.captureId ?: id else id
+    fun reviewRevision(id: String): Result<Long> {
+        val sourceId = reviewId(id)
+        return synchronized(lock) { runCatching { read().getJSONObject("reviews").optJSONObject(sourceId)?.getLong("revision") ?: 0L } }
+    }
 
     fun saveInPersonReview(captureId: String, marks: List<StartDirectionMark>, expectedRevision: Long): Result<StartDirectionReview> =
         saveReview(captureId, marks, expectedRevision, StartDirectionReviewSource.HUMAN_IN_PERSON)
@@ -85,23 +88,26 @@ internal class StartDirectionReviewStore(context: Context) {
         expectedRevision: Long): Result<StartDirectionReview> = synchronized(lock) { runCatching {
         require(alignmentReviewed) { "Review first, middle, and last motion alignment before labeling directions" }
         require(cameraMarks.isNotEmpty() && cameraMarks.size <= 100)
+        require(CalibrationCaptureStore(app).videoFile(captureId).isFile) { "New video labels require the actual retained image" }
         val evidence = videoEvidence(captureId, cameraMarks)
         val capture = CalibrationCaptureStore(app).load(captureId).getOrThrow()
+        val sourceId = CalibrationCaptureStore(app).sensor(captureId).getOrThrow().validated.captureId
         val mapping = CalibrationReviewStore(app).alignment(captureId).getOrThrow()
         // Trim both edges by the clock uncertainty; only the unquestionably labeled hold is fitted.
         val uncertainty = Math.addExact(mapping.uncertaintyNs, 1_000_000L)
         val sensorMarks = cameraMarks.map { mark -> StartDirectionMark(
             Math.addExact(mapping.watchTimeNs(mark.startNs, capture.phoneClockId, mapping.start.watchClockId), uncertainty),
             Math.subtractExact(mapping.watchTimeNs(mark.endNs, capture.phoneClockId, mapping.start.watchClockId), uncertainty), mark.label) }
-        saveReview(captureId, sensorMarks, expectedRevision, StartDirectionReviewSource.HUMAN_VIDEO,
-            evidence, cameraMarks).getOrThrow()
+        saveReview(sourceId, sensorMarks, expectedRevision, StartDirectionReviewSource.HUMAN_VIDEO,
+            evidence, cameraMarks, captureId).getOrThrow()
     } }
 
     private fun videoEvidence(id: String, marks: List<StartDirectionMark>): String {
         val captures = CalibrationCaptureStore(app)
         val capture = captures.load(id).getOrThrow()
         require(capture.videoComplete && capture.status == CalibrationCaptureStatus.REVIEW_PENDING)
-        val inspected = ReferenceVideoEvidence.inspect(captures.videoFile(id)).getOrThrow()
+        val observation = CalibrationVideoRetention(app).observation(id).getOrThrow()
+        val inspected = observation.evidence
         val frames = captures.frames(id).getOrThrow().filter { it.videoFrameWritten }
         require(frames.size == inspected.presentationTimesUs.size && frames.zip(inspected.presentationTimesUs).all { (frame, pts) ->
             kotlin.math.abs(frame.videoPresentationUs - pts) <= 1_000 && frame.width == inspected.width && frame.height == inspected.height
@@ -116,18 +122,15 @@ internal class StartDirectionReviewStore(context: Context) {
             } && selected.zipWithNext().all { (a, b) -> b.cameraTimestampNs - a.cameraTimestampNs in 1..150_000_000L })
         }
         val digest = java.security.MessageDigest.getInstance("SHA-256")
-        captures.videoFile(id).inputStream().use { input ->
-            val buffer = ByteArray(8192)
-            while (true) { val size = input.read(buffer); if (size < 0) break; digest.update(buffer, 0, size) }
-        }
-        digest.update(frames.joinToString("\n") { CameraFrameCodec.encode(it).toString() }.toByteArray())
+        digest.update(observation.videoSha256.toByteArray())
+        digest.update(observation.frameDigest.toByteArray())
         digest.update(listOf(mapping.start, mapping.end, capture.phoneClockId, capture.startWristContext).joinToString("|").toByteArray())
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
     private fun saveReview(captureId: String, marks: List<StartDirectionMark>, expectedRevision: Long,
         reviewSource: StartDirectionReviewSource, videoDigest: String? = null,
-        cameraMarks: List<StartDirectionMark> = emptyList()): Result<StartDirectionReview> = synchronized(lock) {
+        cameraMarks: List<StartDirectionMark> = emptyList(), videoCaptureId: String? = null): Result<StartDirectionReview> = synchronized(lock) {
         runCatching {
             require(marks.isNotEmpty() && marks.size <= 100)
             val root = read(); val reviews = root.getJSONObject("reviews")
@@ -136,6 +139,7 @@ internal class StartDirectionReviewStore(context: Context) {
             val row = JSONObject().put("revision", Math.addExact(expectedRevision, 1)).put("reviewed_at_ms", System.currentTimeMillis())
                 .put("manifest_hash", manifestHash(received)).put("raw_sha256", received.manifest.payload.getValue(WirePayloadKeys.SHA256))
                 .put("source", reviewSource.name).put("video_digest", videoDigest ?: JSONObject.NULL)
+                .put("video_capture_id", videoCaptureId ?: JSONObject.NULL)
                 .put("camera_marks", JSONArray(cameraMarks.map { JSONObject().put("start_ns", it.startNs).put("end_ns", it.endNs).put("label", it.label.name) }))
                 .put("marks", JSONArray(marks.map { JSONObject().put("start_ns", it.startNs).put("end_ns", it.endNs).put("label", it.label.name) }))
             val reviewed = decode(captureId, row, received)
@@ -153,7 +157,9 @@ internal class StartDirectionReviewStore(context: Context) {
             val marks = (0 until cameraMarks.length()).map { i -> cameraMarks.getJSONObject(i).let {
                 StartDirectionMark(it.getLong("start_ns"), it.getLong("end_ns"), StartDirectionLabel.valueOf(it.getString("label")))
             } }
-            require(marks.isNotEmpty() && videoEvidence(id, marks) == row.getString("video_digest")) { "Reviewed video or clock evidence changed" }
+            val clipId = row.getString("video_capture_id")
+            require(received.manifest.sessionId == clipId)
+            require(marks.isNotEmpty() && videoEvidence(clipId, marks) == row.getString("video_digest")) { "Reviewed video or clock evidence changed" }
         }
         val key = StartWristDirectionKey(StartWristContextCodec.decode(received.manifest.payload.getValue("startWristContext")),
             received.manifest.payload.getValue("startWristDeviceId"))
@@ -166,8 +172,9 @@ internal class StartDirectionReviewStore(context: Context) {
                 reviewSource, row.getLong("revision"), row.getLong("reviewed_at_ms"))
         })
     }
-    fun loadReview(id: String): Result<StartDirectionReview> = synchronized(lock) {
-        runCatching { decode(id, read().getJSONObject("reviews").getJSONObject(id), source(id)) }
+    fun loadReview(id: String): Result<StartDirectionReview> {
+        val sourceId = reviewId(id)
+        return synchronized(lock) { runCatching { decode(sourceId, read().getJSONObject("reviews").getJSONObject(sourceId), source(sourceId)) } }
     }
     private fun references(root: JSONObject, ids: List<String>): Pair<List<ReviewedStartDirectionInterval>, JSONArray> {
         require(ids.isNotEmpty() && ids.size <= 100 && ids.distinct().size == ids.size)

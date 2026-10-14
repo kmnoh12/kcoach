@@ -73,6 +73,9 @@ class CalibrationReviewActivity : ComponentActivity() {
     }
 
     private fun root() {
+        previewRequest.incrementAndGet()
+        image?.setImageBitmap(null); imageBitmap?.recycle(); imageBitmap = null; image = null
+        markerButtons = emptyList()
         content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 24, 24, 32); setBackgroundColor(Color.rgb(9, 12, 11)) }
         setContentView(ScrollView(this).apply { addView(content) })
     }
@@ -84,7 +87,10 @@ class CalibrationReviewActivity : ComponentActivity() {
         content.addView(button("준비 손목 방향 · 자료 확인") { startActivity(Intent(this, StartDirectionReviewActivity::class.java)) })
         val clips = captures.list()
         if (clips.isEmpty()) content.addView(text("아직 촬영 자료가 없어요."))
-        clips.forEach { clip -> content.addView(button("${clip.exerciseName} · ${if (clip.videoComplete) "영상 확인" else "중단 자료"}") { showCapture(clip.id) }) }
+        clips.forEach { clip -> content.addView(button("${clip.exerciseName} · ${
+            if (captures.videoFile(clip.id).isFile && clip.videoComplete) "영상 확인"
+            else if (CalibrationVideoRetention(this).logsOnly(clip.id)) "로그만 보관" else "중단·영상 없음"
+        }") { showCapture(clip.id) }) }
     }
 
     private fun showCapture(id: String) {
@@ -124,6 +130,18 @@ class CalibrationReviewActivity : ComponentActivity() {
             } }; dialog.show()
         }
         content.addView(countButton)
+        if (selected.status != CalibrationCaptureStatus.RECORDING && captures.videoFile(id).isFile) addVideoRetention(id)
+        if (!captures.videoFile(id).isFile && selected.videoComplete) {
+            content.addView(text(if (CalibrationVideoRetention(this).logsOnly(id))
+                "로그만 보관 중이에요. 센서·관절·기존 확인 라벨은 남아 있으며 실제 영상으로 동작을 다시 확인하거나 새 영상 라벨을 만들 수는 없어요."
+                else "원본 영상을 찾지 못했어요. 기존 로그와 라벨은 보관하지만 영상 재확인은 할 수 없어요."))
+            content.addView(text(cameraObservedMetricsText(review?.cameraMetrics)))
+            cycleRows = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            content.addView(cycleRows)
+            cycles.forEachIndexed { index, cycle -> cycleRows?.addView(text("확인한 ${index + 1}회 · ${"%.2f".format(cycle.durationMs / 1000.0)}초")) }
+            content.addView(button("개인 패턴·검증 현황") { startActivity(Intent(this, PatternCandidatesActivity::class.java)) })
+            content.addView(button("촬영 목록") { showList() }); return
+        }
         if (!selected.videoComplete || frames.isEmpty()) {
             content.addView(text("횟수만 확인한 기록에는 반복 경계나 자세 정답을 만들지 않아요."))
             content.addView(button("촬영 목록") { showList() }); return
@@ -215,6 +233,35 @@ class CalibrationReviewActivity : ComponentActivity() {
         }) else content.addView(text("이 운동은 손목 자동 측정 대상이 아니에요. 영상과 실제 횟수는 보관하며 워치 횟수 보정 후보를 만들지 않아요."))
         content.addView(button("촬영 목록") { showList() })
         selectFrame(0)
+    }
+
+    private fun addVideoRetention(id: String) {
+        content.addView(button("영상도 보관") {
+            worker.execute {
+                val result = CalibrationVideoRetention(this).keepVideo(id)
+                runOnUiThread { if (!isFinishing && !isDestroyed && capture?.id == id)
+                    toast(if (result.isSuccess) "영상과 로그를 함께 보관해요." else "영상 보관 상태를 저장하지 못했어요.") }
+            }
+        })
+        content.addView(button("확인 후 로그만 보관") {
+            val expectedReview = review?.revision ?: 0L
+            AlertDialog.Builder(this).setTitle("이 촬영의 영상만 삭제")
+                .setMessage("실제 영상을 다시 볼 수 없어요. 센서·관절·이미 확인한 라벨·운동 기록은 남아요. 동작 확인을 마친 촬영만 선택해 주세요.")
+                .setNegativeButton("취소", null).setPositiveButton("영상 삭제 · 로그 보관") { _, _ ->
+                    previewRequest.incrementAndGet()
+                    worker.execute {
+                        val result = runCatching {
+                            val expectedDirection = StartDirectionReviewStore(this).reviewRevision(id).getOrThrow()
+                            CalibrationVideoRetention(this).discardVideo(id, expectedReview, expectedDirection).getOrThrow()
+                        }
+                        runOnUiThread {
+                            if (isFinishing || isDestroyed || capture?.id != id) return@runOnUiThread
+                            result.onSuccess { showCapture(id); toast("영상만 삭제하고 확인 로그를 보관했어요.") }
+                                .onFailure { toast("삭제하지 못했어요. 동작 확인 저장·기록 변경·영상 상태를 확인해 주세요.") }
+                        }
+                    }
+                }.show()
+        })
     }
 
     private fun addDirectionReview(id: String, alignment: CheckBox) {
