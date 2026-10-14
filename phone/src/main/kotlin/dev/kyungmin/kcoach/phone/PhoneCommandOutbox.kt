@@ -42,10 +42,13 @@ class PhoneCommandOutbox(context: Context) {
     internal fun receiveAck(payload: String): CommandAckResult = synchronized(lock) {
         val ack = WearSync.parse(payload)
         val pending = prefs.getString("pending", null)?.let(WearSync::parse) ?: return@synchronized CommandAckResult.IGNORED
-        if (ack.size !in 4..6 || ack[0] != "1" || ack[1] != pending[2] || ack[2] != pending.getOrNull(10)) return@synchronized CommandAckResult.IGNORED
+        if (ack.size !in 4..7 || ack[0] != "1" || ack[1] != pending[2] || ack[2] != pending.getOrNull(10)) return@synchronized CommandAckResult.IGNORED
         val direction = pending.getOrNull(20).orEmpty()
         if (ack[3] in setOf("APPLIED", "DUPLICATE") && direction.isNotEmpty() &&
             ack.getOrNull(5) != dev.kyungmin.kcoach.core.StartDirectionRuntimeCodec.hash(direction)) return@synchronized CommandAckResult.IGNORED
+        val tempo = pending.getOrNull(21).orEmpty()
+        if (ack[3] in setOf("APPLIED", "DUPLICATE") && tempo.isNotEmpty() &&
+            ack.getOrNull(6) != dev.kyungmin.kcoach.core.WorkoutTempoSettingsCodec.hash(tempo)) return@synchronized CommandAckResult.IGNORED
         val peerRevision = if (ack.size >= 5) ack[4].toLongOrNull()?.takeIf { it in 0 until Long.MAX_VALUE }
             ?: return@synchronized CommandAckResult.IGNORED else null
         if (peerRevision != null && ack[3] in setOf("APPLIED", "DUPLICATE") && peerRevision != ack[2].toLong()) return@synchronized CommandAckResult.IGNORED
@@ -55,7 +58,7 @@ class PhoneCommandOutbox(context: Context) {
             "WRONG_SESSION" -> CommandAckResult.RESYNC
             "STALE" -> if (peerRevision != null && peerRevision >= ack[2].toLong()) CommandAckResult.RESYNC else CommandAckResult.BLOCKED
             "CLOSED_SESSION" -> if (pending[1] in setOf("STOP", "END", "COMPLETE")) CommandAckResult.ALREADY_CLOSED else CommandAckResult.BLOCKED
-            "INVALID", "PATTERN_NOT_READY", "PATTERN_BINDING_CHANGED", "START_CONTEXT_CHANGED", "START_PROFILE_CHANGED" -> CommandAckResult.BLOCKED
+            "INVALID", "PATTERN_NOT_READY", "PATTERN_BINDING_CHANGED", "START_CONTEXT_CHANGED", "START_PROFILE_CHANGED", "TEMPO_SETTINGS_CHANGED" -> CommandAckResult.BLOCKED
             else -> return@synchronized CommandAckResult.IGNORED
         }
         val edit = prefs.edit().putString("ackStatus", ack[3])

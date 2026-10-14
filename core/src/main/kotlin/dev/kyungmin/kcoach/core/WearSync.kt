@@ -131,6 +131,16 @@ object WearSync {
         return fields.joinToString("|")
     }
 
+    fun withTempoSettings(payload: String, settings: WorkoutTempoSettings): String {
+        val fields = parse(payload).toMutableList()
+        require(fields.firstOrNull() == "2" && fields.getOrNull(1) in setOf("START", "SET", "SYNC"))
+        require(CapturePurpose.forSession(fields[2]) == CapturePurpose.WORKOUT &&
+            ExerciseMotionCatalog.normalizeExerciseId(fields[3]) == settings.exerciseId)
+        while (fields.size < 22) fields.add("")
+        fields[21] = WorkoutTempoSettingsCodec.encode(settings)
+        return fields.joinToString("|")
+    }
+
     fun hello(device: String): String = listOf("1", device, System.currentTimeMillis()).joinToString("|")
 
     fun heartbeat(device: String): String = listOf("1", device, System.currentTimeMillis()).joinToString("|")

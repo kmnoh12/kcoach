@@ -75,7 +75,7 @@ class WearCommandService : WearableListenerService() {
                     android.os.SystemClock.elapsedRealtimeNanos(), epoch.id, epoch.verified)
                 WireCodec.encode(reply.copy(payload = reply.payload + mapOf("pairedReferenceSupported" to "true", "captureFormats" to "1,2",
                     "patternShadowCaptureSupported" to "true", "patternProfileFormat" to "1", "patternActiveBindingSupported" to "true",
-                    "startWristContextFormat" to "1", "startDirectionProfileFormat" to "1")))
+                    "startWristContextFormat" to "1", "startDirectionProfileFormat" to "1", "tempoSettingsFormat" to "1")))
             }.getOrNull() ?: return
             Thread {
                 runCatching { Tasks.await(Wearable.getNodeClient(this).connectedNodes, 2, TimeUnit.SECONDS).forEach { node ->
@@ -190,6 +190,7 @@ class WearCommandService : WearableListenerService() {
                 putExtra("patternSelectionMode", fields.getOrNull(18).orEmpty())
                 putExtra("startWristContext", fields.getOrNull(19).orEmpty())
                 putExtra("startDirectionSnapshot", fields.getOrNull(20).orEmpty())
+                putExtra("tempoSettings", fields.getOrNull(21).orEmpty())
             } else {
                 putExtra("session", fields.getOrNull(2).orEmpty())
                 putExtra("exerciseId", fields.getOrNull(3).orEmpty())

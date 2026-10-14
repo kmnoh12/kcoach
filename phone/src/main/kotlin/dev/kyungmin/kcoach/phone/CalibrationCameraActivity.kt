@@ -350,7 +350,11 @@ class CalibrationCameraActivity : ComponentActivity() {
             val poseCandidate = pose != null && guide.visible(pose) && (guide.metric == null || readyMetric?.let { guide.metric!!.atRest(it) } == true)
             if (poseCandidate) { if (poseReadySinceNs == null) poseReadySinceNs = cameraNs } else poseReadySinceNs = null
             poseReady = poseReadySinceNs?.let { cameraNs - it >= 200_000_000L } == true
-            if (capture == null && !starting) main.post { if (cameraReady) status.text = if (poseReady) { if (guide.metric == null) "필수 관절 확인 · 안내의 시작 자세를 직접 확인해 주세요" else "관절과 시작 위치 확인 · 촬영을 시작할 수 있어요" } else "필수 관절과 시작 위치가 보이게 맞춰 주세요" }
+            if (capture == null && !starting) main.post { if (cameraReady) status.text = when {
+                normalized.size > 1 -> "여러 사람이 보여요. 한 사람만 화면에 들어오게 맞춰 주세요."
+                poseReady -> if (guide.metric == null) "필수 관절 확인 · 안내의 시작 자세를 직접 확인해 주세요" else "관절과 시작 위치 확인 · 촬영을 시작할 수 있어요"
+                else -> "필수 관절과 시작 위치가 보이게 맞춰 주세요"
+            } }
             val active = capture
             if (active != null) {
                 val first = firstCameraNs ?: cameraNs.also { firstCameraNs = it }

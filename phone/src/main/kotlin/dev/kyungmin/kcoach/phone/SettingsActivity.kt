@@ -16,6 +16,7 @@ class SettingsActivity : ComponentActivity() {
         val taskStore = AiTaskSettings(applicationContext)
         val actions = SettingsActions(
             back = ::finish,
+            tempo = { startActivity(Intent(this, WorkoutTempoSettingsActivity::class.java)) },
             account = { startActivity(Intent(this, ChatGptAccountActivity::class.java)) },
             refreshModels = { auth.loadModels(force = true) },
             chooseModel = auth::chooseModel,

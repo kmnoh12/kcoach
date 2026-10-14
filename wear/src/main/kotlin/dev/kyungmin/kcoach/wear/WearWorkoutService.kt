@@ -173,6 +173,11 @@ class WearWorkoutService : Service(), SensorEventListener {
     private var startDirectionSnapshot = ""
     private var startDirectionStatus = "UNCONFIRMED"
     private var countingStartNs: Long? = null
+    private var tempoSettings = ""
+    private var tempoMuted = false
+    private var tempoHint = ""
+    private var lastTempoAlertNs = 0L
+    private var tempoPolicy = dev.kyungmin.kcoach.core.TempoFeedbackPolicy()
     private var patternSelectionMode = ""
     private var frozenActive: FrozenPatternProfile? = null
     private var activeDetector: dev.kyungmin.kcoach.core.ReviewedPatternDetector? = null
@@ -330,6 +335,13 @@ class WearWorkoutService : Service(), SensorEventListener {
                     sendLiveState(currentWorkingPhase(), true, force = true); broadcastState(force = true)
                 }
             }
+            "TEMPO_MUTE" -> {
+                require(intent.getStringExtra("session") == sessionId && intent.getStringExtra("setId") == setId &&
+                    intent.getStringExtra("attemptId") == attemptId)
+                tempoMuted = true; tempoHint = "이번 세트 템포 알림 꺼짐"
+                tempoPolicy.configure(dev.kyungmin.kcoach.core.TempoFeedbackPolicy.Config())
+                check(checkpoint()); broadcastState(force = true)
+            }
             "STOP", "END" -> finishSession("STOPPED", startId)
             "COMPLETE" -> finishSession("COMPLETE", startId)
             "CAPTURE_ACK" -> acknowledgeCapture(intent.getStringExtra("captureId").orEmpty())
@@ -412,6 +424,17 @@ class WearWorkoutService : Service(), SensorEventListener {
         }
         if ((running || paused && pausedRestRemainingMs == 0L) && incoming == sessionId && sameSet(intent) &&
             workingRequest && requestedDirection != startDirectionSnapshot) return "START_PROFILE_CHANGED"
+        val requestedTempo = intent.getStringExtra("tempoSettings").orEmpty()
+        if (workingRequest && requestedTempo.isNotEmpty()) {
+            val settings = runCatching {
+                dev.kyungmin.kcoach.core.WorkoutTempoSettingsCodec.hash(requestedTempo)
+                dev.kyungmin.kcoach.core.WorkoutTempoSettingsCodec.decode(requestedTempo)
+            }.getOrNull() ?: return "INVALID"
+            if (dev.kyungmin.kcoach.core.CapturePurpose.forSession(incoming) != dev.kyungmin.kcoach.core.CapturePurpose.WORKOUT ||
+                settings.exerciseId != dev.kyungmin.kcoach.core.ExerciseMotionCatalog.normalizeExerciseId(intent.getStringExtra("exerciseId").orEmpty())) return "INVALID"
+        }
+        if ((running || paused && pausedRestRemainingMs == 0L) && incoming == sessionId && sameSet(intent) &&
+            workingRequest && requestedTempo != tempoSettings) return "TEMPO_SETTINGS_CHANGED"
         val binding = if (type in setOf("START", "SET", "SYNC")) runCatching { incomingPatternBinding(intent) }.getOrElse { return "INVALID" }
             else intent.getStringExtra("patternBinding").orEmpty()
         if (binding.isNotEmpty() && type in setOf("START", "SET", "SYNC")) {
@@ -450,6 +473,7 @@ class WearWorkoutService : Service(), SensorEventListener {
         intent.getStringExtra("patternSelectionMode")?.takeIf { it.isNotEmpty() }?.let { boundFields = boundFields + it }
         intent.getStringExtra("startWristContext")?.takeIf { it.isNotEmpty() }?.let { boundFields = boundFields + it }
         intent.getStringExtra("startDirectionSnapshot")?.takeIf { it.isNotEmpty() }?.let { boundFields = boundFields + it }
+        intent.getStringExtra("tempoSettings")?.takeIf { it.isNotEmpty() }?.let { boundFields = boundFields + it }
         return SensorCaptureFormat.sha256(JSONArray(boundFields).toString().toByteArray(Charsets.UTF_8))
     }
 
@@ -460,8 +484,10 @@ class WearWorkoutService : Service(), SensorEventListener {
             intent.getStringExtra("startDirectionSnapshot").orEmpty().isNotEmpty() &&
             intent.getStringExtra("startDirectionSnapshot") == startDirectionSnapshot)
             dev.kyungmin.kcoach.core.StartDirectionRuntimeCodec.hash(startDirectionSnapshot) else ""
+        val tempoReceipt = if (status in setOf("APPLIED", "DUPLICATE") && intent.getStringExtra("tempoSettings").orEmpty().isNotEmpty() &&
+            intent.getStringExtra("tempoSettings") == tempoSettings) dev.kyungmin.kcoach.core.WorkoutTempoSettingsCodec.hash(tempoSettings) else ""
         val payload = listOf("1", intent.getStringExtra("session").orEmpty(), revision, status, lastCommandRevision)
-            .let { if (receipt.isEmpty()) it else it + receipt }.joinToString("|")
+            .let { if (tempoReceipt.isNotEmpty()) it + receipt + tempoReceipt else if (receipt.isNotEmpty()) it + receipt else it }.joinToString("|")
         sendToPhone(WearSync.PATH_COMMAND_ACK, payload, coalescible = false)
     }
 
@@ -572,6 +598,8 @@ class WearWorkoutService : Service(), SensorEventListener {
             .put("startWristContext", startWristContext).put("startWristDeviceId", startWristDeviceId)
             .put("startDirectionSnapshot", startDirectionSnapshot).put("startDirectionStatus", startDirectionStatus)
             .put("countingStartNs", countingStartNs ?: JSONObject.NULL)
+            .put("tempoSettings", tempoSettings).put("tempoMuted", tempoMuted).put("tempoHint", tempoHint)
+            .put("lastTempoAlertNs", lastTempoAlertNs)
             .put("activeInterrupted", activeInterrupted)
             .put("activeSampleCalls", activeSampleCalls)
         runtimePrefs.edit().putString("state", state.toString()).putLong("commandRevision", lastCommandRevision).putString("lastAppliedCommand", lastAppliedCommand).commit()
@@ -643,6 +671,12 @@ class WearWorkoutService : Service(), SensorEventListener {
                     forearmRotationDetector?.beginCounting(); profiledMotionDetector?.beginCounting()
                 }
             }
+            tempoSettings = state.optString("tempoSettings")
+            val tempo = tempoSettings.takeIf { it.isNotEmpty() }?.let(dev.kyungmin.kcoach.core.WorkoutTempoSettingsCodec::decode)
+            require(!ownsWorkingSet || tempo == null || tempo.exerciseId == dev.kyungmin.kcoach.core.ExerciseMotionCatalog.normalizeExerciseId(exerciseId))
+            tempoMuted = state.optBoolean("tempoMuted"); tempoHint = state.optString("tempoHint")
+            lastTempoAlertNs = if (bootChanged) 0 else state.optLong("lastTempoAlertNs")
+            tempoPolicy.configure(if (tempoMuted || tempo == null) dev.kyungmin.kcoach.core.TempoFeedbackPolicy.Config() else tempo.policyConfig())
             configureActive()
             activeUseConfirmed = state.optBoolean("activeUseConfirmed")
             activeInterrupted = state.optBoolean("activeInterrupted")
@@ -868,6 +902,7 @@ class WearWorkoutService : Service(), SensorEventListener {
         paused = false
         pausedRestRemainingMs = 0L
         if (incomingSessionId != sessionId) heartRate = 0
+        if (sessionId != incomingSessionId) { tempoPolicy = dev.kyungmin.kcoach.core.TempoFeedbackPolicy(); lastTempoAlertNs = 0L }
         sessionId = incomingSessionId
         exerciseId = incomingExerciseId
         exerciseName = intent.getStringExtra("exerciseName").orEmpty().ifBlank { exerciseId.replace('_', ' ') }
@@ -891,6 +926,11 @@ class WearWorkoutService : Service(), SensorEventListener {
         startWristDeviceId = if (startWristContext.isEmpty()) "" else WearClockEpoch.current(this).deviceId
         startDirectionSnapshot = intent.getStringExtra("startDirectionSnapshot").orEmpty()
         countingStartNs = null
+        tempoSettings = intent.getStringExtra("tempoSettings").orEmpty()
+        tempoMuted = false; tempoHint = ""
+        tempoPolicy.configure(tempoSettings.takeIf { it.isNotEmpty() }?.let {
+            dev.kyungmin.kcoach.core.WorkoutTempoSettingsCodec.decode(it).policyConfig()
+        } ?: dev.kyungmin.kcoach.core.TempoFeedbackPolicy.Config())
         configureTracking()
         patternBinding = incomingPatternBinding(intent)
         configureActive()
@@ -1125,6 +1165,7 @@ class WearWorkoutService : Service(), SensorEventListener {
     }
 
     private fun pauseSession() {
+        tempoPolicy.pause()
         markPhoneAlive()
         if (!running && !resting) return
         if (resting) pausedRestRemainingMs = (restEndAtMs - System.currentTimeMillis()).coerceAtLeast(0L)
@@ -1289,6 +1330,8 @@ class WearWorkoutService : Service(), SensorEventListener {
                         }
                         if (marker != null) {
                             recordDetectedRep()
+                            if (activeDetector != null && marker is dev.kyungmin.kcoach.core.ReviewedPatternDetection)
+                                observeTempo(marker, countingSample)
                             if (!running) return
                         }
                     }
@@ -1394,6 +1437,27 @@ class WearWorkoutService : Service(), SensorEventListener {
         checkpoint()
         vibrateShort()
         if (reps >= targetReps && dev.kyungmin.kcoach.core.CapturePurpose.forSession(sessionId).stopAtTarget) completeSet()
+    }
+
+    private fun observeTempo(detection: dev.kyungmin.kcoach.core.ReviewedPatternDetection, sample: SensorSample) {
+        if (tempoSettings.isEmpty() || tempoMuted) return
+        val settings = dev.kyungmin.kcoach.core.WorkoutTempoSettingsCodec.decode(tempoSettings)
+        val cycle = detection.cycle
+        val feedback = tempoPolicy.observe(dev.kyungmin.kcoach.core.TempoFeedbackPolicy.Observation(setId, attemptId, reps, cycle.endNs,
+            cycle.durationMs, cycle.concentricMs, cycle.eccentricMs,
+            phasesValidated = activeUseConfirmed && cycle.departurePhase != dev.kyungmin.kcoach.core.MusclePhase.UNKNOWN,
+            qualitySufficient = activeUseConfirmed && !activeInterrupted && sample.sensorAccuracy in 1..3 && lastAccelerometerAccuracy in 1..3)) ?: return
+        if (lastTempoAlertNs > 0 && (feedback.endNs - lastTempoAlertNs) / 1_000_000 < settings.minimumAlertIntervalMs) return
+        tempoHint = feedback.deviations.joinToString(" · ") { deviation ->
+            val label = when (deviation.metric) {
+                dev.kyungmin.kcoach.core.TempoFeedbackPolicy.Metric.REPETITION -> "1회"
+                dev.kyungmin.kcoach.core.TempoFeedbackPolicy.Metric.CONCENTRIC -> "힘쓰는 구간"
+                dev.kyungmin.kcoach.core.TempoFeedbackPolicy.Metric.ECCENTRIC -> "복귀 구간"
+            }
+            "$label ${"%.1f".format(java.util.Locale.US, deviation.observedMs / 1000.0)}초 · 목표보다 ${if (deviation.direction == dev.kyungmin.kcoach.core.TempoFeedbackPolicy.Direction.LONGER) "느림" else "빠름"}"
+        }
+        lastTempoAlertNs = feedback.endNs
+        vibrateReady(); check(checkpoint()); broadcastState(force = true)
     }
 
     private fun currentWorkingPhase(): String = when (calibrationStage) {
@@ -1562,6 +1626,7 @@ class WearWorkoutService : Service(), SensorEventListener {
                     "startDirectionStatus" to startDirectionStatus,
                     "startDirectionSnapshot" to startDirectionSnapshot,
                     "countingStartNs" to countingStartNs?.toString().orEmpty(),
+                    "tempoSettings" to tempoSettings, "tempoMuted" to tempoMuted.toString(), "lastTempoHint" to tempoHint,
                     "startDirectionCandidate" to dev.kyungmin.kcoach.core.StartWristOrientationPolicy.candidate(exerciseId).name,
                     "startWristContext" to startWristContext,
                     "startWristDeviceId" to startWristDeviceId,
@@ -1820,6 +1885,8 @@ class WearWorkoutService : Service(), SensorEventListener {
         patternBinding = ""; patternWearing = ""; patternSelectionMode = ""; frozenActive = null; activeDetector = null; activeUseConfirmed = false; activeInterrupted = false
         startWristContext = ""; startWristDeviceId = ""
         startDirectionSnapshot = ""; countingStartNs = null; startDirectionStatus = "UNCONFIRMED"
+        tempoSettings = ""; tempoMuted = false; tempoHint = ""; lastTempoAlertNs = 0L
+        tempoPolicy = dev.kyungmin.kcoach.core.TempoFeedbackPolicy()
         sessionId = ""
         setId = ""; attemptId = ""
         exerciseId = ""
@@ -1883,6 +1950,10 @@ class WearWorkoutService : Service(), SensorEventListener {
             putExtra("personalized", trackingProfile.calibrationProfileVersion != null)
             putExtra("patternShadowCommandId", patternShadowCommandId)
             putExtra("patternShadowCount", shadowCount)
+            putExtra("tempoHint", tempoHint)
+            putExtra("tempoEnabled", tempoSettings.takeIf { it.isNotEmpty() }?.let {
+                dev.kyungmin.kcoach.core.WorkoutTempoSettingsCodec.decode(it).enabled && !tempoMuted
+            } == true)
             putExtra("patternShadowEventIndex", shadowEvents.lastIndex)
             putExtra("patternShadowEmissionNs", shadowEvents.lastOrNull()?.sourceEmissionNs ?: -1L)
         })

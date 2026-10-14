@@ -84,7 +84,9 @@ class WorkoutWearingStore(private val context: Context) {
                         StartDirectionReviewStore(context).selected(it).getOrNull()
                     }
                 bindings.put(identity, JSONObject().put("exerciseId", exercise).put("binding", binding).put("startContext", startContext)
-                    .put("startDirectionSnapshot", direction?.let(StartDirectionRuntimeCodec::encode).orEmpty()))
+                    .put("startDirectionSnapshot", direction?.let(StartDirectionRuntimeCodec::encode).orEmpty())
+                    .put("tempoSettings", if (ExerciseTrackingProfiles.resolve(normalized).mode == TrackingMode.MANUAL_REQUIRED) "" else
+                        WorkoutTempoSettingsCodec.encode(WorkoutTempoSettingsStore(context).load(normalized).getOrDefault(WorkoutTempoSettings(normalized)))))
                 check(prefs.edit().putString(sessionKey(session), json.toString()).commit()) { "Could not freeze the set binding" }
             }
             val frozen = bindings.getJSONObject(identity)
@@ -100,7 +102,10 @@ class WorkoutWearingStore(private val context: Context) {
             val withContext = if (startContext.isEmpty()) selected else WearSync.withStartWristContext(selected, StartWristContextCodec.decode(startContext))
             val snapshot = frozen.optString("startDirectionSnapshot")
             require(fields.getOrNull(20).isNullOrEmpty() || fields[20] == snapshot) { "Set start direction profile changed" }
-            if (snapshot.isEmpty()) withContext else WearSync.withStartDirectionProfile(withContext, StartDirectionRuntimeCodec.decode(snapshot))
+            val withDirection = if (snapshot.isEmpty()) withContext else WearSync.withStartDirectionProfile(withContext, StartDirectionRuntimeCodec.decode(snapshot))
+            val tempo = frozen.optString("tempoSettings")
+            require(fields.getOrNull(21).isNullOrEmpty() || fields[21] == tempo) { "Set tempo settings changed" }
+            if (tempo.isEmpty()) withDirection else WearSync.withTempoSettings(withDirection, WorkoutTempoSettingsCodec.decode(tempo))
         }
     }
 

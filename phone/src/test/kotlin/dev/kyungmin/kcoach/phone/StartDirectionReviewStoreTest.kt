@@ -82,7 +82,7 @@ class StartDirectionReviewStoreTest {
         assertNotNull(outbox.pending())
         assertFalse(outbox.directionStoredOnWatch(profile))
         assertFalse(outbox.acknowledge("1|workout|$revision|APPLIED|$revision|${"0".repeat(64)}"))
-        assertTrue(outbox.acknowledge("1|workout|$revision|APPLIED|$revision|${StartDirectionRuntimeCodec.hash(queued[20])}"))
+        assertTrue(outbox.acknowledge("1|workout|$revision|APPLIED|$revision|${StartDirectionRuntimeCodec.hash(queued[20])}|${WorkoutTempoSettingsCodec.hash(queued[21])}"))
         assertNull(outbox.pending())
         assertTrue(PhoneCommandOutbox(app).directionStoredOnWatch(profile))
     }

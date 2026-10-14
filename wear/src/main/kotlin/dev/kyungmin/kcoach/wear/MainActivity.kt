@@ -110,6 +110,10 @@ class MainActivity : Activity() {
     private val workoutControls by lazy { WatchWorkoutOutbox(this) }
     private lateinit var workoutControlButton: TextView
     private lateinit var directionBypassButton: TextView
+    private lateinit var tempoText: TextView
+    private lateinit var tempoMuteButton: TextView
+    private var tempoEnabled = false
+    private var tempoHint = ""
     private val restUiTicker = object : Runnable {
         override fun run() {
             if (!resting) return
@@ -180,6 +184,8 @@ class MainActivity : Activity() {
         attemptId = intent.getStringExtra("attemptId").orEmpty()
         manualRequired = intent.getBooleanExtra("manualRequired", false)
         manualStatus = intent.getStringExtra("manualStatus").orEmpty()
+        tempoEnabled = intent.getBooleanExtra("tempoEnabled", false)
+        tempoHint = intent.getStringExtra("tempoHint").orEmpty()
         exerciseName = intent.getStringExtra("exerciseName").orEmpty().ifBlank { "운동 대기 중" }
         setIndex = intent.getIntExtra("setIndex", setIndex)
         targetReps = intent.getIntExtra("targetReps", targetReps).coerceAtLeast(1)
@@ -311,6 +317,18 @@ class MainActivity : Activity() {
             }
         }
         details.addView(directionBypassButton)
+        tempoText = label("", 11f, Color.rgb(0, 210, 185), true).apply { gravity = Gravity.CENTER }
+        details.addView(tempoText)
+        tempoMuteButton = label("이번 세트 템포 알림 끄기", 12f, Color.rgb(0, 210, 185), true).apply {
+            gravity = Gravity.CENTER; setPadding(8, 10, 8, 10)
+            background = rounded(Color.rgb(18, 35, 30), 14)
+            setOnClickListener {
+                startService(Intent(this@MainActivity, WearWorkoutService::class.java)
+                    .putExtra(WearWorkoutService.EXTRA_COMMAND, "TEMPO_MUTE")
+                    .putExtra("session", sessionId).putExtra("setId", setId).putExtra("attemptId", attemptId))
+            }
+        }
+        details.addView(tempoMuteButton)
         heartText = label("❤️ -- bpm", 12f, Color.rgb(255, 82, 82), true).apply {
             gravity = Gravity.CENTER
         }
@@ -407,6 +425,9 @@ class MainActivity : Activity() {
         }
         val hasActiveExercise = running || resting || paused || (sessionId.isNotBlank() && setId.isNotBlank())
         directionBypassButton.visibility = if (running && runtimePhase == "START_DIRECTION_WAITING") View.VISIBLE else View.GONE
+        tempoText.visibility = if (hasActiveExercise && !resting && (tempoEnabled || tempoHint.isNotEmpty())) View.VISIBLE else View.GONE
+        tempoText.text = tempoHint.ifBlank { "템포 알림 · 검증된 개인 엔진의 유효 반복에서 사용" }
+        tempoMuteButton.visibility = if (hasActiveExercise && !resting && tempoEnabled) View.VISIBLE else View.GONE
         val offered = workoutControls.offer()
         val pendingControl = workoutControls.pending().firstOrNull()
         workoutControlButton.visibility = if (pendingControl != null || workoutControls.supportsControls() &&

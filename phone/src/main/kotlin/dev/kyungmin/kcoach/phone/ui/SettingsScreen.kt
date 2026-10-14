@@ -42,6 +42,7 @@ class SettingsActions(
     val chooseEffort: (String?) -> Unit,
     val profile: () -> Unit = {},
     val saveTasks: (AiTaskPreferences) -> Unit = {},
+    val tempo: () -> Unit = {},
 )
 
 fun reasoningLabel(effort: String): String = when (effort) {
@@ -73,6 +74,10 @@ fun SettingsScreen(connection: ChatGptConnectionUi, modelUi: ChatGptModelSetting
                 Text("설정", color = KColors.White, fontSize = 28.sp, fontWeight = FontWeight.Medium)
             }
             Spacer(Modifier.height(28.dp))
+            OutlinedButton(onClick = actions.tempo, modifier = Modifier.fillMaxWidth().height(50.dp), shape = KShape.Control) {
+                Text("운동별 템포 알림", color = KColors.White)
+            }
+            Spacer(Modifier.height(24.dp))
             Text("ChatGPT 계정", color = KColors.Muted, fontSize = 13.sp)
             Spacer(Modifier.height(10.dp))
             Text(if (connection.connected) connection.accountLabel else "연결된 계정이 없어요", color = KColors.White, fontSize = 18.sp)
