@@ -46,6 +46,8 @@ class CalibrationCameraActivity : ComponentActivity() {
     private lateinit var preview: PreviewView
     private lateinit var overlay: PoseOverlay
     private lateinit var status: TextView
+    private lateinit var copyError: Button
+    private var failureReport: String? = null
     private lateinit var start: Button
     private lateinit var stop: Button
     private lateinit var hand: CheckBox
@@ -117,6 +119,17 @@ class CalibrationCameraActivity : ComponentActivity() {
         addView(frame, LinearLayout.LayoutParams(-1, 0, 1f))
         status = TextView(this@CalibrationCameraActivity).apply { text = "카메라 준비 중…"; textSize = 14f; setTextColor(Color.rgb(30, 210, 190)); setPadding(0, 12, 0, 8) }
         addView(status)
+        copyError = Button(this@CalibrationCameraActivity).apply {
+            text = "오류 정보 복사"; visibility = View.GONE
+            setOnClickListener {
+                failureReport?.let { report ->
+                    (getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager)
+                        .setPrimaryClip(android.content.ClipData.newPlainText("카메라 초기화 오류", report))
+                    Toast.makeText(this@CalibrationCameraActivity, "오류 정보를 복사했어요", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        addView(copyError)
         addView(LinearLayout(this@CalibrationCameraActivity).apply {
             start = Button(this@CalibrationCameraActivity).apply { text = "워치와 함께 촬영 시작"; isEnabled = false; setOnClickListener { beginCapture() } }
             stop = Button(this@CalibrationCameraActivity).apply { text = "촬영 종료 · 저장"; isEnabled = false; setOnClickListener { stopCapture(null) } }
@@ -151,9 +164,20 @@ class CalibrationCameraActivity : ComponentActivity() {
                         imageAnalysis.setAnalyzer(worker, ::analyze)
                         cameraReady = true
                         main.post { start.isEnabled = true; status.text = "몸이 보이면 촬영을 시작해 주세요. 영상은 폰 안에 저장돼요." }
-                    }.onFailure { main.post { status.text = "관절 인식을 시작하지 못했어요. 촬영 자료는 삭제하지 않아요." } }
+                    }.onFailure { error ->
+                        val report = CameraInitializationFailure.save(this, "POSE_INIT", error)
+                        main.post {
+                            cameraReady = false; start.isEnabled = false
+                            failureReport = report; copyError.visibility = View.VISIBLE
+                            status.text = "관절 인식을 시작하지 못했어요. 몸의 위치를 바꿀 필요는 없어요. 오류 정보를 복사해 주세요."
+                        }
+                    }
                 }
-            }.onFailure { status.text = "전면 카메라를 시작하지 못했어요." }
+            }.onFailure { error ->
+                failureReport = CameraInitializationFailure.save(this, "CAMERA_BIND", error)
+                copyError.visibility = View.VISIBLE
+                status.text = "전면 카메라를 시작하지 못했어요. 오류 정보를 복사해 주세요."
+            }
         }, ContextCompat.getMainExecutor(this))
     }
 
