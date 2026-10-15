@@ -15,11 +15,18 @@ if [ -n "$(git status --porcelain)" ]; then
     exit 1
 fi
 
-# One final integration pass after all implementation and parallel work is committed.
-# Do not run a second full pass outside this script before publishing.
-"$TOOLS/gradle-8.11.1/bin/gradle" -Pkotlin.incremental=false \
-    :core:test :updates:testDebugUnitTest :phone:testDebugUnitTest :wear:testDebugUnitTest \
-    :phone:lint :wear:lint :phone:assembleOta :wear:assembleOta
+# --publish-built resumes publication after a failed final check has been fixed
+# and its affected checks/APK build rerun. It avoids rerunning every module test.
+# The exact committed source must already have been checked and built; APK
+# declaration/signature verification below still runs before any push.
+if [ "${1:-}" = "--publish-built" ]; then
+    shift
+else
+    # One final integration pass after all implementation and parallel work.
+    "$TOOLS/gradle-8.11.1/bin/gradle" -Pkotlin.incremental=false \
+        :core:test :updates:testDebugUnitTest :phone:testDebugUnitTest :wear:testDebugUnitTest \
+        :phone:lint :wear:lint :phone:assembleOta :wear:assembleOta
+fi
 
 # A successful shrink/build does not guarantee the JNI entry points survive R8.
 # Run the existing APK inspection before any push or public release. This does

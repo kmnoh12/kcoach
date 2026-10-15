@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item name="tempo_enabled" type="id" />
+    <item name="tempo_repetition_minimum" type="id" />
+    <item name="tempo_repetition_maximum" type="id" />
+    <item name="tempo_concentric_minimum" type="id" />
+    <item name="tempo_concentric_maximum" type="id" />
+    <item name="tempo_eccentric_minimum" type="id" />
+    <item name="tempo_eccentric_maximum" type="id" />
+    <item name="tempo_consecutive" type="id" />
+    <item name="tempo_interval" type="id" />
+</resources>

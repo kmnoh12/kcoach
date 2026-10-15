@@ -47,7 +47,7 @@ class WorkoutTempoSettingsActivity : ComponentActivity() {
         selectedExerciseId = id
         root("$name · 템포")
         val previous = store.load(id).getOrDefault(WorkoutTempoSettings(id))
-        val enabled = CheckBox(this).apply { this.id = 0x6f100001; text = "이 운동의 템포 알림 사용"; isChecked = previous.enabled; setTextColor(Color.WHITE) }
+        val enabled = CheckBox(this).apply { this.id = R.id.tempo_enabled; text = "이 운동의 템포 알림 사용"; isChecked = previous.enabled; setTextColor(Color.WHITE) }
         content.addView(enabled)
         content.addView(text("원하는 시간 범위를 초로 입력해 주세요. 비워 둔 항목은 알림을 끄며, 목표 시간은 운동 처방이나 자세 점수가 아니에요."))
         val rows = WorkoutTempoMetric.entries.associateWith { metric ->
@@ -55,18 +55,23 @@ class WorkoutTempoSettingsActivity : ComponentActivity() {
             val range = previous.targets[metric]
             val minimum = input("최소 초", range?.let { (it.minimumMs / 1000.0).toString() }.orEmpty())
             val maximum = input("최대 초", range?.let { (it.maximumMs / 1000.0).toString() }.orEmpty())
-            minimum.id = 0x6f100010 + metric.ordinal * 2; maximum.id = minimum.id + 1
+            val ids = when (metric) {
+                WorkoutTempoMetric.REPETITION -> R.id.tempo_repetition_minimum to R.id.tempo_repetition_maximum
+                WorkoutTempoMetric.CONCENTRIC -> R.id.tempo_concentric_minimum to R.id.tempo_concentric_maximum
+                WorkoutTempoMetric.ECCENTRIC -> R.id.tempo_eccentric_minimum to R.id.tempo_eccentric_maximum
+            }
+            minimum.id = ids.first; maximum.id = ids.second
             content.addView(LinearLayout(this).apply {
                 addView(minimum, LinearLayout.LayoutParams(0, -2, 1f)); addView(maximum, LinearLayout.LayoutParams(0, -2, 1f))
             }); minimum to maximum
         }
         content.addView(text("몇 회 연속 벗어나면 알릴까요?"))
         val consecutive = input("연속 횟수", previous.consecutiveRepetitions.toString()).apply { inputType = InputType.TYPE_CLASS_NUMBER }
-        consecutive.id = 0x6f100020
+        consecutive.id = R.id.tempo_consecutive
         content.addView(consecutive)
         content.addView(text("알림 사이 최소 간격"))
         val interval = input("초", (previous.minimumAlertIntervalMs / 1000.0).toString()); content.addView(interval)
-        interval.id = 0x6f100021
+        interval.id = R.id.tempo_interval
         content.addView(text("저장은 다음 새 세트부터 반영해요. 검증된 엔진이나 유효한 구간이 없으면 알림을 보내지 않아요."))
         content.addView(button("다음 새 세트부터 저장") {
             runCatching {
