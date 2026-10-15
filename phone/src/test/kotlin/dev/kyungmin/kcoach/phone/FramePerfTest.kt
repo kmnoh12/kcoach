@@ -20,6 +20,20 @@ class FramePerfTest {
         assertEquals(text, perf.latest)
     }
 
+    @Test fun aNewCaptureClearsPreviewAndPreviousCaptureWindows() {
+        val perf = FramePerf()
+        repeat(190) { i -> perf.add((i + 1) * 1_100 * ms, (i + 1) * 1_100 * ms, 1, 2, 3, 4, 10) }
+        assertEquals(180, perf.recordedLines().size)
+        val snapshot = perf.recordedLines()
+        perf.reset()
+        assertTrue(perf.recordedLines().isEmpty())
+        assertEquals("", perf.latest)
+        assertEquals(180, snapshot.size)
+        assertNull(perf.add(300_000 * ms, 300_000 * ms, 1, 2, 3, 4, 10))
+        assertNotNull(perf.add(301_100 * ms, 301_100 * ms, 1, 2, 3, 4, 10))
+        assertEquals(1, perf.recordedLines().size)
+    }
+
     @Test fun staysSilentInsideTheFirstSecond() {
         val perf = FramePerf()
         assertNull(perf.add(0, 0, 1, 1, 1, 1, 4))

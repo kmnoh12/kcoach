@@ -13,7 +13,9 @@ data class CalibrationCapture(val id: String, val exerciseId: String, val exerci
     val watchOnLeft: Boolean, val watchOrientation: String, val phoneClockId: String,
     val setId: String, val attemptId: String, val createdAtMs: Long, val status: CalibrationCaptureStatus,
     val videoComplete: Boolean = false, val interruptionReason: String? = null, val ownerProcessId: String = "UNKNOWN",
-    val startWristContext: StartWristContext? = null)
+    val startWristContext: StartWristContext? = null,
+    /** Last useful frame, before the observed end hold. Originals and original clocks are retained. */
+    val motionEndCameraNs: Long? = null)
 
 /** A stopped/interrupted clip remains its own immutable attempt, with original frame clocks. */
 class CalibrationCaptureStore(private val context: Context) {
@@ -59,6 +61,18 @@ class CalibrationCaptureStore(private val context: Context) {
     }
 
     fun videoFile(id: String): File = File(directory(id), "reference.mp4")
+
+    fun savePerformance(id: String, lines: List<String>): Result<Unit> = synchronized(lock) { runCatching {
+        require(lines.size <= 180 && lines.all { it.length <= 1024 })
+        val file = File(directory(id), "performance.json")
+        val temp = File(file.parentFile, "performance.json.incoming")
+        val json = JSONObject().put("schemaVersion", 1).put("windows", JSONArray(lines))
+        FileOutputStream(temp).use { it.write(json.toString().toByteArray(Charsets.UTF_8)); it.fd.sync() }
+        check(temp.renameTo(file))
+    } }
+    fun performance(id: String): String? = synchronized(lock) {
+        File(directory(id), "performance.json").takeIf { it.isFile && it.length() <= 200_000 }?.readText()
+    }
 
     fun active(): Result<CalibrationCapture?> = synchronized(lock) {
         runCatching { prefs.getString("active", null)?.let { load(it).getOrThrow() }
@@ -140,7 +154,30 @@ class CalibrationCaptureStore(private val context: Context) {
         }
     }
 
-    fun finish(id: String, videoComplete: Boolean, reason: String? = null): Result<CalibrationCapture> = synchronized(lock) {
+    /** A view over immutable camera evidence; no renumbering or timestamp rewriting. */
+    fun motionFrames(id: String): Result<List<CameraPoseFrame>> = runCatching {
+        val end = load(id).getOrThrow().motionEndCameraNs
+        frames(id).getOrThrow().filter { end == null || it.cameraTimestampNs <= end }
+    }
+
+    /** Never apply a camera cutoff to the watch clock without a verified mapping. */
+    fun motionDocument(id: String): Result<SensorCaptureDocument> = runCatching {
+        val capture = load(id).getOrThrow()
+        val document = sensor(id).getOrThrow().validated.document
+        val end = capture.motionEndCameraNs ?: return@runCatching document
+        val boundary = frames(id).getOrThrow().single { it.cameraTimestampNs == end && it.videoFrameWritten }
+        require(boundary.timestampSource == CameraTimestampSource.PHONE_ELAPSED_REALTIME && boundary.phoneClockId == capture.phoneClockId) {
+            "Camera boundary is not in the verified phone clock"
+        }
+        val mapping = CalibrationReviewStore(context).alignment(id).getOrThrow()
+        val watchEnd = mapping.watchTimeNs(end, capture.phoneClockId, mapping.start.watchClockId)
+        // Keep the first bracketing sample for boundary interpolation/coverage. It belongs
+        // to the observed stationary hold; all later hold/approach samples stay excluded.
+        val after = document.records.indexOfFirst { it.sample.timestampNs > watchEnd }
+        document.copy(records = if (after < 0) document.records else document.records.take(after + 1))
+    }
+
+    fun finish(id: String, videoComplete: Boolean, reason: String? = null, motionEndCameraNs: Long? = null): Result<CalibrationCapture> = synchronized(lock) {
         runCatching {
             val capture = load(id).getOrThrow()
             if (capture.status != CalibrationCaptureStatus.RECORDING) {
@@ -157,7 +194,11 @@ class CalibrationCaptureStore(private val context: Context) {
                 recorded.zip(video.presentationTimesUs).all { (frame, pts) ->
                     kotlin.math.abs(frame.videoPresentationUs - pts) <= 1_000 && frame.width == video.width && frame.height == video.height
                 }
+            if (complete && motionEndCameraNs != null) require(capturedFrames.orEmpty().any {
+                it.cameraTimestampNs == motionEndCameraNs && it.videoFrameWritten
+            }) { "End boundary must be an encoded camera frame" }
             val updated = capture.copy(status = if (complete) CalibrationCaptureStatus.REVIEW_PENDING else CalibrationCaptureStatus.INTERRUPTED,
+                motionEndCameraNs = motionEndCameraNs.takeIf { complete },
                 videoComplete = complete, interruptionReason = reason ?: if (!complete) "Reference video was not finalized" else null)
             writeMetadata(updated)
             if (prefs.getString("active", null) == id) check(prefs.edit().remove("active").commit())
@@ -190,6 +231,7 @@ class CalibrationCaptureStore(private val context: Context) {
             .put("setId", capture.setId).put("attemptId", capture.attemptId).put("createdAtMs", capture.createdAtMs)
             .put("status", capture.status.name).put("videoComplete", capture.videoComplete)
             .put("ownerProcessId", capture.ownerProcessId)
+            .put("motionEndCameraNs", capture.motionEndCameraNs ?: JSONObject.NULL)
             .put("startWristContext", capture.startWristContext?.let(StartWristContextCodec::encode) ?: JSONObject.NULL)
             .put("interruptionReason", capture.interruptionReason ?: JSONObject.NULL)
             .put("model", "pose_landmarker_lite-float16-1").put("purpose", "PAIRED_REFERENCE")
@@ -205,7 +247,8 @@ class CalibrationCaptureStore(private val context: Context) {
             CalibrationCaptureStatus.valueOf(json.getString("status")), json.getBoolean("videoComplete"),
             if (json.isNull("interruptionReason")) null else json.getString("interruptionReason"), json.optString("ownerProcessId", "UNKNOWN"),
             json.optString("startWristContext").takeIf { json.has("startWristContext") && !json.isNull("startWristContext") }
-                ?.let(StartWristContextCodec::decode))
+                ?.let(StartWristContextCodec::decode),
+            if (json.has("motionEndCameraNs") && !json.isNull("motionEndCameraNs")) json.getLong("motionEndCameraNs") else null)
     }
 
     companion object {

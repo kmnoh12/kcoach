@@ -66,7 +66,9 @@ class CalibrationEvidenceExport(private val context: Context) {
                 .put("createdAtMs", capture.createdAtMs).put("status", capture.status.name).put("videoComplete", capture.videoComplete)
                 .put("videoRetained", video.isFile).put("logsOnlyChosen", CalibrationVideoRetention(context).logsOnly(captureId))
                 .put("interruptionReason", capture.interruptionReason ?: JSONObject.NULL).put("watchOnLeft", capture.watchOnLeft)
-                .put("watchOrientation", capture.watchOrientation).put("phoneClockId", capture.phoneClockId))
+                .put("watchOrientation", capture.watchOrientation).put("phoneClockId", capture.phoneClockId)
+                .put("motionEndCameraNs", capture.motionEndCameraNs ?: JSONObject.NULL))
+            captures.performance(captureId)?.let { json("performance.json", JSONObject(it)) }
             entry("camera-frames.jsonl", 120_000_000) { sink -> frames.forEach {
                 sink.write((CameraFrameCodec.encode(it).toString() + "\n").toByteArray(Charsets.UTF_8))
             } }

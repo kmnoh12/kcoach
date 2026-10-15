@@ -80,6 +80,10 @@ class CalibrationReviewActivity : ComponentActivity() {
         image?.setImageBitmap(null); imageBitmap?.recycle(); imageBitmap = null; image = null
         markerButtons = emptyList()
         content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 24, 24, 32); setBackgroundColor(Color.rgb(9, 12, 11)) }
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(content) { view, insets ->
+            val bars = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            view.setPadding(24 + bars.left, 24 + bars.top, 24 + bars.right, 32 + bars.bottom); insets
+        }
         setContentView(ScrollView(this).apply { addView(content) })
     }
     private fun text(value: String, size: Float = 14f) = TextView(this).apply { text = value; textSize = size; setTextColor(Color.LTGRAY); setPadding(0, 6, 0, 6) }
@@ -103,7 +107,7 @@ class CalibrationReviewActivity : ComponentActivity() {
         val selected = captures.load(id).getOrElse { showList(); return }
         capture = selected
         review = reviews.load(id).getOrNull()
-        frames = captures.frames(id).getOrDefault(emptyList()).filter { it.videoFrameWritten }
+        frames = captures.motionFrames(id).getOrDefault(emptyList()).filter { it.videoFrameWritten }
         cycles = reviews.cameraCycles(id).getOrDefault(emptyList()).toMutableList()
         nonRepIntervals = review?.nonRepIntervals.orEmpty().toMutableList()
         nonRepStart = null

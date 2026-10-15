@@ -18,8 +18,8 @@ android {
         applicationId = "dev.kyungmin.kcoach"
         minSdk = 29
         targetSdk = 35
-        versionCode = 40
-        versionName = "0.2.1"
+        versionCode = 41
+        versionName = "0.2.2"
         buildConfigField(
             "String",
             "UPDATE_MANIFEST_URL",
@@ -81,4 +81,32 @@ dependencies {
     testImplementation(platform("androidx.compose:compose-bom:2024.12.01"))
     testImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+}
+
+// Raw ActivityController tests create real Compose views outside a Compose rule. Running
+// those before Compose-rule tests in one Robolectric JVM poisons Compose idling (the
+// WorkoutResultIntentTest + AiCalibrationUiTest pair reproduces it). Keep both suites in
+// the full gate, but give the Compose rule its own JVM instead of skipping screen tests.
+afterEvaluate {
+    val unit = tasks.named<org.gradle.api.tasks.testing.Test>("testDebugUnitTest").get()
+    val setup = unit.taskDependencies.getDependencies(unit).toList()
+    val composeTests = tasks.register<org.gradle.api.tasks.testing.Test>("testDebugCompose") {
+        description = "Runs phone Compose/Roborazzi tests in a fresh Robolectric process"
+        group = "verification"
+        testClassesDirs = unit.testClassesDirs
+        classpath = unit.classpath
+        systemProperties(unit.systemProperties)
+        listOf("record", "compare", "verify").forEach { mode ->
+            systemProperty("roborazzi.test.$mode", providers.gradleProperty("roborazzi.test.$mode").getOrElse("false"))
+        }
+        jvmArgs(unit.jvmArgs.orEmpty())
+        jvmArgumentProviders.addAll(unit.jvmArgumentProviders)
+        maxHeapSize = unit.maxHeapSize
+        workingDir = unit.workingDir
+        include("**/ui/**", "**/CalibrationCameraActivityTest*")
+        dependsOn(setup)
+    }
+    unit.exclude("**/ui/**", "**/CalibrationCameraActivityTest*")
+    // An unfiltered full run (including release.sh) still executes every screen test.
+    unit.dependsOn(composeTests)
 }

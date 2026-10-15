@@ -5,6 +5,12 @@ package dev.kyungmin.kcoach.phone
  * Only the analysis thread feeds it; [summary] is read once a second for the `KCoachPerf` log and the debug overlay.
  */
 internal class FramePerf {
+    private val captureLines = mutableListOf<String>()
+    fun reset() {
+        windowStartNs = 0L; frames = 0; convertNs = 0; detectNs = 0; encodeNs = 0; storeNs = 0; totalNs = 0
+        lastCameraNs = 0; gapSumNs = 0; gapMaxNs = 0; gaps = 0; latest = ""; captureLines.clear()
+    }
+    fun recordedLines(): List<String> = captureLines.toList()
     private var windowStartNs = 0L
     private var frames = 0
     private var convertNs = 0L; private var detectNs = 0L; private var encodeNs = 0L; private var storeNs = 0L; private var totalNs = 0L
@@ -28,6 +34,7 @@ internal class FramePerf {
         windowStartNs = nowNs; frames = 0; convertNs = 0; detectNs = 0; encodeNs = 0; storeNs = 0; totalNs = 0
         gapSumNs = 0; gapMaxNs = 0; gaps = 0
         latest = line
+        if (captureLines.size < 180) captureLines.add(line)
         return line
     }
 }

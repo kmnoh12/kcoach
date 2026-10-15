@@ -67,6 +67,9 @@ class CalibrationReviewStore(private val context: Context) {
             require(current.revision == expectedRevision && cycles.size <= 1_000)
             require(current.countReference == null || cycles.size <= current.countReference.reps)
             require(cycles.zipWithNext().all { (a, b) -> b.startNs >= a.endNs })
+            require(capture.motionEndCameraNs == null || cycles.all { it.endNs <= capture.motionEndCameraNs }) {
+                "Repetition crosses the capture end hold"
+            }
             val frames = captures.frames(id).getOrThrow()
             val written = frames.filter { it.videoFrameWritten }
             require(written.size == video.presentationTimesUs.size && written.zip(video.presentationTimesUs).all { (frame, pts) ->

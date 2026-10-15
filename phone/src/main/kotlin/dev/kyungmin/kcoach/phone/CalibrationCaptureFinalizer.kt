@@ -2,18 +2,21 @@ package dev.kyungmin.kcoach.phone
 
 /** Retains the already-stopped attempt until its final metadata is durably committed. */
 internal class CalibrationCaptureFinalizer(private val store: CalibrationCaptureStore) {
-    data class Pending(val capture: CalibrationCapture, val videoComplete: Boolean, val reason: String?)
+    data class Pending(val capture: CalibrationCapture, val videoComplete: Boolean, val reason: String?, val motionEndCameraNs: Long? = null,
+        val performance: List<String> = emptyList())
     @Volatile var pending: Pending? = null
         private set
 
-    @Synchronized fun prepare(capture: CalibrationCapture, videoComplete: Boolean, reason: String?) {
+    @Synchronized fun prepare(capture: CalibrationCapture, videoComplete: Boolean, reason: String?, motionEndCameraNs: Long? = null,
+        performance: List<String> = emptyList()) {
         check(pending == null)
-        pending = Pending(capture, videoComplete, reason)
+        pending = Pending(capture, videoComplete, reason, motionEndCameraNs, performance)
     }
 
     @Synchronized fun save(): Result<CalibrationCapture> {
         val attempt = pending ?: return Result.failure(IllegalStateException("No stopped capture to save"))
-        val result = store.finish(attempt.capture.id, attempt.videoComplete, attempt.reason)
+        val result = store.finish(attempt.capture.id, attempt.videoComplete, attempt.reason, attempt.motionEndCameraNs)
+            .mapCatching { saved -> store.savePerformance(saved.id, attempt.performance).getOrThrow(); saved }
         if (result.isSuccess) pending = null
         return result
     }

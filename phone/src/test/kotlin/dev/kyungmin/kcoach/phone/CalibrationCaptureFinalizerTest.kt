@@ -65,6 +65,26 @@ class CalibrationCaptureFinalizerTest {
         assertEquals(another, store.active().getOrThrow())
     }
 
+    @Test fun performanceWriteFailureRetriesWithoutLosingTheAlreadyFinalizedAttempt() {
+        val app = RuntimeEnvironment.getApplication()
+        val store = CalibrationCaptureStore(app)
+        val clip = store.begin("external_rotation", "외회전", true, "phone").getOrThrow()
+        store.videoFile(clip.id).writeText("unchanged reference")
+        val finalizer = CalibrationCaptureFinalizer(store)
+        finalizer.prepare(clip, false, "interrupted fixture", performance = listOf("처리 8.5fps"))
+        val obstacle = app.filesDir.resolve("calibration-captures/${clip.id}/performance.json.incoming")
+        assertTrue(obstacle.mkdir())
+        assertTrue(finalizer.save().isFailure)
+        val saved = store.load(clip.id).getOrThrow()
+        assertEquals(CalibrationCaptureStatus.INTERRUPTED, saved.status)
+        assertNotNull(finalizer.pending)
+        assertTrue(obstacle.delete())
+        assertEquals(saved, finalizer.save().getOrThrow())
+        assertNull(finalizer.pending)
+        assertTrue(requireNotNull(store.performance(clip.id)).contains("8.5fps"))
+        assertEquals("unchanged reference", store.videoFile(clip.id).readText())
+    }
+
     @Test fun storageFullCauseGetsActionableCopyWhileOtherFailuresNeverPretendToBeDiskFull() {
         val errno = android.system.ErrnoException("write", android.system.OsConstants.ENOSPC)
         val wrapped = RuntimeException("finalization", errno)

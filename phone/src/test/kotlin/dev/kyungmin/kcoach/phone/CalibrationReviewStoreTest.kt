@@ -28,6 +28,23 @@ class CalibrationReviewStoreTest {
         assertEquals(frames, CalibrationCaptureStore(app).frames(clip.id).getOrThrow())
     }
 
+    @Test fun endHoldIsExcludedWithoutChangingFramesAndCountAloneNeverCreatesBoundaries() {
+        val app = RuntimeEnvironment.getApplication()
+        val captures = CalibrationCaptureStore(app)
+        val clip = finalizedClip()
+        val frames = captures.frames(clip.id).getOrThrow()
+        val metadata = app.filesDir.resolve("calibration-captures/${clip.id}/capture.json")
+        metadata.writeText(org.json.JSONObject(metadata.readText()).put("motionEndCameraNs", frames[2].cameraTimestampNs).toString())
+        assertEquals(frames.take(3), captures.motionFrames(clip.id).getOrThrow())
+        assertEquals(frames, captures.frames(clip.id).getOrThrow())
+        val reviews = CalibrationReviewStore(app)
+        val count = reviews.saveCount(clip.id, 10, 0).getOrThrow()
+        assertTrue(count.references.isEmpty())
+        val crosses = RepCycle(frames[0].cameraTimestampNs, frames[1].cameraTimestampNs, frames[4].cameraTimestampNs, MusclePhase.CONCENTRIC)
+        assertTrue(reviews.saveCycles(clip.id, listOf(crosses), true, count.revision).isFailure)
+        assertTrue(captures.motionDocument(clip.id).isFailure) // No verified watch mapping: fail closed.
+    }
+
     private fun finalizedClip(frameCount: Int = 5): CalibrationCapture {
         val captures = CalibrationCaptureStore(RuntimeEnvironment.getApplication())
         val clip = captures.begin("dumbbell_curl", "컬", true, "phone").getOrThrow()
@@ -78,6 +95,25 @@ class CalibrationReviewStoreTest {
         assertTrue(unpaused.references.single().eligibleForLearning)
         val restored = store.saveCycles(clip.id, listOf(cycle), true, unpaused.revision).getOrThrow()
         assertFalse(restored.references.single().eligibleForLearning)
+        // The training view stops at the mapped camera boundary, retaining only the
+        // next sensor record for interpolation. The immutable evidence stays intact.
+        val metadata = app.filesDir.resolve("calibration-captures/${clip.id}/capture.json")
+        metadata.writeText(org.json.JSONObject(metadata.readText()).put("motionEndCameraNs", times.last()).toString())
+        val watchEnd = store.alignment(clip.id).getOrThrow().let { it.watchTimeNs(times.last(), "phone", "watch") }
+        val cropped = captures.motionDocument(clip.id).getOrThrow().records
+        val firstAfter = records.indexOfFirst { it.sample.timestampNs > watchEnd }
+        assertTrue(firstAfter > 0 && firstAfter < records.lastIndex)
+        assertEquals(records.take(firstAfter + 1), cropped)
+        assertTrue(cropped[cropped.lastIndex - 1].sample.timestampNs <= watchEnd)
+        assertTrue(cropped.last().sample.timestampNs > watchEnd)
+        val frameFile = app.filesDir.resolve("calibration-captures/${clip.id}/frames.jsonl")
+        val originalFrames = frameFile.readText()
+        frameFile.writeText(captures.frames(clip.id).getOrThrow().joinToString("\n", postfix = "\n") {
+            CameraFrameCodec.encode(it.copy(timestampSource = CameraTimestampSource.UNKNOWN)).toString()
+        })
+        assertTrue(captures.motionDocument(clip.id).isFailure)
+        frameFile.writeText(originalFrames)
+        assertArrayEquals(raw, captures.sensor(clip.id).getOrThrow().rawFile.readBytes())
         val count = store.saveCount(clip.id, 1, restored.revision).getOrThrow()
         CalibrationVideoRetention(app).discardVideo(clip.id, count.revision, 0).getOrThrow()
         assertEquals(listOf(cycle), CalibrationReviewStore(app).cameraCycles(clip.id).getOrThrow())

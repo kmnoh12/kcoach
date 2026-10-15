@@ -1105,9 +1105,9 @@ class MainActivity : ComponentActivity() {
         }
         val instructions = "1. 운동을 고르고 설정에 저장한 워치 착용 정보 확인\n" +
             "2. 폰을 고정하고 필요한 관절이 보이게 촬영 (스쿼트는 머리부터 발까지 전신)\n" +
-            "3. 안내 자세를 유지해 촬영이 시작되면 평소 동작으로 6~8회 수행한 뒤 종료\n" +
-            "4. 영상과 워치 움직임의 시점·반복 구간 확인\n" +
-            "5. 확인 자료를 보관하고 별도 세트에서 개인 설정 검증"
+            "3. 안내 자세로 촬영을 시작하고 평소 동작으로 10회 수행해 주세요\n" +
+            "4. 시작 자세로 돌아와 3초 멈추면 자동으로 종료해요\n" +
+            "5. 영상을 보고 실제 횟수를 확인해 주세요"
         calibrationButtonOverride.value = null
         val profileUi = personalProfile(selected.id)?.let { profile ->
             val created = SimpleDateFormat("yyyy.MM.dd HH:mm", Locale.KOREA).format(Date(profile.createdAtMs))
@@ -1156,7 +1156,7 @@ class MainActivity : ComponentActivity() {
             toggle = ::startOrStopCalibration,
             deleteProfile = { confirmDeletePersonalProfile(selected.id, selected.name) },
             openSensorView = ::showSensorView,
-            openCaptureReview = { startActivity(Intent(this, CalibrationReviewActivity::class.java)) },
+            openCaptureReview = { startActivity(Intent(this, CalibrationResultActivity::class.java)) },
             select = { id ->
                 selectedCalibrationExerciseId = id
                 showCalibration()

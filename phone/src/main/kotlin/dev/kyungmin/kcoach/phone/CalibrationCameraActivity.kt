@@ -79,6 +79,7 @@ class CalibrationCameraActivity : ComponentActivity() {
     private var frameIndex = 0L
     private var timestampSource = CameraTimestampSource.UNKNOWN
     private var counter: UpperBodyPoseCounter? = null
+    private var captureEnd = CameraCaptureEnd()
     private val guideFamily by lazy { CameraPoseGuide.familyFor(exerciseId) }
     private val guideSmoother = CameraPoseGuideSmoother()
     private val finalizer by lazy { CalibrationCaptureFinalizer(store) }
@@ -112,7 +113,7 @@ class CalibrationCameraActivity : ComponentActivity() {
         setContent {
             CalibrationCameraScreen(ui, exerciseName, guideFamily, preview, overlay,
                 back = ::finish,
-                openSaved = { if (capture == null) startActivity(Intent(this, CalibrationReviewActivity::class.java)) },
+                openSaved = { if (capture == null) startActivity(Intent(this, CalibrationResultActivity::class.java)) },
                 openWearingSettings = { if (capture == null && !starting) startActivity(Intent(this, WorkoutProfileActivity::class.java)) },
                 stop = { stopCapture(null) },
                 retrySave = { ui = ui.copy(saveRetry = false); worker.execute { saveStoppedCapture() } },
@@ -269,6 +270,7 @@ class CalibrationCameraActivity : ComponentActivity() {
                     }
                     val next = store.begin(exerciseId, exerciseName, onLeft, epoch.id, wearing, declared).getOrThrow()
                     frameIndex = 0; firstCameraNs = null; stopping = false; watchStartScheduled = false; encoder = null
+                    captureEnd = CameraCaptureEnd()
                     val motion = CameraCaptureGuide.forExercise(exerciseId, onLeft).metric
                     counter = motion?.let(::UpperBodyPoseCounter)
                     preparedCapture = next
@@ -309,9 +311,10 @@ class CalibrationCameraActivity : ComponentActivity() {
             synchronized(this) {
                 if (stopping) return@execute
                 capture = prepared
+                perf.reset()
                 preparedCapture = null
                 val startCommand = WearSync.withPatternShadow(WearSync.richCommand("START", prepared.id, exerciseId,
-                    exerciseName, 0, 8, null, 0, setId = prepared.setId, attemptId = prepared.attemptId), selectedShadow?.commandId.orEmpty())
+                    exerciseName, 0, CameraCaptureEnd.TARGET_REPS, null, 0, setId = prepared.setId, attemptId = prepared.attemptId), selectedShadow?.commandId.orEmpty())
                 val patternBound = selectedShadow?.runtime?.compatibility?.let { WearSync.withPatternBinding(startCommand, it) } ?: startCommand
                 val boundCommand = prepared.startWristContext?.let { declared ->
                     WearSync.withStartWristContext(WearSync.withPatternWearing(patternBound,
@@ -319,7 +322,7 @@ class CalibrationCameraActivity : ComponentActivity() {
                 } ?: patternBound
                 PhoneWorkoutService.send(this, WearSync.PATH_COMMAND, boundCommand)
             }
-            main.post { starting = false; ui = ui.copy(recordingSinceMs = SystemClock.uptimeMillis(), status = "촬영 중 · 평소 속도로 움직여 주세요") }
+            main.post { starting = false; ui = ui.copy(recordingSinceMs = SystemClock.uptimeMillis(), status = "10회 후 시작 자세에서 3초 멈춰 주세요") }
         }
     }
 
@@ -392,11 +395,12 @@ class CalibrationCameraActivity : ComponentActivity() {
                 val message = when {
                     normalized.size > 1 -> "여러 사람이 보여요. 혼자 화면에 들어와 주세요."
                     normalized.isEmpty() || counter != null && metric == null -> "팔과 몸통이 가려지지 않게 해 주세요."
-                    counter != null -> "촬영 중 · 영상 추정 ${counter!!.reps}회"
-                    else -> "촬영 중 · 횟수는 종료 후 영상에서 확인해요"
+                    else -> "10회 후 시작 자세에서 3초 멈춰 주세요"
                 }
                 main.post { ui = ui.copy(status = message) }
-                if (videoUs >= 120_000_000L) stopCapture(null)
+                val end = captureEnd.observe(cameraNs, pose.takeIf { written }, worldPose.takeIf { written }, guide, active.watchOnLeft)
+                if (end != null) stopCapture(null, end)
+                else if (videoUs >= 120_000_000L) stopCapture(null)
             }
             val frameWidth = bitmap.width; val frameHeight = bitmap.height
             val perfLine = perf.add(SystemClock.elapsedRealtimeNanos(), cameraNs, convertedNs - receivedNs, completedNs - convertedNs,
@@ -449,17 +453,17 @@ class CalibrationCameraActivity : ComponentActivity() {
         }, index * 150L) }
     }
 
-    @Synchronized private fun stopCapture(reason: String?) {
+    @Synchronized private fun stopCapture(reason: String?, motionEndCameraNs: Long? = null) {
         val active = capture ?: preparedCapture ?: return
         if (stopping) return
         stopping = true
-        main.post { ui = ui.copy(stopEnabled = false, saving = true, status = "영상과 워치 원본을 저장하는 중…") }
+        main.post { ui = ui.copy(stopEnabled = false, saving = true, status = "영상과 센서 기록 저장 중…") }
         if (capture != null) PhoneWorkoutService.send(this, WearSync.PATH_COMMAND, WearSync.command("STOP", active.id, "", 0, 0))
         probe(active.id, "END")
         worker.execute {
             val videoFinished = runCatching { encoder?.finish() == true }.getOrDefault(false)
             encoder = null
-            finalizer.prepare(active, videoFinished, reason)
+            finalizer.prepare(active, videoFinished, reason, motionEndCameraNs, perf.recordedLines())
             saveStoppedCapture()
         }
     }
@@ -481,7 +485,7 @@ class CalibrationCameraActivity : ComponentActivity() {
                     status = if (saved.getOrThrow().status == CalibrationCaptureStatus.REVIEW_PENDING)
                         "영상 저장 완료 · 워치 원본 수신 후 동작을 확인해 주세요." else "중단 자료를 보관했어요. 새 촬영에서 이어갈 수 있어요.")
                 if (pending.reason == null && !isFinishing && lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED))
-                    startActivity(Intent(this, CalibrationReviewActivity::class.java).putExtra("captureId", active.id))
+                    startActivity(Intent(this, CalibrationResultActivity::class.java).putExtra("captureId", active.id))
             }
         }
     }

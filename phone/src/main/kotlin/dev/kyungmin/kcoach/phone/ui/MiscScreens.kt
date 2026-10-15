@@ -1,6 +1,7 @@
 package dev.kyungmin.kcoach.phone.ui
 
 import android.view.View
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -94,6 +95,7 @@ class CalibrationActions(
     val openCaptureReview: (() -> Unit)? = null,
 )
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun CalibrationScreen(
     ui: CalibrationUi,
@@ -101,11 +103,13 @@ fun CalibrationScreen(
     button: () -> CalibrationButtonUi,
     actions: CalibrationActions,
 ) {
+    var researchVisible by remember { mutableStateOf(false) }
     val state = button()
     val active = sessionActive()
     Column(Modifier.fillMaxSize().background(KColors.Bg).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 20.dp)) {
         Row(Modifier.fillMaxWidth().heightIn(min = 52.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("측정·보정", color = KColors.White, fontSize = 32.sp, fontWeight = FontWeight.Medium)
+            Text("측정·보정", color = KColors.White, fontSize = 32.sp, fontWeight = FontWeight.Medium,
+                modifier = Modifier.combinedClickable(onClick = {}, onLongClick = { researchVisible = !researchVisible }))
         }
         Spacer(Modifier.height(24.dp))
         Text(ui.selectedName, color = KColors.White, fontSize = 24.sp, fontWeight = FontWeight.Medium)
@@ -122,14 +126,14 @@ fun CalibrationScreen(
             enabled = state.enabled && (!ui.manualRequired || ui.cameraObservationAvailable),
             onClick = actions.toggle,
         )
-        actions.openSensorView?.let { open ->
+        if (researchVisible) actions.openSensorView?.let { open ->
             Spacer(Modifier.height(10.dp))
-            WideButton("센서·3D 보기", KColors.SurfaceRaised, KColors.Soft, 48,
+            WideButton("연구 모드 · 센서·3D", KColors.SurfaceRaised, KColors.Soft, 48,
                 enabled = !active, onClick = open)
         }
         actions.openCaptureReview?.let { open ->
             Spacer(Modifier.height(10.dp))
-            WideButton("저장한 촬영·반복 구간 확인", KColors.SurfaceRaised, KColors.Soft, 48,
+            WideButton("저장한 촬영", KColors.SurfaceRaised, KColors.Soft, 48,
                 enabled = !active, onClick = open)
         }
         ui.profile?.let { profile ->

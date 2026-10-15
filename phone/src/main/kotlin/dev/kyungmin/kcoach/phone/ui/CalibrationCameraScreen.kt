@@ -126,6 +126,7 @@ private fun Controls(
                 Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text(ui.headline, color = KColors.White, fontSize = 14.sp)
                     ui.startHint?.let { Text(it, color = KColors.Muted, fontSize = 13.sp) }
+                    Text("10회 후 시작 자세에서 3초 멈춰 주세요", color = KColors.Soft, fontSize = 13.sp)
                 }
             }
             Box(Modifier.fillMaxWidth().height(1.dp).background(KColors.Hairline))

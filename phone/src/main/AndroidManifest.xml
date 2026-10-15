@@ -43,6 +43,7 @@
             android:name=".ProbeActivity"
             android:exported="false" />
         <activity android:name=".CalibrationCameraActivity" android:exported="false" android:screenOrientation="portrait" />
+        <activity android:name=".CalibrationResultActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".CalibrationReviewActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".PatternCandidatesActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".StartDirectionReviewActivity" android:exported="false" android:screenOrientation="portrait" />

@@ -454,7 +454,7 @@ class PatternCandidateStore(private val context: Context) {
         val review = reviews.load(capture.id).getOrThrow()
         val day = Instant.ofEpochMilli(capture.createdAtMs).atOffset(ZoneOffset.UTC).toLocalDate().toString()
         ReviewedPatternSet(capture.id, manifest.payload.getValue(WirePayloadKeys.SHA256).lowercase(), capture.exerciseId,
-            key, day, sensor.validated.document, review.references)
+            key, day, captures.motionDocument(capture.id).getOrThrow(), review.references)
     }
 
     private fun candidateFile(id: String): File {
