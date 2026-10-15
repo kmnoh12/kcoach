@@ -69,7 +69,7 @@ WatchMoreDesignSnapshotTest.kt의 전용 캡처 task만 실행했고 성공했�
 네 시안을 열어 원형 가장자리 잘림과 글자 겹침을 확인했다.
 기존 D와 다른 시안은 그대로 보존했으며, 선택 전 비교 자료로 앱 동작에는 반영하지 않았다.
 
-## D1 최종 조정 요청
+## D1 조정 요청 (이후 D2로 정정됨)
 
 사용자는 D1에서 bpm 글자만 제거하고 심박 숫자의 위치를 유지하도록 요청했다.
 심박 112의 중심 x=287px, baseline=354px, 글자 크기 22sp를 그대로 두었다.
@@ -83,3 +83,15 @@ WatchMoreDesignSnapshotTest.kt의 전용 캡처 task만 실행했고 성공했�
 `draft-d1-revised.png`는 8회 수정본, `draft-d1-at-target.png`와
 `draft-d1-over-target.png`는 20회와 21회의 비교 시안이다.
 해당 캡처/색상/위치 검사 한 개만 실행했다. 앱 소스 및 배포에는 반영하지 않았다.
+
+## 현재 선택: D2에 동일한 조정 적용
+
+사용자가 D1이 아니라 D2라고 정정했다. 기존 시안은 보존하고 D2 수정본을 따로 생성했다.
+D2의 심장 기호와 심박 112는 원래 위치를 그대로 유지했다.
+숫자 중심 x=306px, baseline=337px, 크기 22sp이며 bpm 글자만 제거했다.
+8회 상태에서 제거한 bpm 영역 외 모든 픽셀이 원래 D2와 일치함을 확인했다.
+
+D2도 `reps > targetReps`일 때만 주황이다. 목표 20회 기준 19/20회 초록,
+21회 주황 및 목표 12회에서 13회 주황을 전용 렌더링 검사로 확인했다.
+`draft-d2-revised.png`, `draft-d2-at-target.png`, `draft-d2-over-target.png`,
+`comparison-d2-revised.png`가 현재 선택에 해당하는 자료다. 앱에는 아직 적용하지 않았다.
