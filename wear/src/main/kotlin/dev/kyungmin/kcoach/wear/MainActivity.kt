@@ -27,6 +27,8 @@ import android.widget.Toast
 import android.widget.EditText
 import android.text.InputType
 import android.text.InputFilter
+import android.text.Editable
+import android.text.TextWatcher
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.google.android.gms.tasks.Tasks
@@ -521,7 +523,13 @@ class MainActivity : Activity() {
                 filters = arrayOf(InputFilter.LengthFilter(4))
                 hint = "횟수"
                 setText(draftPrefs.getString(key, null) ?: existing?.command?.performedReps?.toString() ?: if (!manualRequired) reps.toString() else "")
-
+                addTextChangedListener(object : TextWatcher {
+                    override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                    override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                        draftPrefs.edit().putString(key, s.toString()).apply()
+                    }
+                    override fun afterTextChanged(s: Editable?) = Unit
+                })
             }
             val controls = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; addView(input) }
             controls.addView(LinearLayout(this).apply {

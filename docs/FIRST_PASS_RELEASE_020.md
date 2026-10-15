@@ -30,6 +30,12 @@
 기존 인증서 일치, 실제 새 APK의 버전/manifest/JNI/Flogger/Protobuf 보존과 공개 파일 해시를 확인한다.
 공개 결과와 남은 범위는 실제 배포 뒤 기록한다.
 
+통합한 워커 묶음: 클로드 43b5bef/001cad0, 코덱스1 3d6b15c와 그 페이지 전환 기반.
+폰의 새 대상 검사 WatchOverviewPublisherTest 2 / CalibrationCameraActivityTest 1 /
+CalibrationCameraScreenTest 7, 합계 10건 통과(전체/실기 확인을 뜻하지 않음).
+워치 통합 리뷰에서 편집 중 초안 보존이 빠진 것을 확인해 기존 입력 중 저장을 유지했다.
+초안 저장은 완료 명령을 보내지 않으며 적용/세트 마치기 분리는 그대로다.
+
 워치 대기 요약 계약은 /kcoach/watch/overview, schemaVersion=1,
 generatedAtMs/weekStartDate(월요일)/weekWorkoutCount/recent다.
 recent는 null 또는 sessionId/routineName/endedAtMs이며 코덱스1 WatchHomeStore와 맞춘다.
