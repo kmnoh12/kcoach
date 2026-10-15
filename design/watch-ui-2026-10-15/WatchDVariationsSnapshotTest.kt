@@ -16,6 +16,68 @@ import java.io.File
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34], qualifiers = "w216dp-h216dp-round-xhdpi")
 class WatchDVariationsSnapshotTest {
+    @Test fun renderD1WithoutBpmAndVerifyTargetColorBoundary() {
+        val output = File("build/outputs/watch-design").apply { mkdirs() }
+        fun render(reps: Int, target: Int = 20): Bitmap {
+            val view = DVariationView(RuntimeEnvironment.getApplication(), 0, reps, target)
+            val exact = View.MeasureSpec.makeMeasureSpec(432, View.MeasureSpec.EXACTLY)
+            view.measure(exact, exact); view.layout(0, 0, 432, 432)
+            return Bitmap.createBitmap(432, 432, Bitmap.Config.ARGB_8888).also { view.draw(Canvas(it)) }
+        }
+        fun save(bitmap: Bitmap, name: String) = File(output, "$name.png").outputStream().use {
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
+        }
+        fun containsCountColor(bitmap: Bitmap, color: Int): Boolean =
+            (165..260).any { y -> (75..240).any { x -> bitmap.getPixel(x, y) == color } }
+        val green = Color.rgb(0, 230, 140)
+        val orange = Color.rgb(255, 152, 0)
+        val images = listOf(19, 20, 21).map { render(it) }
+        images.forEachIndexed { index, bitmap ->
+            val above = index == 2
+            org.junit.Assert.assertTrue(containsCountColor(bitmap, if (above) orange else green))
+            org.junit.Assert.assertFalse(containsCountColor(bitmap, if (above) green else orange))
+        }
+        val differentTarget = render(13, 12)
+        org.junit.Assert.assertTrue(containsCountColor(differentTarget, orange))
+        differentTarget.recycle()
+
+        val revised = render(8)
+        val original = requireNotNull(BitmapFactory.decodeFile("../design/watch-ui-2026-10-15/draft-d1.png"))
+        // Every pixel outside the removed bpm label stays identical, including the heart-rate digits.
+        for (y in 0 until 432) for (x in 0 until 432) {
+            if (x in 250..325 && y in 355..390) continue
+            org.junit.Assert.assertEquals("Only bpm should be removed: ($x,$y)", original.getPixel(x, y), revised.getPixel(x, y))
+        }
+        original.recycle()
+        save(revised, "draft-d1-revised")
+        save(images[1], "draft-d1-at-target")
+        save(images[2], "draft-d1-over-target")
+
+        val board = Bitmap.createBitmap(1000, 650, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(board)
+        canvas.drawColor(Color.rgb(24, 26, 29))
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; textSize = 32f; typeface = Typeface.DEFAULT_BOLD }
+        canvas.drawText("D1 수정 · 목표 초과 색상", 40f, 48f, paint)
+        paint.textSize = 22f; paint.color = Color.rgb(183, 190, 199); paint.typeface = Typeface.DEFAULT
+        canvas.drawText("bpm 글자만 제거 · 심박 112의 위치 유지 · 목표 20회", 40f, 82f, paint)
+        listOf(images[1], images[2]).forEachIndexed { index, bitmap ->
+            val x = if (index == 0) 52f else 516f
+            paint.textSize = 25f; paint.color = Color.WHITE; paint.typeface = Typeface.DEFAULT_BOLD
+            canvas.drawText(if (index == 0) "20회 · 목표까지 초록" else "21회 · 초과하면 주황", x + 12f, 132f, paint)
+            canvas.save()
+            canvas.clipPath(Path().apply { addCircle(x + 216f, 370f, 214f, Path.Direction.CW) })
+            canvas.drawBitmap(bitmap, x, 154f, null)
+            canvas.restore()
+            paint.style = Paint.Style.STROKE; paint.strokeWidth = 1f; paint.color = Color.rgb(73, 78, 87)
+            canvas.drawCircle(x + 216f, 370f, 214f, paint)
+            paint.style = Paint.Style.FILL
+        }
+        paint.textSize = 21f; paint.color = Color.rgb(183, 190, 199); paint.typeface = Typeface.DEFAULT
+        canvas.drawText("비교용 시안 · 앱 미적용", 40f, 626f, paint)
+        save(board, "comparison-d1-revised")
+        board.recycle(); revised.recycle(); images.forEach { it.recycle() }
+    }
+
     @Test fun renderFourVariationsOfD() {
         val output = File("build/outputs/watch-design").apply { mkdirs() }
         fun save(bitmap: Bitmap, name: String) = File(output, "$name.png").outputStream().use {
@@ -57,10 +119,12 @@ class WatchDVariationsSnapshotTest {
     }
 }
 
-private class DVariationView(context: Context, private val variant: Int) : View(context) {
+private class DVariationView(context: Context, private val variant: Int,
+    private val reps: Int = 8, private val targetReps: Int = 20) : View(context) {
     private val white = Color.rgb(245, 247, 250)
     private val muted = Color.rgb(164, 177, 190)
     private val green = Color.rgb(0, 230, 140)
+    private val orange = Color.rgb(255, 152, 0)
     private val red = Color.rgb(255, 105, 105)
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private fun text(canvas: Canvas, value: String, x: Float, baseline: Float, sp: Float,
@@ -75,13 +139,13 @@ private class DVariationView(context: Context, private val variant: Int) : View(
         paint.color = Color.rgb(48, 56, 64); paint.style = Paint.Style.STROKE; paint.strokeWidth = 1f
         canvas.drawLine(93f, y, 339f, y, paint); paint.style = Paint.Style.FILL
     }
-    private fun bottom(canvas: Canvas, labelsY: Float, valuesY: Float, size: Float) {
+    private fun bottom(canvas: Canvas, labelsY: Float, valuesY: Float, size: Float, showBpm: Boolean = true) {
         text(canvas, "중량", 134f, labelsY, 12f, muted)
         text(canvas, "심박", 294f, labelsY, 12f, muted)
         text(canvas, "10", 127f, valuesY, size, white, true)
         text(canvas, "kg", 181f, valuesY - 2f, 12f, muted)
         text(canvas, "112", 287f, valuesY, size, red, true)
-        text(canvas, "bpm", 287f, valuesY + 26f, 12f, muted)
+        if (showBpm) text(canvas, "bpm", 287f, valuesY + 26f, 12f, muted)
     }
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
@@ -91,11 +155,11 @@ private class DVariationView(context: Context, private val variant: Int) : View(
         text(canvas, if (variant == 3) "자동 측정" else "1세트 · 자동 측정", 216f, 122f, 12f, muted)
         when (variant) {
             0 -> {
-                text(canvas, "8", 175f, 252f, 48f, green, true)
+                text(canvas, reps.toString(), 175f, 252f, 48f, if (reps > targetReps) orange else green, true)
                 text(canvas, "목표", 284f, 209f, 12f, muted)
-                text(canvas, "20회", 284f, 248f, 18f, white)
+                text(canvas, "${targetReps}회", 284f, 248f, 18f, white)
                 divider(canvas, 279f)
-                bottom(canvas, 309f, 354f, 22f)
+                bottom(canvas, 309f, 354f, 22f, showBpm = false)
             }
             1 -> {
                 text(canvas, "8", 175f, 252f, 48f, green, true)
