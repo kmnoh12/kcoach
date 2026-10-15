@@ -3,7 +3,9 @@
 기준: 사용자가 승인한 MEASUREMENT_REDESIGN_PLAN.md, EXERCISE_MEASUREMENT_MATRIX.md,
 START_WRIST_ORIENTATION_PLAN.md, AI_COACH_PLAN.md, WORKOUT_RESULT_UX.md와 이후 요청.
 최종 완료 선언이 아니다. 대상 테스트를 전체 통합/실물 증거로 대신하지 않는다.
-이번 대조에서 전체 테스트·lint·OTA·reviews JSON 생성·배포를 실행하지 않았다.
+최초 대조 뒤 최종 전체 검사와 통합 업데이트를 진행했다. 폰 0.7.7/워치 0.2.7은 공개됐고,
+latest manifest와 실제 다운로드 APK SHA-256도 대조했다. 새 reviews JSON은 생성하지 않았다.
+소프트웨어 검사/공개와 실제 폰·Watch8·계정 검증의 완료는 구분한다.
 
 ## 소프트웨어 경로와 증거 범위
 
@@ -28,7 +30,7 @@ START_WRIST_ORIENTATION_PLAN.md, AI_COACH_PLAN.md, WORKOUT_RESULT_UX.md와 이�
 | 종료 리뷰·상담 근거 조회·개인 사실/해석 분리 | AiCoachController/ReadTools, AutomaticWorkoutReview, WorkoutReviewController | 연결됨. 코덱스1의 설정 해제/계정 변경/늦은 저장 수정도 8ceff8c로 통합됨 |
 | 제한된 GPT 보정 제안·원본 재생·독립 채택 | AiCalibrationController/Input, PatternCandidateStore | 45초/1회 호출/허용 파라미터와 재생 경로 있음. GPT 응답/실물 개선은 미확인 |
 | 폰에서 두 기기 OTA 제어·한 기기만 준비돼도 설치 | COMPANION_UPDATE_FLOW.md, updates 모듈/각 ListenerTest | 구현됨. 첫 통합 버전은 구형 워치의 기존 버튼으로 먼저 설치해야 함. 실제 통합 OTA는 미확인 |
-| 코덱스1 후순위까지 포함·최종 1회 검사/릴리스 | 8ceff8c/dc0f18f, tools/release.sh | 세 후순위 병합/템포 연결 완료. 아래 구현 완료 뒤 버전/서명/manifest/최종 전체 검사·공개 필요 |
+| 코덱스1 후순위까지 포함·최종 1회 검사/릴리스 | 8ceff8c/dc0f18f/2ecd3ad, tools/release.sh | 세 후순위 포함 통합 검사·공개 완료. 전체 676건 통과/2건 제외, lint ID 수정 후 대상 1건/폰 lint·OTA 재확인. 실기/계정 전체 목표는 미완료 |
 
 ## 확인된 구현 잔여 — 완료를 기기 확인으로만 축소하지 않는다
 
@@ -43,13 +45,15 @@ START_WRIST_ORIENTATION_PLAN.md, AI_COACH_PLAN.md, WORKOUT_RESULT_UX.md와 이�
    실제 Flogger 0.6 초기화를 R8 classfile 최적화하면 같은 예외로 실패하고, 폰의 Flogger keep 규칙을
    추가하면 통과한다. 기존 0.7.5 APK의 JNI 4개는 있지만 필수 Flogger 메서드 보존은 실패했다.
    tools/verify_flogger_r8.py는 이 경로만 검사하며 MediaPipe native/사용자 폰 몸 인식 성공은 별도다.
-4. 위 구현 뒤 최종 전체 테스트/lint/OTA를 tools/release.sh의 한 실행에서 진행한다.
-   빌드 뒤 공개 전에 verify_mediapipe_jni.py로 필수 JNI 4개와 Flogger 스택 메서드 2개를 검사하며,
-   두 APK의 서명도 기존 공개 0.7.5의 인증서 SHA-256과 일치해야 push/공개한다.
-   스크립트 구문과 기존 옛 APK에서의 검사 실행만 확인했다.
-   새 APK 빌드나 사용자 폰의 native 초기화/몸 인식 성공을 확인한 것은 아니다.
+4. 최종 전체 실행은 core 265(2건 제외)/updates 14/phone 322/wear 77로 실패 없이 끝났다.
+   폰 lint의 View ID 3곳 오류로 공개 전에 중단했으며 정식 리소스 ID로 바꿨다.
+   이후 해당 대상 테스트 1건/폰 lint·OTA만 다시 실행해 통과했고 다른 모듈 전체 테스트는 반복하지 않았다.
+   tools/release.sh --publish-built로 이미 검사한 APK의 공개를 이어갔다.
+   새 축소 폰 APK는 필수 JNI 4개/Flogger 스택 메서드 2개를 모두 보존한다.
+   두 APK 서명은 기존 설치본의 인증서 SHA-256과 일치한다. 사용자 폰 native/몸 인식은 아직 미확인이다.
    공개됐다 초안으로 돌린 phone code 36/watch code 34는 재사용하지 않는다.
-   새 소스 버전은 phone 0.7.7(code 37)/watch 0.2.7(code 35)로 준비했다. 아직 새 APK 빌드·공개는 아니다.
+   [통합 업데이트](https://github.com/kmnoh12/kcoach/releases/tag/p0.7.7-w0.2.7)는
+   phone 0.7.7(code 37)/watch 0.2.7(code 35), 소스 2ecd3ad다. 최신 공개 상태/양쪽 manifest/실제 APK 해시를 확인했다.
    기존 reviews/2026-10-14-start-wrist-context.json은 그때 작성된 미커밋 기록을 재생성 없이 보존했다.
    기록된 옛 APK SHA 두 개는 현재 남은 옛 OTA 파일과 일치하며 artifactScope도 그 당시 조건 전달에 한정돼 있다.
    이 기록을 새 통합 검사나 관절 초기화 성공 증거로 사용하지 않는다.

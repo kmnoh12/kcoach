@@ -1,5 +1,18 @@
 # KCoach 다음 세션 인수인계 (2026-10-14, 폰 0.7.4 / 워치 0.2.5 검증용 업데이트)
 
+## 2026-10-15 최신 공개 통합본 — 폰 0.7.7 / 워치 0.2.7
+
+[공개 태그](https://github.com/kmnoh12/kcoach/releases/tag/p0.7.7-w0.2.7), 소스 2ecd3ad.
+원래 세션과 코덱스1 구현을 포함해 tools/release.sh로 배포했다. latest manifest와 실제 APK 해시를 확인했다.
+전체 676건 통과/2건 제외, 폰 lint ID 수정 뒤 대상 1건/폰 lint·OTA 재확인, JNI/Flogger/서명 검사가 근거다.
+[진행 기록 첫 항목](MEASUREMENT_IMPLEMENTATION_PROGRESS.md)과 [전체 범위 대조](FINAL_SCOPE_AUDIT.md)를 따른다.
+아래 미배포/새 APK 없음/예외 정보 없음은 이 최신 항목 전의 시점 이력이다.
+
+사용자가 제공한 0.7.5의 `no caller found on the stack for: S2.c`는 Flogger/R8 재현과 keep 규칙으로 수정했다.
+같은 옛 오류 복사를 다시 요구하지 않는다. 먼저 0.7.7에서 촬영 화면의 초기화/민트 골격 표시 여부를 확인한다.
+실제 MediaPipe/Watch8 성능·독립 날짜 검증·로그인 계정 호출은 아직 미완료이며 전체 목표는 완료 처리하지 않는다.
+구형 워치 0.2.5에서 통합 업데이트 채널은 없으므로 이번 한 번 기존 워치 버튼으로 0.2.7을 설치한다.
+
 ## 2026-10-15 원래 세션의 최신 소스
 
 사용자가 실제 0.7.5 POSE_INIT 예외를 제공했다. Flogger 0.6/R8 초기화의 동일 예외를 최소 코드로 재현하고

@@ -1,5 +1,27 @@
 # 측정 개편 구현 진행
 
+## 2026-10-15 통합 검사·폰 0.7.7 / 워치 0.2.7 공개
+
+[통합 업데이트](https://github.com/kmnoh12/kcoach/releases/tag/p0.7.7-w0.2.7), 소스 2ecd3ad.
+코덱스1 병합분·정지/제외 구간·G12 전신 관측·Flogger 초기화 수정을 포함한다.
+
+- 최종 전체 실행의 결과는 core 265(외부 자료 평가 2건 제외)/updates 14/phone 322/wear 77,
+  총 676건 통과/2건 제외/실패 0이다. 기존 외부 자료 제외를 실제 Watch8 성능 통과로 해석하지 않는다.
+- 폰 lint가 임의 View ID 3곳을 보고해 공개 전에 중단했다. 정식 ID 리소스로 바꾼 뒤
+  WorkoutTempoSettingsStoreTest 1건·폰 lint/OTA만 재실행해 통과했다. 다른 전체 테스트는 반복하지 않았다.
+- tools/release.sh --publish-built가 필수 JNI 4개/Flogger 스택 메서드 2개와 두 APK의 기존 서명을
+  검사한 뒤 공개했다. 해당 모드는 전체 검사 생략 용도가 아니라 실패한 최종 검사 보완 뒤 공개 재개용이다.
+- 공개 latest manifest 두 개와 실제 다운로드 APK를 로컬 결과와 대조했다.
+  phone 37/0.7.7 SHA-256 `d7e1300c6e44e059f5ec717213be50242f40e40bbebeabf78535eb3268243737`.
+  watch 35/0.2.7 SHA-256 `ff4d677b122b7ad5b07ab9546008a00b9094bdee7abefdd0490e362ca7b9b786`.
+  p0.7.6-w0.2.6은 초안 유지, 최신 공개는 p0.7.7-w0.2.7이다.
+
+로그는 work/final-077-integration-release.log, final-077-test-counts-before-id-fix.txt,
+final-077-phone-followup.log, final-077-publication.log다. 새 reviews JSON은 만들지 않았다.
+실제 폰의 관절 초기화/몸 인식과 Watch8 자료·실제 계정 응답은 아직 확인되지 않았다.
+전체 목표를 완료 처리하지 않는다. 우선 새 폰 촬영 화면의 초기화/골격 표시부터 확인한다.
+구형 워치 0.2.5는 이번 한 번 기존 워치 업데이트 버튼으로 0.2.7을 설치해야 한다.
+
 ## 2026-10-15 사용자 POSE_INIT 예외 확보·Flogger/R8 재현 수정
 
 사용자가 폰 0.7.5/SDK 37/arm64-v8a의 실제 오류를 제공했다:
