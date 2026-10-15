@@ -1102,9 +1102,9 @@ class MainActivity : ComponentActivity() {
                 else -> "자동 인식 후보 · 프로필 미보정"
             }
         }
-        val instructions = "1. 운동과 워치를 착용한 손·화면 방향 선택\n" +
+        val instructions = "1. 운동을 고르고 설정에 저장한 워치 착용 정보 확인\n" +
             "2. 폰을 고정하고 필요한 관절이 보이게 촬영 (스쿼트는 머리부터 발까지 전신)\n" +
-            "3. 평소 동작으로 6~8회부터 수행한 뒤 촬영 종료\n" +
+            "3. 안내 자세를 유지해 촬영이 시작되면 평소 동작으로 6~8회 수행한 뒤 종료\n" +
             "4. 영상과 워치 움직임의 시점·반복 구간 확인\n" +
             "5. 확인 자료를 보관하고 별도 세트에서 개인 설정 검증"
         calibrationButtonOverride.value = null
