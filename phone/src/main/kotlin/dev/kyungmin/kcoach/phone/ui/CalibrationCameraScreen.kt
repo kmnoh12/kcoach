@@ -41,6 +41,8 @@ data class CalibrationCameraUi(
     val startHint: String? = null,
     val wearingSummary: String? = null,
     val wearingFromSettings: Boolean = true,
+    /** Pattern candidate test whose own wearing value is unusable: only leaving and re-picking the candidate fixes it. */
+    val candidateWearingInvalid: Boolean = false,
     val recordingSinceMs: Long? = null,
 )
 
@@ -73,12 +75,12 @@ fun CalibrationCameraScreen(
             if (stacked) {
                 Column(Modifier.fillMaxSize()) {
                     frame(Modifier.size(fullWidth, fullWidth * 4f / 3f))
-                    Controls(ui, family, openWearingSettings, stop, retrySave, requestPermission, copyError,
+                    Controls(ui, family, back, openWearingSettings, stop, retrySave, requestPermission, copyError,
                         Modifier.fillMaxWidth().weight(1f).offset(y = (-8).dp).clip(KShape.Sheet).background(KColors.Surface))
                 }
             } else {
                 frame(Modifier.align(Alignment.TopCenter).size(frameWidth, frameWidth * 4f / 3f))
-                Controls(ui, family, openWearingSettings, stop, retrySave, requestPermission, copyError,
+                Controls(ui, family, back, openWearingSettings, stop, retrySave, requestPermission, copyError,
                     Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(12.dp)
                         .clip(KShape.Panel).background(KColors.Surface.copy(alpha = 0.92f)))
             }
@@ -110,7 +112,7 @@ private fun TopBar(ui: CalibrationCameraUi, exerciseName: String, back: () -> Un
 
 @Composable
 private fun Controls(
-    ui: CalibrationCameraUi, family: CameraPoseFamily?, openWearingSettings: () -> Unit, stop: () -> Unit,
+    ui: CalibrationCameraUi, family: CameraPoseFamily?, back: () -> Unit, openWearingSettings: () -> Unit, stop: () -> Unit,
     retrySave: () -> Unit, requestPermission: () -> Unit, copyError: () -> Unit, modifier: Modifier,
 ) {
     Column(modifier.padding(horizontal = 20.dp, vertical = 18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -128,13 +130,14 @@ private fun Controls(
             }
             Box(Modifier.fillMaxWidth().height(1.dp).background(KColors.Hairline))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(ui.wearingSummary?.let { "워치 $it" } ?: "워치 착용 정보가 없어요", color = KColors.Muted, fontSize = 13.sp,
+                Text(ui.wearingSummary?.let { "워치 $it" } ?: if (ui.candidateWearingInvalid) "후보의 워치 착용 정보가 올바르지 않아요" else "워치 착용 정보가 없어요", color = KColors.Muted, fontSize = 13.sp,
                     modifier = Modifier.weight(1f))
                 if (ui.wearingFromSettings) Text(if (ui.wearingSummary == null) "설정에서 저장  ›" else "설정에서 변경  ›",
                     color = KColors.Accent, fontSize = 13.sp,
                     modifier = Modifier.clip(KShape.Control).clickable(onClick = openWearingSettings).padding(6.dp))
             }
         }
+        if (ui.candidateWearingInvalid && !ui.recording) ActionButton("뒤로 가서 후보 시험 다시 선택", KColors.Accent, KColors.OnAccent, back)
         ui.failureReport?.let { ActionButton("오류 정보 복사", KColors.SurfaceRaised, KColors.White, copyError) }
         if (ui.permissionNeeded) ActionButton("카메라 권한 허용", KColors.Accent, KColors.OnAccent, requestPermission)
         if (ui.saveRetry) ActionButton("저장 다시 시도", KColors.Accent, KColors.OnAccent, retrySave)

@@ -66,6 +66,20 @@ class CalibrationCameraScreenTest {
         compose.onNodeWithText("설정에서 저장  ›").assertExists()
     }
 
+    @Test fun invalidCandidateWearingOffersBackNotSettings() {
+        var left = false
+        compose.setContent {
+            val context = LocalContext.current
+            CalibrationCameraScreen(waiting.copy(wearingSummary = null, wearingFromSettings = false, candidateWearingInvalid = true),
+                "덤벨 컬", null, remember { View(context) }, remember { View(context) },
+                back = { left = true }, openSaved = {}, openWearingSettings = {}, stop = {}, retrySave = {}, requestPermission = {}, copyError = {})
+        }
+        compose.onNodeWithText("후보의 워치 착용 정보가 올바르지 않아요").assertExists()
+        assertTrue(compose.onAllNodesWithTextCount("설정에서") == 0)
+        compose.onNodeWithText("뒤로 가서 후보 시험 다시 선택").performClick()
+        assertTrue(left)
+    }
+
     @Config(qualifiers = "w412dp-h660dp-xxhdpi") // about 10:16, like a wide foldable cover screen
     @Test fun wideCoverScreenOverlaysACompactPanel() {
         show(waiting)
