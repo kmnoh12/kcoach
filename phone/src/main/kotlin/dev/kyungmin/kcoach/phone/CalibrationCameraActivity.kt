@@ -153,7 +153,9 @@ class CalibrationCameraActivity : ComponentActivity() {
         val guide = CameraCaptureGuide.forExercise(exerciseId, previewLeft)
         ui = ui.copy(headline = guide.headline, startHint = guide.startHint, wearingSummary = selection?.let {
             (if (it.side == "LEFT") "왼손" else "오른손") + " · " + (if (it.placement == "OUTSIDE") "손등 쪽" else "손바닥 쪽")
-        }, wearingFromSettings = !intent.hasExtra("watchOnLeft"))
+        }, wearingFromSettings = !intent.hasExtra("watchOnLeft"),
+            // A candidate with an unusable wearing value never falls back to the saved defaults; the user re-picks from the test entry.
+            candidateWearingInvalid = selection == null && intent.hasExtra("watchOnLeft"))
     }
 
     companion object { private const val AUTO_START_MS = 1500L }
@@ -357,12 +359,13 @@ class CalibrationCameraActivity : ComponentActivity() {
                 // A refused start keeps its reason on screen until the user breaks the pose and tries again.
                 if (!poseCandidate && ui.blocked) ui = ui.copy(blocked = false)
                 if (cameraReady && !ui.blocked && finalizer.pending == null && !ui.saving) ui = ui.copy(status = when {
+                    wearing == null && intent.hasExtra("watchOnLeft") -> "후보의 착용 정보가 올바르지 않아 촬영할 수 없어요"
                     wearing == null -> "워치 착용 정보를 먼저 저장해 주세요"
                     people > 1 -> "한 사람만 화면에 들어오게 해 주세요"
                     ready -> "자세 확인 · 곧 촬영을 시작해요"
                     guideFamily != null -> "회색 졸라맨에 맞춰 자세를 잡아 주세요"
                     else -> "필요한 관절이 다 보이게 맞춰 주세요"
-                }, ready = ready)
+                }, ready = ready && wearing != null)
             }
             val active = capture
             if (active != null) {
@@ -394,7 +397,8 @@ class CalibrationCameraActivity : ComponentActivity() {
                 val anchor = normalized.singleOrNull()?.let { CameraPoseGuide.measure(it, frameWidth.toDouble(), frameHeight.toDouble(), family, previewLeft) }
                 guideSmoother.update(anchor, modelMs)?.let { CameraPoseGuide.build(family, it) }
             }
-            val matched = poseReady
+            // Without wearing info capture cannot start, so the figure must not look ready (pose geometry itself is unchanged).
+            val matched = poseReady && wearing != null
             main.post {
                 overlay.points = normalized.singleOrNull().orEmpty(); overlay.frameWidth = frameWidth; overlay.frameHeight = frameHeight
                 overlay.update(figure, matched); overlay.invalidate()
