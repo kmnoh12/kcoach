@@ -160,6 +160,7 @@ class MainActivity : ComponentActivity() {
     private enum class Screen { ROOT, ROUTINE, FREE, LIBRARY, EXERCISE_INFO, EXERCISE_RECORD, ACTIVE, REST, MY_MOUNTAIN }
 
     private var visibleWorkoutResultSessionId: String? = null
+    private val handledResultRequests = mutableSetOf<String>()
 
     private data class WorkoutResultUi(
         val sessionId: String,
@@ -236,7 +237,7 @@ class MainActivity : ComponentActivity() {
                         lastWorkoutResult?.let(::hydrateResultAnalyses)
                         if (currentScreen == Screen.ROOT) when (currentTab) {
                             RootTab.HOME -> showHome()
-                            RootTab.RECORDS -> lastWorkoutResult?.takeIf { it.sessionId == visibleWorkoutResultSessionId }?.let(::showWorkoutResult) ?: showRecords()
+                            RootTab.RECORDS -> if (visibleWorkoutResultSessionId == null) showRecords() else refreshVisibleWorkoutResult()
                             RootTab.STATS -> showStats()
                             else -> Unit
                         }
@@ -409,10 +410,7 @@ class MainActivity : ComponentActivity() {
                         text = "세트 분석 완료 · 자동 추정 ${measuredRepsText(analysis.confirmedReps, "확인 필요")} · 실제 횟수를 확인해 주세요"
                         setTextColor(green)
                     }
-                    if (currentScreen == Screen.ROOT && currentTab == RootTab.RECORDS &&
-                        visibleWorkoutResultSessionId == sessionId && lastWorkoutResult?.sessionId == sessionId) {
-                        showWorkoutResult(lastWorkoutResult!!)
-                    }
+                    if (visibleWorkoutResultSessionId == sessionId) refreshVisibleWorkoutResult()
                 }
                 PhoneWearListenerService.ACTION_CAPTURE_ERROR -> {
                     val captureId = intent.getStringExtra("captureId").orEmpty()
@@ -507,15 +505,38 @@ class MainActivity : ComponentActivity() {
         )
         startService(Intent(this, PhoneWearListenerService::class.java))
         startService(Intent(this, PhoneWorkoutService::class.java))
+        handledResultRequests.addAll(savedInstanceState?.getStringArrayList(STATE_HANDLED_RESULT_REQUESTS).orEmpty())
+        val requestKey = WorkoutResultIntent.requestKey(intent)
+        val replayedRequest = requestKey != null && requestKey in handledResultRequests
+        val requestedResultShown = !replayedRequest && showRequestedWorkoutResult(intent)
+        val restoredResult = if (requestedResultShown) null else savedInstanceState?.getString(STATE_VISIBLE_RESULT)
+            ?.let { loadFinishedWorkoutResult(it) ?: lastWorkoutResult?.takeIf { saved -> saved.sessionId == it } }
+        if (restoredResult != null) showWorkoutResult(restoredResult)
+        val resultShown = requestedResultShown || restoredResult != null
         activeWorkout?.let { workout ->
             lastCompletedLiveKey = workout.lastCompletedSetKey
-            if (workout.exerciseIndex >= workout.routine.exercises.size) showMyMountainDecision()
-            else showActiveWorkout(forceRebuild = true)
+            if (!resultShown) {
+                if (workout.exerciseIndex >= workout.routine.exercises.size) showMyMountainDecision()
+                else showActiveWorkout(forceRebuild = true)
+            }
             sendWear(
                 WearSync.PATH_COMMAND,
                 WearSync.command("QUERY", workout.sessionId, "", workout.setIndex, 0),
             )
-        } ?: showHome()
+        } ?: run { if (!resultShown) showHome() }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        showRequestedWorkoutResult(intent)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putStringArrayList(STATE_HANDLED_RESULT_REQUESTS, ArrayList(handledResultRequests))
+        if (currentScreen == Screen.ROOT && currentTab == RootTab.RECORDS) {
+            visibleWorkoutResultSessionId?.let { outState.putString(STATE_VISIBLE_RESULT, it) }
+        }
+        super.onSaveInstanceState(outState)
     }
 
     override fun onStart() {
@@ -548,8 +569,8 @@ class MainActivity : ComponentActivity() {
         lastWorkoutResult?.let { result ->
             hydrateResultAnalyses(result)
             persistLastWorkoutResult(result)
-            if (currentTab == RootTab.RECORDS && currentScreen == Screen.ROOT && visibleWorkoutResultSessionId == result.sessionId) showWorkoutResult(result)
         }
+        refreshVisibleWorkoutResult()
         refreshActiveSession()
         updateWearConnectionStatus()
     }
@@ -934,10 +955,40 @@ class MainActivity : ComponentActivity() {
         result.analyses.putAll(store.loadForSession(result.sessionId))
     }
 
+    private fun loadFinishedWorkoutResult(sessionId: String): WorkoutResultUi? {
+        val saved = FinishedWorkoutStore(this).evidenceForSessions(setOf(sessionId)).singleOrNull() ?: return null
+        return WorkoutResultUi(sessionId, saved.title, saved.minutes, saved.snapshot.plannedSets.count { it.completed },
+            SetAnalysisStore(this).loadForSession(sessionId).toMutableMap())
+    }
+
+    private fun showRequestedWorkoutResult(request: Intent?): Boolean {
+        if (request == null || !WorkoutResultIntent.isRequest(request)) return false
+        WorkoutResultIntent.requestKey(request)?.let(handledResultRequests::add)
+        // Consume this navigation request so leaving the result does not reopen it on recreation.
+        setIntent(Intent(request).apply { action = Intent.ACTION_MAIN; data = null; removeExtra(WorkoutResultIntent.EXTRA_SESSION_ID) })
+        val id = WorkoutResultIntent.sessionId(request)
+        val result = id?.let { runCatching { loadFinishedWorkoutResult(it) }.getOrNull() }
+        if (result == null) {
+            Toast.makeText(this, "완료된 운동 결과를 찾지 못했어요. 운동 기록을 확인해 주세요.", Toast.LENGTH_LONG).show()
+            return false
+        }
+        overlays.dismiss()
+        showWorkoutResult(result)
+        return true
+    }
+
+    private fun refreshVisibleWorkoutResult() {
+        if (currentScreen != Screen.ROOT || currentTab != RootTab.RECORDS) return
+        val id = visibleWorkoutResultSessionId ?: return
+        val result = loadFinishedWorkoutResult(id) ?: lastWorkoutResult?.takeIf { it.sessionId == id }
+        if (result != null) showWorkoutResult(result)
+    }
+
     private fun showWorkoutResult(result: WorkoutResultUi?) {
         if (result == null) return showRecords()
         hydrateResultAnalyses(result)
         if (lastWorkoutResult?.sessionId == result.sessionId) {
+            lastWorkoutResult = result
             val store = FinishedWorkoutStore(this)
             val pounds = store.usePounds(result.sessionId)
             val unit = if (pounds) 2.20462 else 1.0
@@ -947,7 +998,7 @@ class MainActivity : ComponentActivity() {
                 "$name · $kind" to "${cleanWeight(hit.previous * unit)} → ${cleanWeight(hit.value * unit)}$unitLabel"
             }
         }
-        persistLastWorkoutResult(result)
+        if (lastWorkoutResult?.sessionId == result.sessionId) persistLastWorkoutResult(result)
         stopTicker()
         currentTab = RootTab.RECORDS
         currentScreen = Screen.ROOT
@@ -2993,6 +3044,8 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         private const val EVENT_TAG = "KCoachEvent"
+        private const val STATE_VISIBLE_RESULT = "visibleFinishedWorkoutResult"
+        private const val STATE_HANDLED_RESULT_REQUESTS = "handledWorkoutResultRequests"
         private const val WATCH_PANEL_CONNECTION = "watch-panel-connection"
         private const val WATCH_PANEL_TELEMETRY = "watch-panel-telemetry"
         private const val CALIBRATION_SAVE_TIMEOUT_MS = 20_000L
