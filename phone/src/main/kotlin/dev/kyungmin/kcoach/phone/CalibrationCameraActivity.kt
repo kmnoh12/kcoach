@@ -339,6 +339,7 @@ class CalibrationCameraActivity : ComponentActivity() {
             val rotation = image.imageInfo.rotationDegrees
             bitmap = if (rotation == 0) original else Bitmap.createBitmap(original, 0, 0, original.width, original.height,
                 Matrix().apply { postRotate(rotation.toFloat()) }, true).also { original.recycle() }
+            val convertedNs = SystemClock.elapsedRealtimeNanos()
             val result = bitmap.withDetectorImage { mp -> requireNotNull(pose).detectForVideo(mp, modelMs) }
             val completedNs = SystemClock.elapsedRealtimeNanos()
             val normalized = result.landmarks().map { points -> points.map {
@@ -369,15 +370,19 @@ class CalibrationCameraActivity : ComponentActivity() {
                     else -> "필요한 관절이 다 보이게 맞춰 주세요"
                 }, ready = ready && wearing != null)
             }
+            var encodeNs = 0L; var storeNs = 0L; var storeDoneNs = 0L
             val active = capture
             if (active != null) {
                 val first = firstCameraNs ?: cameraNs.also { firstCameraNs = it }
                 val videoUs = (cameraNs - first) / 1_000L
+                val encodeStartNs = SystemClock.elapsedRealtimeNanos()
                 val writer = encoder ?: ReferenceVideoEncoder(store.videoFile(active.id), bitmap.width, bitmap.height).also { encoder = it }
                 val written = writer.write(bitmap, videoUs)
+                val storeStartNs = SystemClock.elapsedRealtimeNanos()
                 store.appendFrame(active.id, CameraPoseFrame(frameIndex, cameraNs, receivedNs, modelMs, completedNs, videoUs,
                     bitmap.width, bitmap.height, rotation, true, timestampSource, active.phoneClockId, normalized, world, written)).getOrThrow()
                 frameIndex++
+                storeDoneNs = SystemClock.elapsedRealtimeNanos(); encodeNs = storeStartNs - encodeStartNs; storeNs = storeDoneNs - storeStartNs
                 val now = SystemClock.elapsedRealtime()
                 if (now - lastClockWindowAtMs >= 20_000) { lastClockWindowAtMs = now; probe(active.id, "MIDDLE") }
                 val metric = if (world.size == 1 && normalized.size == 1)
@@ -394,6 +399,9 @@ class CalibrationCameraActivity : ComponentActivity() {
                 if (videoUs >= 120_000_000L) stopCapture(null)
             }
             val frameWidth = bitmap.width; val frameHeight = bitmap.height
+            val perfLine = perf.add(SystemClock.elapsedRealtimeNanos(), cameraNs, convertedNs - receivedNs, completedNs - convertedNs,
+                encodeNs, storeNs, SystemClock.elapsedRealtimeNanos() - receivedNs)
+            perfLine?.let { Log.i("KCoachPerf", "$exerciseId recording=${active != null} $it") }
             // Start-pose pictogram follows the user's own shoulder and size; readiness stays the angle check above.
             val figure = guideFamily?.takeIf { capture == null && !starting }?.let { family ->
                 val anchor = normalized.singleOrNull()?.let { CameraPoseGuide.measure(it, frameWidth.toDouble(), frameHeight.toDouble(), family, previewLeft) }
@@ -402,7 +410,7 @@ class CalibrationCameraActivity : ComponentActivity() {
             // Without wearing info capture cannot start, so the figure must not look ready (pose geometry itself is unchanged).
             val matched = poseReady && wearing != null
             main.post {
-                overlay.points = normalized.singleOrNull().orEmpty(); overlay.frameWidth = frameWidth; overlay.frameHeight = frameHeight; overlay.diagnosis = diagnosis
+                overlay.points = normalized.singleOrNull().orEmpty(); overlay.frameWidth = frameWidth; overlay.frameHeight = frameHeight; overlay.diagnosis = diagnosis; overlay.perfText = perfLine ?: overlay.perfText
                 overlay.update(figure, matched); overlay.invalidate()
             }
         } catch (error: Throwable) {
@@ -422,6 +430,7 @@ class CalibrationCameraActivity : ComponentActivity() {
         } finally { bitmap?.recycle(); image.close() }
     }
 
+    private val perf = FramePerf()
     private var lastDiagnosisLogMs = 0L
     /** Once a second: raw per-joint confidences behind the start-pose decision, readable with `adb logcat -s KCoachPose`. */
     private fun logDiagnosis(diagnosis: StartDiagnosis?, modelMs: Long) {
@@ -509,6 +518,7 @@ class CalibrationCameraActivity : ComponentActivity() {
 
         /** Live per-joint confidences behind the start decision; long-press the camera view to toggle. */
         var diagnosis: StartDiagnosis? = null
+        var perfText = ""
         private var showDiagnosis = intent.getBooleanExtra("debugVisibility", false)
         private val debugText = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 12 * dp; typeface = android.graphics.Typeface.MONOSPACE }
         init { setOnLongClickListener { showDiagnosis = !showDiagnosis; invalidate(); true } }
@@ -529,7 +539,14 @@ class CalibrationCameraActivity : ComponentActivity() {
             val scale = minOf(width.toFloat() / frameWidth, height.toFloat() / frameHeight)
             val dx = (width - frameWidth * scale) / 2; val dy = (height - frameHeight * scale) / 2
             drawGuide(canvas, scale, dx, dy)
-            if (showDiagnosis) drawDiagnosis(canvas)
+            if (showDiagnosis) {
+                drawDiagnosis(canvas)
+                if (perfText.isNotEmpty()) {
+                    debugText.color = Color.rgb(255, 214, 120); debugText.textSize = 10 * dp
+                    perfText.split(" · ").forEachIndexed { i, part -> canvas.drawText(part, 12 * dp, height - 150 * dp + i * 13 * dp, debugText) }
+                    debugText.textSize = 12 * dp
+                }
+            }
             // Mirrored selfie preview: landmarks are in the unmirrored frame.
             fun vx(x: Double) = dx + (1 - x).toFloat() * frameWidth * scale
             fun vy(y: Double) = dy + y.toFloat() * frameHeight * scale
