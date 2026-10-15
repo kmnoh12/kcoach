@@ -9,8 +9,11 @@
 -keep class com.google.mediapipe.framework.ProtoUtil$SerializedMessage { *; }
 
 # Generated message schemas refer to their fields reflectively at task startup.
-# Preserve MediaPipe protobuf fields without disabling shrinking for the app.
--keepclassmembers class com.google.mediapipe.** extends com.google.protobuf.GeneratedMessageLite {
+# protobuf-javalite 4.26.1 ships no R8 rules, so this covers every message, not
+# only MediaPipe's: CalculatorGraphConfig/Node hold google.protobuf.Any, and R8
+# reduced an unprotected Any to an empty abstract class (0.7.7 POSE_INIT:
+# "Can't instantiate abstract class com.google.protobuf.d").
+-keepclassmembers class * extends com.google.protobuf.GeneratedMessageLite {
     <fields>;
 }
 

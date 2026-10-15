@@ -43,7 +43,8 @@ internal fun WorkoutSummaryPanel(sessionId: String) {
             val records = FinishedWorkoutStore(app).allEvidence()
             val record = FinishedWorkoutStore(app).evidenceForSessions(setOf(sessionId)).single()
             val profileStore = AiCoachStore(app)
-            val profile = account?.takeIf { sessionId in profileStore.sessionIds(it) }?.let(profileStore::profile)
+            val legacyProfile = account?.takeIf { sessionId in profileStore.sessionIds(it) }?.let(profileStore::profile)
+            val profile = WorkoutWearingStore(app).frozenBodyProfile(sessionId, legacyProfile).getOrThrow()
             val previousId = WorkoutComparison.previous(record.snapshot, records.map { it.snapshot })?.sessionId
             WorkoutSummaryRead(record, records.firstOrNull { it.snapshot.sessionId == previousId },
                 WorkoutVitalsStore(app).summary(sessionId, record.snapshot.startedAtMs, record.finishedAtMs), WorkoutTimeStore(app).read(sessionId),

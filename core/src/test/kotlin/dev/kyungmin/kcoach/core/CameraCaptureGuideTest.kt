@@ -36,6 +36,21 @@ class CameraCaptureGuideTest {
             }
         }
     }
+    @Test fun everyExerciseGetsAOneOrTwoLineBriefInsteadOfAParagraph() {
+        (ExerciseMeasurementContracts.standard.keys + "squat").forEach { id ->
+            for (left in listOf(true, false)) {
+                val guide = CameraCaptureGuide.forExercise(id, left)
+                assertTrue(guide.headline.isNotBlank() && guide.headline.length <= 24, "$id ${guide.headline}")
+                val hint = guide.startHint
+                if (ExerciseMeasurementContracts.resolve(id).recipe == MeasurementRecipe.MANUAL) assertNull(hint, id)
+                else assertTrue(hint != null && hint.length <= 26, "$id $hint")
+            }
+        }
+        val curl = CameraCaptureGuide.forExercise("dumbbell_curl", true)
+        assertEquals("왼쪽 측면 · 상체와 왼팔이 보이게", curl.headline)
+        assertEquals("팔을 쭉 내린 상태에서 시작", curl.startHint)
+        assertEquals("오른쪽 측면 · 상체와 오른팔이 보이게", CameraCaptureGuide.forExercise("dumbbell_curl", false).headline)
+    }
     @Test fun mirroredPreviewDoesNotSwapTheObservedAnatomicalArmAndOcclusionBlocksReady() {
         val guide = CameraCaptureGuide.forExercise("dumbbell_curl", true)
         val points = frame(1000, 160.0).imageLandmarks.single().toMutableList()
@@ -43,6 +58,46 @@ class CameraCaptureGuideTest {
         assertTrue(guide.visible(points)); points[15] = points[15].copy(presence = 0.0)
         assertFalse(guide.visible(points)); points[15] = points[15].copy(presence = 1.0, x = 1.2)
         assertFalse(guide.visible(points))
+    }
+    @Test fun elbowAngleExercisesPassWithTheHipOutOfAnUpperBodySelfieFrame() {
+        val points = frame(1000, 160.0).imageLandmarks.single().toMutableList()
+        listOf(23, 24, 25, 26, 27, 28).forEach { points[it] = points[it].copy(y = 1.3, visibility = 0.0) }
+        for (id in listOf("dumbbell_curl", "cable_seated_row", "lat_pull_down", "dumbbell_shoulder_press", "cable_pushdown"))
+            assertTrue(CameraCaptureGuide.forExercise(id, true).visible(points), id)
+        // The shoulder-raise angle is measured against the torso, so the hip stays required.
+        assertFalse(CameraCaptureGuide.forExercise("dumbbell_lateral_raise", true).visible(points))
+        assertFalse(CameraCaptureGuide.forExercise("squat", true).visible(points))
+    }
+    private fun world(vararg joints: Pair<Int, Triple<Double, Double, Double>>): List<CameraLandmark> {
+        val list = MutableList(33) { CameraLandmark(0.0, 0.0, 0.0, 1.0, 1.0) }
+        joints.forEach { (i, p) -> list[i] = CameraLandmark(p.first, p.second, p.third, 1.0, 1.0) }
+        return list
+    }
+    private val visibleImage = List(33) { CameraLandmark(0.5, 0.5, 0.0, 1.0, 1.0) }
+
+    @Test fun shoulderDrivenLiftsHaveStartChecksInsteadOfAManualTick() {
+        // Left shoulder at the origin, right shoulder to its right, hip below (MediaPipe world y points down).
+        val base = arrayOf(11 to Triple(0.0, 0.0, 0.0), 12 to Triple(-0.4, 0.0, 0.0), 23 to Triple(0.0, 0.5, 0.0), 15 to Triple(0.6, 0.0, 0.0))
+        val open = world(*base, 13 to Triple(0.3, 0.0, 0.0))
+        val forward = world(*base, 13 to Triple(0.0, 0.0, -0.3))
+        assertTrue(CameraCaptureGuide.forExercise("machine_fly", true).startReady(visibleImage, open, true))
+        assertFalse(CameraCaptureGuide.forExercise("machine_fly", true).startReady(visibleImage, forward, true))
+        assertTrue(CameraCaptureGuide.forExercise("machine_reverse_fly", true).startReady(visibleImage, forward, true))
+        assertFalse(CameraCaptureGuide.forExercise("machine_reverse_fly", true).startReady(visibleImage, open, true))
+        val overhead = world(*base, 13 to Triple(0.0, -0.3, 0.0))
+        val atChest = world(*base, 13 to Triple(0.0, 0.0, -0.3))
+        assertTrue(CameraCaptureGuide.forExercise("dumbbell_pullover", true).startReady(visibleImage, overhead, true))
+        assertFalse(CameraCaptureGuide.forExercise("dumbbell_pullover", true).startReady(visibleImage, atChest, true))
+    }
+
+    @Test fun externalRotationOnlyChecksTheElbowSetUpAndHoldsLonger() {
+        val guide = CameraCaptureGuide.forExercise("external_rotation", true)
+        assertNull(guide.metric); assertEquals(1000L, guide.readyHoldMs)
+        val bent = world(11 to Triple(0.0, 0.0, 0.0), 13 to Triple(0.0, 0.3, 0.0), 15 to Triple(0.0, 0.3, -0.25))
+        val straight = world(11 to Triple(0.0, 0.0, 0.0), 13 to Triple(0.0, 0.3, 0.0), 15 to Triple(0.0, 0.55, -0.05))
+        assertTrue(guide.startReady(visibleImage, bent, true))
+        assertFalse(guide.startReady(visibleImage, straight, true))
+        assertEquals(200L, CameraCaptureGuide.forExercise("dumbbell_curl", true).readyHoldMs)
     }
     @Test fun completeCandidateKeepsActualFrameBoundariesAndIncompleteOrHiddenMotionDoesNotCount() {
         val frames = listOf(frame(1000, 160.0), frame(1200, 160.0), frame(1400, 120.0), frame(1600, 60.0),

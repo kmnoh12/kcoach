@@ -33,6 +33,7 @@ class WorkoutWearingStore(private val context: Context) {
                 .put("deviceTop", selection?.deviceTop ?: JSONObject.NULL)
                 .put("startVariants", JSONObject(selection?.startVariants.orEmpty()))
                 .put("bindings", JSONObject())
+            AiCoachStore(context).deviceProfile()?.profile?.let { json.put("deviceBodyProfile", it.json()) }
             val edit = prefs.edit().putString(key, json.toString())
             if (selection != null) {
                 edit.putString("last-side", selection.side).putString("last-placement", selection.placement)
@@ -50,6 +51,50 @@ class WorkoutWearingStore(private val context: Context) {
             val side = prefs.getString("last-side", null) ?: return@runCatching null
             WorkoutWearingSelection(side, requireNotNull(prefs.getString("last-placement", null)),
                 prefs.getString("last-top", null), variants(JSONObject(prefs.getString("last-start-variants", "{}")!!)))
+        }
+    }
+
+    /** An explicit unset default stays unset; legacy confirmations only seed unsaved defaults. */
+    fun defaultSelection(): Result<WorkoutWearingSelection?> = runCatching {
+        val defaults = AiCoachStore(context).deviceProfile()
+        if (defaults != null) defaults.wearing else lastSelection().getOrThrow()?.copy(deviceTop = null, startVariants = emptyMap())
+    }
+
+    /** Remember declared exercise variants across routines; these are never sensor validation. */
+    internal fun preparationAnswers(): Result<Map<String, String>> = synchronized(lock) {
+        runCatching {
+            val saved = prefs.getString("preparation-answers", null)
+            val answers = if (saved == null) lastSelection().getOrThrow()?.startVariants.orEmpty() else variants(JSONObject(saved))
+            val checked = answers.filterKeys { StartWristContext.expectedVariant(ExerciseMotionCatalog.normalizeExerciseId(it)) != null }
+                .also { checked -> checked.forEach { (id, answer) -> require(answer in StartWristContext.variantsFor(id)) } }
+            // Persist legacy choices before another routine can replace the old last-session fields.
+            if (saved == null && checked.isNotEmpty()) {
+                check(prefs.edit().putString("preparation-answers", JSONObject(checked).toString()).commit()) {
+                    "Could not preserve previous preparation answers"
+                }
+            }
+            checked
+        }
+    }
+
+    internal fun savePreparationAnswer(exerciseId: String, answer: String): Result<Map<String, String>> = synchronized(lock) {
+        runCatching {
+            require(exerciseId == ExerciseMotionCatalog.normalizeExerciseId(exerciseId))
+            require(answer in StartWristContext.variantsFor(exerciseId))
+            val updated = preparationAnswers().getOrThrow() + (exerciseId to answer)
+            check(prefs.edit().putString("preparation-answers", JSONObject(updated).toString()).commit()) {
+                "Could not save preparation answer"
+            }
+            updated
+        }
+    }
+
+    /** New local facts belong to the workout that captured them, not to older records. */
+    internal fun frozenBodyProfile(sessionId: String, legacyProfile: AiCoachProfile?): Result<AiCoachProfile?> = synchronized(lock) {
+        runCatching {
+            val json = read(sessionId)
+            if (json == null || !json.has("deviceBodyProfile")) legacyProfile
+            else AiCoachProfile.fromJson(json.getJSONObject("deviceBodyProfile"))
         }
     }
 

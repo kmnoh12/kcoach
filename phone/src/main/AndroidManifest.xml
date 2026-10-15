@@ -32,6 +32,12 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="kcoach" android:host="workout" android:path="/result" />
+            </intent-filter>
         </activity>
         <activity
             android:name=".ProbeActivity"
@@ -41,6 +47,7 @@
         <activity android:name=".PatternCandidatesActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".StartDirectionReviewActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".SettingsActivity" android:exported="false" />
+        <activity android:name=".WorkoutProfileActivity" android:exported="false" />
         <activity android:name=".WorkoutTempoSettingsActivity" android:exported="false" />
         <activity android:name=".AiCoachActivity" android:exported="false" />
         <activity android:name=".ChatGptAccountActivity" android:exported="true" android:launchMode="singleTop">

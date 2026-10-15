@@ -22,10 +22,15 @@ internal data class AiCoachProfile(
     val equipment: String = "",
     val ageYears: Int? = null,
     val calorieBasis: String = "",
+    val gender: String = "",
+    val skeletalMuscleKg: Double? = null,
 ) {
     init {
         require(ageYears == null || ageYears in 1..120)
         require(calorieBasis in setOf("", "RESISTANCE_MULTIPLE_8_15"))
+        require(gender in setOf("", "MALE", "FEMALE", "OTHER"))
+        require(skeletalMuscleKg == null || (skeletalMuscleKg.isFinite() && skeletalMuscleKg > 0 && skeletalMuscleKg <= 300))
+        require(skeletalMuscleKg == null || weightKg == null || skeletalMuscleKg <= weightKg)
         require(id.isNotBlank() && revision >= 0)
         require(heightCm == null || (heightCm.isFinite() && heightCm in 50.0..260.0))
         require(weightKg == null || (weightKg.isFinite() && weightKg in 10.0..500.0))
@@ -38,13 +43,20 @@ internal data class AiCoachProfile(
         .put("height_cm", heightCm ?: JSONObject.NULL).put("weight_kg", weightKg ?: JSONObject.NULL)
         .put("weight_measured_on", weightMeasuredOn).put("body_fat_percent", bodyFatPercent ?: JSONObject.NULL)
         .put("age_years", ageYears ?: JSONObject.NULL).put("calorie_basis", calorieBasis)
+        .put("gender", gender).put("skeletal_muscle_kg", skeletalMuscleKg ?: JSONObject.NULL)
         .put("goal", goal).put("experience", experience).put("constraints", constraints).put("equipment", equipment)
     companion object {
         fun fromJson(json: JSONObject) = AiCoachProfile(json.getString("id"), json.getLong("revision"),
             json.optionalDouble("height_cm"), json.optionalDouble("weight_kg"), json.optString("weight_measured_on"),
             json.optionalDouble("body_fat_percent"), json.optString("goal"), json.optString("experience"),
-            json.optString("constraints"), json.optString("equipment"), if (json.isNull("age_years")) null else json.getInt("age_years"), json.optString("calorie_basis"))
+            json.optString("constraints"), json.optString("equipment"), if (json.isNull("age_years")) null else json.getInt("age_years"), json.optString("calorie_basis"),
+            json.optString("gender"), json.optionalDouble("skeletal_muscle_kg"))
     }
+}
+
+/** Local defaults do not assign an AI account or change any workout's existing owner. */
+internal data class DeviceWorkoutProfile(val profile: AiCoachProfile, val wearing: WorkoutWearingSelection? = null) {
+    init { require(wearing == null || (wearing.deviceTop == null && wearing.startVariants.isEmpty())) }
 }
 
 internal data class AiCoachTurn(val question: String, val answer: String, val citations: List<String>,
@@ -82,6 +94,33 @@ internal class AiCoachStore(context: Context) {
     }
     fun profile(accountId: String): AiCoachProfile? = synchronized(lock) {
         read().getJSONObject("accounts").optJSONObject(accountId)?.optJSONObject("profile")?.let(AiCoachProfile::fromJson)
+    }
+    fun deviceProfile(): DeviceWorkoutProfile? = synchronized(lock) {
+        read().optJSONObject("device_profile")?.let { json ->
+            DeviceWorkoutProfile(AiCoachProfile.fromJson(json.getJSONObject("profile")),
+                json.optJSONObject("wearing")?.let { WorkoutWearingSelection(it.getString("side"), it.getString("placement")) })
+        }
+    }
+    fun saveDeviceProfile(value: DeviceWorkoutProfile): DeviceWorkoutProfile = synchronized(lock) {
+        val root = read()
+        val previous = root.optJSONObject("device_profile")?.getJSONObject("profile")?.let(AiCoachProfile::fromJson)
+        require(previous == null || previous.id == value.profile.id) { "Cannot silently replace local profile identity" }
+        require((previous?.revision ?: 0) == value.profile.revision) { "Local profile changed while editing" }
+        val saved = value.copy(profile = value.profile.copy(revision = Math.addExact(value.profile.revision, 1)))
+        root.put("device_profile", JSONObject().put("profile", saved.profile.json()).put("wearing", saved.wearing?.let {
+            JSONObject().put("side", it.side).put("placement", it.placement)
+        } ?: JSONObject.NULL))
+        write(root)
+        saved
+    }
+    /** Explicit UI action copies body facts, never account identity, linked sessions or conversation. */
+    fun copyDeviceBodyToAccount(accountId: String): AiCoachProfile = synchronized(lock) {
+        val body = requireNotNull(deviceProfile()) { "Save the device profile first" }.profile
+        val previous = profile(accountId) ?: AiCoachProfile()
+        saveProfile(accountId, previous.copy(heightCm = body.heightCm, weightKg = body.weightKg,
+            weightMeasuredOn = body.weightMeasuredOn, bodyFatPercent = body.bodyFatPercent,
+            ageYears = body.ageYears, calorieBasis = body.calorieBasis, gender = body.gender,
+            skeletalMuscleKg = body.skeletalMuscleKg))
     }
     fun saveProfile(accountId: String, profile: AiCoachProfile): AiCoachProfile = synchronized(lock) {
         require(accountId.isNotBlank())

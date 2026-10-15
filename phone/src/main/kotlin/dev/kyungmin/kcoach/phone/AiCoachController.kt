@@ -82,6 +82,10 @@ internal class AiCoachController(
     fun saveProfile(profile: AiCoachProfile) = change("프로필을 저장하지 못했어요. 입력 값과 저장 공간을 확인해 주세요") { id ->
         store.saveProfile(id, profile)
     }
+    fun importDeviceBody() = change("폰 설정에서 기본 프로필을 먼저 저장해 주세요. 계정이 바뀌었다면 다시 열어 주세요") { id ->
+        check(auth.state.value.connected && auth.state.value.activeProfileId == id)
+        store.copyDeviceBodyToAccount(id)
+    }
     fun linkRecords(ids: Set<String>) = change("기록을 연결하지 못했어요. 현재 프로필과 선택한 기록을 다시 확인해 주세요") { id ->
         val actual = FinishedWorkoutStore(app).recentEvidence(100).map { it.snapshot.sessionId }.toSet()
         require(ids.all { it in actual })
