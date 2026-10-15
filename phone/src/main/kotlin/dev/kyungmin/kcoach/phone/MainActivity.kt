@@ -573,6 +573,7 @@ class MainActivity : ComponentActivity() {
         refreshVisibleWorkoutResult()
         refreshActiveSession()
         updateWearConnectionStatus()
+        WatchOverviewPublisher.publish(this)
     }
 
     override fun onStop() {
@@ -1541,6 +1542,7 @@ class MainActivity : ComponentActivity() {
     private fun recordWorkoutLog(workout: ActiveWorkout) {
         FinishedWorkoutStore(this).finish(workoutSnapshot(workout), workout.routine.name,
             (workoutElapsedSeconds(workout) / 60L).toInt(), workout.usePounds)
+        WatchOverviewPublisher.publish(this)
         historyCache = null
     }
 

@@ -121,6 +121,7 @@ class PhoneWearListenerService : WearableListenerService() {
     override fun onPeerConnected(peer: com.google.android.gms.wearable.Node) {
         super.onPeerConnected(peer)
         dev.kyungmin.kcoach.updates.OtaCoordinator.get(this).recover()
+        WatchOverviewPublisher.publish(this)
     }
 
     /** Identical retransmissions need not produce another change event; also inspect the cache on restart. */
