@@ -299,6 +299,7 @@ private fun ExercisePage(
     onNextExercise: () -> Unit,
 ) {
     val exercise = model.exercises[exerciseIndex]
+    val restingSetIndex = model.restingSet?.takeIf { it.first == exerciseIndex }?.second
     val scroll = rememberScrollState()
     val imageHeight by animateDpAsState(if (keypadOpen) 92.dp else 190.dp, Motion.panel(), label = "image")
     Column(Modifier.fillMaxSize().verticalScroll(scroll).padding(horizontal = 16.dp)) {
@@ -353,8 +354,8 @@ private fun ExercisePage(
                     SetRow(
                         set = set,
                         weighted = exercise.weighted,
-                        isCurrent = if (model.restingSet != null) model.restingSet == (exerciseIndex to setIndex)
-                            else exerciseIndex == model.exerciseIndex && setIndex == exercise.currentSetIndex && !set.completed,
+                        isCurrent = !model.isPreview && (if (model.restingSet != null) model.restingSet == (exerciseIndex to setIndex)
+                            else exerciseIndex == model.exerciseIndex && setIndex == exercise.currentSetIndex && !set.completed),
                         editingField = editing?.takeIf { it.setIndex == setIndex }?.field,
                         onLabel = { actions.onSetMenu(exerciseIndex, setIndex) },
                         onWeight = { onOpenEditor(EditTarget(exerciseIndex, setIndex, SetField.WEIGHT)) },
@@ -377,8 +378,10 @@ private fun ExercisePage(
             TextAction("다음 운동", KColors.White, Modifier.fillMaxWidth(), KIcon.Forward, iconAfter = true) { onNextExercise() }
         }
         Text(
-            "현재 ${exercise.sets.getOrNull(exercise.currentSetIndex)?.label ?: "-"}세트 · 완료 ${exercise.completedWorkSets}/${exercise.workSetCount}세트",
-            color = KColors.Accent,
+            if (model.isPreview) "운동 시작 전 · 총 ${exercise.sets.size}세트" else
+                if (restingSetIndex != null) "${exercise.sets.getOrNull(restingSetIndex)?.label ?: "-"}세트 후 휴식 · 완료 ${exercise.completedWorkSets}/${exercise.workSetCount}세트" else
+                "현재 ${exercise.sets.getOrNull(exercise.currentSetIndex)?.label ?: "-"}세트 · 완료 ${exercise.completedWorkSets}/${exercise.workSetCount}세트",
+            color = if (model.isPreview) KColors.Muted else KColors.Accent,
             fontSize = 13.sp,
             fontWeight = FontWeight.Medium,
             modifier = Modifier.padding(top = 8.dp),
