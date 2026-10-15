@@ -2,6 +2,25 @@
 
 작성일: 2026-10-15 · 기준: 폰 0.7.7 / 워치 0.2.7 공개본
 
+## 후속 개발 재현 — NAV-001 늦은 분석 수신이 현재 화면을 교체함 (미배포 수정)
+
+aaece43에서 MainActivity의 ACTION_CAPTURE 수신 경로를 재현했다. 활성 운동 없이 완료 기록의
+늦은 분석만 수신해도 HOME이 RECORDS로 바뀌었고, 다른 완료 결과를 보고 있어도 최근 결과로 교체됐다.
+사용자가 보고한 과거 탭 문제와 동일 원인이라고 단정하지 않는다. 이번에 별도로 확인한 화면 이동 버그다.
+
+- MainResultNavigationTest는 실제 MainActivity를 create/start/resume하고, 저장 분석과 원본 manifest를
+  준비한 뒤 실제 BroadcastReceiver의 수신 경로를 호출한다. 수정 전 3개 중 2개 실패:
+  `expected:<HOME> but was:<RECORDS>`와 다른 결과 화면의 View 교체가 재현됐다.
+- 원인은 ROOT 화면 여부와 최근 세션만 확인하고 현재 탭/열린 결과 ID를 확인하지 않은 것이다.
+  현재 탭이 기록이고 열린 결과 ID가 수신 세션과 같을 때만 결과를 다시 표시하도록 좁혔다.
+- 수정 후 대상 3개 모두 통과했다. 홈·통계·메뉴·기록 목록/다른 결과를 유지하고,
+  열려 있는 같은 결과는 갱신한다. 늦은 분석 저장은 계속 수행한다.
+- 로그: work/late-analysis-navigation-before.log / work/late-analysis-navigation-after.log.
+  가이드 34abba2 반영 전 빌드 산출물이 남아 있어, 실행 시각만으로 통합 검증을 주장하지 않는다.
+  현재 조합의 별도 대상 검사 work/camera-guide-navigation-integrated-focused.log에서
+  카메라 12개/수신 경로 3개, 총 15건 통과와 현재 가이드 클래스 생성/폰 컴파일을 확인했다.
+  실기기·새 APK·공개 배포는 아직 아니며 전체 테스트/lint/OTA/리뷰 JSON을 반복하지 않았다.
+
 ## 후속 상태 — 폰 0.7.8 공개
 
 이후 클로드가 Protobuf 필드 보존 대상을 MediaPipe 패키지에서 모든 GeneratedMessageLite 메시지로

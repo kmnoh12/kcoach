@@ -409,7 +409,10 @@ class MainActivity : ComponentActivity() {
                         text = "세트 분석 완료 · 자동 추정 ${measuredRepsText(analysis.confirmedReps, "확인 필요")} · 실제 횟수를 확인해 주세요"
                         setTextColor(green)
                     }
-                    if (currentScreen == Screen.ROOT && lastWorkoutResult?.sessionId == sessionId) showWorkoutResult(lastWorkoutResult!!)
+                    if (currentScreen == Screen.ROOT && currentTab == RootTab.RECORDS &&
+                        visibleWorkoutResultSessionId == sessionId && lastWorkoutResult?.sessionId == sessionId) {
+                        showWorkoutResult(lastWorkoutResult!!)
+                    }
                 }
                 PhoneWearListenerService.ACTION_CAPTURE_ERROR -> {
                     val captureId = intent.getStringExtra("captureId").orEmpty()

@@ -1,5 +1,19 @@
 # 측정 개편 구현 진행
 
+## 2026-10-15 클로드 가이드 34abba2 수령·NAV-001 수정 — 미배포
+
+사용자가 [클로드 카메라 인계](CLAUDE_CAMERA_GUIDE_READY.md)의 1~3단계를 다음 배포에 포함하도록 요청했다.
+aaece43 바로 위 main 커밋/기존 작업 보존을 확인했다. 4단계 UI는 별도다. 졸라맨 실기 표시는 미확인이다.
+기존 준비 질문 구성의 미확정과 워치 최종 구현 대기는 그대로이며, 이 커밋만 먼저 공개하지 않는다.
+
+MainActivity의 늦은 ACTION_CAPTURE가 ROOT만 검사해 홈을 기록으로 바꾸거나 다른 결과를 교체하는
+문제도 재현·수정했다. MainResultNavigationTest 수정 전 3개 중 2개 실패, 수정 후 3개 통과.
+분석 저장은 유지하고, 현재 기록 탭에서 같은 결과를 보고 있을 때만 다시 표시한다.
+가이드 반영 전 산출물이 남아 있어 현 조합은 work/camera-guide-navigation-integrated-focused.log에서
+카메라 대상 두 클래스(각 6개)/실제 수신 경로(3개)를 별도 검사해 총 15건 통과했다.
+현재 가이드 클래스 생성/폰 컴파일도 확인했다. 전체 테스트/lint/OTA/리뷰 JSON은 반복하지 않았다.
+상세 증거는 [NAV-001](BUG_REPORT.md)과 work/late-analysis-navigation-before.log/after.log다.
+
 ## 2026-10-15 폰 기본 프로필·중복 없는 루틴 시작 준비 — 미배포
 
 [후속 폰 구현](PHONE_WORKOUT_PREPARATION.md)을 따른다. 기존 저장소에서 로그인 없는 신체/착용 기본값,
