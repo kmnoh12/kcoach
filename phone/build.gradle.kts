@@ -34,6 +34,8 @@ android {
     androidResources { noCompress += "task" }
     testOptions {
         unitTests.isIncludeAndroidResources = true
+        // Keep Compose tests in one graphics backend; mixing legacy/native sandboxes can stall idling.
+        unitTests.all { it.systemProperty("robolectric.graphicsMode", "NATIVE") }
     }
     buildTypes {
         // Shrunk build for in-app updates: same debug key, so it installs over debug builds.
