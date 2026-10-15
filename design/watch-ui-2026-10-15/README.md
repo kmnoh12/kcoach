@@ -115,3 +115,13 @@ D2도 `reps > targetReps`일 때만 주황이다. 목표 20회 기준 19/20회 �
 
 `draft-d2-details.png`와 `comparison-d2-pages.png`를 생성하고 원형 화면의 텍스트/버튼을 확인했다.
 전용 렌더링 task `renderD2WithTheWholeSecondPage`만 실행했다.
+
+## 폰 앱과 모서리 반경 통일
+
+사용자가 두 번째 화면 버튼의 둥글기를 폰 앱에 맞추도록 요청했다.
+현재 main의 phone/ui/Motion.kt에서 KShape.Control=RoundedCornerShape(6.dp)를 확인했고,
+WorkoutScreen.kt의 셀/목표 행/TextAction에도 같은 Control이 실제 적용됨을 확인했다.
+워치 시안의 두 버튼 반경을 기존 11dp(22px)에서 6dp(12px)로 맞췄다.
+버튼 크기/위치/색/문구와 첫 번째 D2 화면은 변경하지 않았다.
+해당 두 화면 렌더링만 다시 생성해 확인했다. 앱 적용/배포 전 시안 상태다.
+수정 파일: draft-d2-details-phone-radius.png, comparison-d2-pages-phone-radius.png.

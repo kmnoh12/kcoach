@@ -241,12 +241,14 @@ private class D2DetailsPreview(context: Context) : View(context) {
         text(canvas, "덤벨 컬", 85f, 16f, bold = true)
         text(canvas, "1세트 · 현재 8회", 122f, 12f, muted)
         // Each proposed action occupies 48dp in height on this 216dp / 432px preview.
+        // Match phone ui/Motion.kt KShape.Control (6dp), including workout controls.
+        val controlRadius = 6f * resources.displayMetrics.density
         paint.color = green
-        canvas.drawRoundRect(RectF(76f, 150f, 356f, 246f), 22f, 22f, paint)
+        canvas.drawRoundRect(RectF(76f, 150f, 356f, 246f), controlRadius, controlRadius, paint)
         text(canvas, "세트 마치기", 190f, 15f, Color.rgb(3, 20, 13), true)
         text(canvas, "8회로 기록", 223f, 12f, Color.rgb(3, 20, 13))
         paint.color = Color.rgb(27, 33, 39)
-        canvas.drawRoundRect(RectF(76f, 258f, 356f, 354f), 22f, 22f, paint)
+        canvas.drawRoundRect(RectF(76f, 258f, 356f, 354f), controlRadius, controlRadius, paint)
         text(canvas, "횟수 수정", 316f, 15f, white, true)
         paint.color = muted; paint.style = Paint.Style.STROKE; paint.strokeWidth = 2.5f
         paint.strokeCap = Paint.Cap.ROUND
