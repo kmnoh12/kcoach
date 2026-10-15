@@ -1,5 +1,22 @@
 # KCoach 다음 세션 인수인계 (2026-10-14, 폰 0.7.4 / 워치 0.2.5 검증용 업데이트)
 
+## 2026-10-15 최신 공개 — 폰 0.7.8 / 워치 0.2.7
+
+사용자가 0.7.7의 새 POSE_INIT 예외(`Unable to get message info for com.google.protobuf.d`,
+`Can't instantiate abstract class com.google.protobuf.d`)를 제공했다. 해당 버전 매핑은 Any다.
+클로드가 생성 메시지 필드 보존을 MediaPipe 패키지에서 모든 GeneratedMessageLite로 확대하고
+0.7.8(38)을 빌드했다. 사용자 요청으로 tools/release.sh --publish-built를 통해
+[p0.7.8-w0.2.7](https://github.com/kmnoh12/kcoach/releases/tag/p0.7.8-w0.2.7), 소스 009fd1d를 공개했다.
+새 APK의 Any 구체 클래스/DEFAULT_INSTANCE/typeUrl_, JNI/Flogger, 기존 설치 서명 일치를 확인했다.
+latest manifest 두 개와 실제 다운로드 APK 해시도 확인했다. 워치 0.2.7(35)은 이전과 동일한 APK다.
+앱 Kotlin 소스는 이번 변경에서 바뀌지 않았다. 기존 전체 검사를 반복하지 않고 새 축소 APK를 검사했다.
+실제 0.7.8의 초기화/골격 표시·Watch8 측정 정확도는 아직 확인되지 않았다.
+[버그 리포트](BUG_REPORT.md)에 원본 오류와 조치/한계를 모았다. 아래 항목은 버전별 이전 이력이다.
+
+업데이트 요구도 사용자가 명확히 했다: 폰에서 워치 확인·다운로드·설치 요청을 관리하고,
+워치에서는 운영체제 설치 확인을 직접 눌러도 충분하다. 별도 워치 업데이트 확인 버튼을 없애는 것이 목적이다.
+무인 강제 설치를 추가 목표로 삼지 않는다. 코덱스1이 워치 화면을 수정 중이므로 임의로 수정하지 않는다.
+
 ## 2026-10-15 최신 공개 통합본 — 폰 0.7.7 / 워치 0.2.7
 
 [공개 태그](https://github.com/kmnoh12/kcoach/releases/tag/p0.7.7-w0.2.7), 소스 2ecd3ad.

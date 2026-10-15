@@ -2,11 +2,14 @@
 
 작성일: 2026-10-15 · 기준: 폰 0.7.7 / 워치 0.2.7 공개본
 
-## 후속 상태 — 폰 0.7.8 공개 준비
+## 후속 상태 — 폰 0.7.8 공개
 
 이후 클로드가 Protobuf 필드 보존 대상을 MediaPipe 패키지에서 모든 GeneratedMessageLite 메시지로
 확장하고 폰 0.7.8(code 38) APK를 만들었다. 실제 새 APK에서 Any의 구체 클래스·DEFAULT_INSTANCE·
-typeUrl_ 보존과 기존 JNI/Flogger 검사, 기존 설치 서명 일치를 확인했다. 사용자가 GitHub 배포를 요청했다.
+typeUrl_ 보존과 기존 JNI/Flogger 검사, 기존 설치 서명 일치를 확인했다. 사용자 요청으로
+[폰 0.7.8 / 워치 0.2.7](https://github.com/kmnoh12/kcoach/releases/tag/p0.7.8-w0.2.7)을 공개했고,
+latest manifest와 실제 다운로드 APK의 SHA-256도 대조했다. 배포 소스는 009fd1d다.
+폰 APK SHA-256: `15ad7b7296180b34e828c83406d3cc683558336ea5cc784b46b14ee826dee50c`.
 워치는 0.2.7(code 35)의 기존 공개 APK를 유지한다. 실제 폰 초기화·골격 표시 성공은 아직 미확인이다.
 아래 본문의 미수정/일시정지 표시는 최초 작성 당시 이력이며 이 후속 상태가 우선한다.
 
