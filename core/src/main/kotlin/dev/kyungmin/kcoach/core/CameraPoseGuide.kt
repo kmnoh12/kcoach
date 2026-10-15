@@ -34,6 +34,8 @@ enum class CameraPoseFamily(
     SEATED_ARMS_FORWARD_SIDE(false, 2.0, 85.0 to 88.0),
     SEATED_CHEST_PRESS_SIDE(false, -5.0, -30.0 to 80.0),
     ARMS_OPEN_FRONT(true, 0.0, 80.0 to 85.0),
+    // Hands together in front of the chest. The fly gate measures elbow-shoulder-opposite shoulder, which a side view hides.
+    FLY_CLOSED_FRONT(true, 0.0, 0.0 to -75.0),
     BENT_OVER_SIDE(false, 62.0, 0.0 to 0.0),
     LYING_ARMS_UP_SIDE(false, 90.0, 180.0 to 180.0),
     LYING_EXTENSION_SIDE(false, 90.0, 170.0 to 70.0),
@@ -78,7 +80,7 @@ object CameraPoseGuide {
             }
             MeasurementRecipe.SHOULDER_PRESS -> CameraPoseFamily.SEATED_PRESS_FRONT
             MeasurementRecipe.LATERAL_RAISE -> CameraPoseFamily.STAND_ARMS_DOWN_FRONT
-            MeasurementRecipe.FLY -> if (id == "machine_fly") CameraPoseFamily.ARMS_OPEN_FRONT else CameraPoseFamily.SEATED_ARMS_FORWARD_SIDE
+            MeasurementRecipe.FLY -> if (id == "machine_fly") CameraPoseFamily.ARMS_OPEN_FRONT else CameraPoseFamily.FLY_CLOSED_FRONT
             MeasurementRecipe.PULLOVER -> CameraPoseFamily.PULLOVER_SIDE
             MeasurementRecipe.TRICEPS_EXTENSION -> when (id) {
                 "cable_overhead_extension", "rope_overhead_extension" -> CameraPoseFamily.CABLE_OVERHEAD_EXTENSION_SIDE

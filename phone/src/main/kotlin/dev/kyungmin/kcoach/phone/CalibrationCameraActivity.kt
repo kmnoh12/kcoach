@@ -16,6 +16,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.util.Log
 import android.view.View
 import android.view.WindowManager
 import android.widget.Toast
@@ -31,7 +32,6 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import com.google.android.gms.wearable.Wearable
-import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.google.mediapipe.tasks.core.BaseOptions
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.poselandmarker.PoseLandmarker
@@ -339,7 +339,7 @@ class CalibrationCameraActivity : ComponentActivity() {
             val rotation = image.imageInfo.rotationDegrees
             bitmap = if (rotation == 0) original else Bitmap.createBitmap(original, 0, 0, original.width, original.height,
                 Matrix().apply { postRotate(rotation.toFloat()) }, true).also { original.recycle() }
-            val result = BitmapImageBuilder(bitmap).build().use { mp -> requireNotNull(pose).detectForVideo(mp, modelMs) }
+            val result = bitmap.withDetectorImage { mp -> requireNotNull(pose).detectForVideo(mp, modelMs) }
             val completedNs = SystemClock.elapsedRealtimeNanos()
             val normalized = result.landmarks().map { points -> points.map {
                 CameraLandmark(it.x().toDouble(), it.y().toDouble(), it.z().toDouble(), it.visibility().orElse(null)?.toDouble(), it.presence().orElse(null)?.toDouble())
@@ -351,6 +351,8 @@ class CalibrationCameraActivity : ComponentActivity() {
             val pose = normalized.singleOrNull()
             val worldPose = world.singleOrNull()
             val poseCandidate = pose != null && worldPose != null && guide.startReady(pose, worldPose, previewLeft)
+            val diagnosis = if (pose != null && worldPose != null) guide.diagnose(pose, worldPose, previewLeft) else null
+            logDiagnosis(diagnosis, modelMs)
             if (poseCandidate) { if (poseReadySinceNs == null) poseReadySinceNs = cameraNs } else poseReadySinceNs = null
             poseReady = poseReadySinceNs?.let { cameraNs - it >= guide.readyHoldMs * 1_000_000L } == true
             val ready = poseReady; val people = normalized.size
@@ -400,7 +402,7 @@ class CalibrationCameraActivity : ComponentActivity() {
             // Without wearing info capture cannot start, so the figure must not look ready (pose geometry itself is unchanged).
             val matched = poseReady && wearing != null
             main.post {
-                overlay.points = normalized.singleOrNull().orEmpty(); overlay.frameWidth = frameWidth; overlay.frameHeight = frameHeight
+                overlay.points = normalized.singleOrNull().orEmpty(); overlay.frameWidth = frameWidth; overlay.frameHeight = frameHeight; overlay.diagnosis = diagnosis
                 overlay.update(figure, matched); overlay.invalidate()
             }
         } catch (error: Throwable) {
@@ -418,6 +420,18 @@ class CalibrationCameraActivity : ComponentActivity() {
                 })
             }
         } finally { bitmap?.recycle(); image.close() }
+    }
+
+    private var lastDiagnosisLogMs = 0L
+    /** Once a second: raw per-joint confidences behind the start-pose decision, readable with `adb logcat -s KCoachPose`. */
+    private fun logDiagnosis(diagnosis: StartDiagnosis?, modelMs: Long) {
+        if (modelMs - lastDiagnosisLogMs < 1000) return
+        lastDiagnosisLogMs = modelMs
+        val text = diagnosis?.let { d ->
+            d.joints.joinToString(" ") { "${it.index}=${"%.2f".format(it.confidence)}${if (it.inFrame) "" else "(out)"}" } +
+                " angle=${d.angle?.let { "%.0f".format(it) }} atRest=${d.atRest} ready=${d.ready}"
+        } ?: "no single pose"
+        Log.i("KCoachPose", "$exerciseId left=$previewLeft $text")
     }
 
     private fun probe(id: String, window: String) {
@@ -493,11 +507,29 @@ class CalibrationCameraActivity : ComponentActivity() {
 
         fun update(next: GuideFigure?, ready: Boolean) { figure = next; matched = ready }
 
+        /** Live per-joint confidences behind the start decision; long-press the camera view to toggle. */
+        var diagnosis: StartDiagnosis? = null
+        private var showDiagnosis = intent.getBooleanExtra("debugVisibility", false)
+        private val debugText = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 12 * dp; typeface = android.graphics.Typeface.MONOSPACE }
+        init { setOnLongClickListener { showDiagnosis = !showDiagnosis; invalidate(); true } }
+
+        private fun drawDiagnosis(canvas: Canvas) {
+            val d = diagnosis ?: return
+            var y = 96 * dp
+            fun row(text: String, ok: Boolean) {
+                debugText.color = if (ok) Color.rgb(120, 255, 170) else Color.rgb(255, 120, 110)
+                canvas.drawText(text, 12 * dp, y, debugText); y += 15 * dp
+            }
+            d.joints.forEach { row("#${it.index} vis=${it.visibility?.let { v -> "%.2f".format(v) }} pres=${it.presence?.let { v -> "%.2f".format(v) }}${if (it.inFrame) "" else " OUT"}", it.ok) }
+            row("angle=${d.angle?.let { "%.0f°".format(it) } ?: "-"} atRest=${d.atRest ?: "-"} ≥${CameraCaptureGuide.MIN_CONFIDENCE}", d.ready)
+        }
+
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
             val scale = minOf(width.toFloat() / frameWidth, height.toFloat() / frameHeight)
             val dx = (width - frameWidth * scale) / 2; val dy = (height - frameHeight * scale) / 2
             drawGuide(canvas, scale, dx, dy)
+            if (showDiagnosis) drawDiagnosis(canvas)
             // Mirrored selfie preview: landmarks are in the unmirrored frame.
             fun vx(x: Double) = dx + (1 - x).toFloat() * frameWidth * scale
             fun vy(y: Double) = dy + y.toFloat() * frameHeight * scale

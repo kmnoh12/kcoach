@@ -18,8 +18,21 @@ data class CameraCaptureGuide(val id: String, val direction: String, val framing
     }
     fun visible(points: List<CameraLandmark>): Boolean = required.isNotEmpty() && required.all { index ->
         val point = points.getOrNull(index) ?: return@all false
-        minOf(point.visibility ?: 0.0, point.presence ?: 0.0) >= 0.65 && point.x in 0.02..0.98 && point.y in 0.02..0.98
+        minOf(point.visibility ?: 0.0, point.presence ?: 0.0) >= MIN_CONFIDENCE && inFrame(point)
     }
+
+    /** Why [startReady] says yes or no, joint by joint, for the on-screen debug overlay and offline replays. */
+    fun diagnose(image: List<CameraLandmark>, world: List<CameraLandmark>, left: Boolean): StartDiagnosis {
+        val joints = required.sorted().map { index ->
+            val point = image.getOrNull(index)
+            StartJoint(index, point?.visibility, point?.presence, point?.let(::inFrame) == true,
+                point != null && minOf(point.visibility ?: 0.0, point.presence ?: 0.0) >= MIN_CONFIDENCE && inFrame(point))
+        }
+        val angle = if (image.size == 33 && world.size == 33 && joints.all { it.ok }) observedMetric(image, world, left) else null
+        return StartDiagnosis(joints, angle, angle?.let { metric?.atRest(it) }, startReady(image, world, left))
+    }
+
+    private fun inFrame(point: CameraLandmark) = point.x in 0.02..0.98 && point.y in 0.02..0.98
     fun observedMetric(image: List<CameraLandmark>, world: List<CameraLandmark>, left: Boolean): Double? {
         val motion = metric ?: return null
         if (image.size != 33 || world.size != 33 || !visible(image)) return null
@@ -36,6 +49,9 @@ data class CameraCaptureGuide(val id: String, val direction: String, val framing
         return value
     }
     companion object {
+        /** Minimum min(visibility, presence) for a required joint to count as seen. */
+        const val MIN_CONFIDENCE = 0.65
+
         fun forExercise(id: String, left: Boolean): CameraCaptureGuide {
             val contract = ExerciseMeasurementContracts.resolve(id)
             val recipe = contract.recipe
@@ -160,4 +176,16 @@ object CameraRepProposals {
         }
         return rows
     }
+}
+
+data class StartJoint(val index: Int, val visibility: Double?, val presence: Double?, val inFrame: Boolean, val ok: Boolean) {
+    val confidence: Double get() = minOf(visibility ?: 0.0, presence ?: 0.0)
+}
+
+/** [angle] is the guide's movement metric when every required joint is seen; [atRest] says whether it satisfies the start pose. */
+data class StartDiagnosis(val joints: List<StartJoint>, val angle: Double?, val atRest: Boolean?, val ready: Boolean) {
+    /** The first thing blocking readiness, in plain words, or null when ready. */
+    val blocker: String? get() = joints.firstOrNull { !it.ok }?.let {
+        if (!it.inFrame) "관절 ${it.index}번이 화면 밖" else "관절 ${it.index}번 신뢰도 ${"%.2f".format(it.confidence)}"
+    } ?: if (atRest == false) "각도 ${"%.0f".format(angle)}° 시작 범위 밖" else if (!ready) "각도를 못 구함" else null
 }
