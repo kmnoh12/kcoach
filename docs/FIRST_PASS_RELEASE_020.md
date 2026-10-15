@@ -1,5 +1,26 @@
 # 폰·워치 0.2.0 1차 배포 범위
 
+## 실제 공개 완료
+
+2026-10-15 18:49 KST에 p0.2.0-w0.2.0을 latest/정식 공개했다.
+https://github.com/kmnoh12/kcoach/releases/tag/p0.2.0-w0.2.0
+
+배포 소스 5ad7d2e(앱 코드/빌드 설정은 검사·빌드한 995234c와 동일, 추가는 검사 제외 인계 문서).
+폰·워치 APK의 실제 versionName 0.2.0과 versionCode 39/36을 aapt2로 확인했다.
+tools/release.sh --publish-built에서 JNI/Flogger/Any 구체 클래스·DEFAULT_INSTANCE/typeUrl_와
+두 APK의 기존 인증서 일치를 검사한 뒤 source push/공개/manifest 업로드를 완료했다.
+GitHub latest API의 태그/공개 상태/4개 asset, 앱이 사용하는 latest 다운로드 manifest 두 개와
+그 주소의 실제 APK 스트리밍 SHA-256을 로컬 결과와 대조했다.
+
+- phone: 60,864,350 bytes, SHA-256 ac1843198e0bb62621748604e2edba2dea3a832e662ff522d115f5ea92af70c0
+- watch: 1,259,491 bytes, SHA-256 175ef61f4bb75aa8585ca383ee5442a27a7f378fb9a0d268c7d698f45a6718e5
+
+로그: work/three-agent/final-020-resume-checks.log / final-020-publication.log /
+final-020-public-download-verification.log.
+첫 로그의 전체 명령은 폰 화면 검사 실패/종료 143 때문에 exit 1이다. 다른 검사와 두 assembleOta는
+완료됐고, 사용자의 화면 검사 제외 지시를 아래에 기록했다. 전체 테스트 통과로 바꾸지 않는다.
+실제 기기 설치/카메라·워치 동작/측정 성능 확인은 별도다. 새 reviews JSON은 생성하지 않았다.
+
 ## 최신 사용자 지시 — 폰 화면 검사 제외
 
 사용자가 중단 뒤 배포를 다시 요청했고, 이어서 “폰화면검사하지마라”고 지시했다.
