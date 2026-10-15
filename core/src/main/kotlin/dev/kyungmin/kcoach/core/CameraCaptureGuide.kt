@@ -2,7 +2,19 @@ package dev.kyungmin.kcoach.core
 
 /** Anatomical MediaPipe indices, independent of the mirrored selfie preview. Guides are not accuracy claims. */
 data class CameraCaptureGuide(val id: String, val direction: String, val framing: String, val required: Set<Int>,
-    val startDescription: String, val metric: CameraMotion?) {
+    val startDescription: String, val metric: CameraMotion?, val readyElbowBand: ClosedFloatingPointRange<Double>? = null) {
+    /** How long the start pose must hold before capture may start; a band-only check needs a steadier hold. */
+    val readyHoldMs: Long get() = if (metric == null && readyElbowBand != null) 1000L else 200L
+
+    /** Start-pose readiness: the movement metric at rest, or for rotation lifts only the elbow set-up. */
+    fun startReady(image: List<CameraLandmark>, world: List<CameraLandmark>, left: Boolean): Boolean {
+        if (!visible(image)) return false
+        metric?.let { motion -> return observedMetric(image, world, left)?.let(motion::atRest) == true }
+        val band = readyElbowBand ?: return true
+        if (world.size != 33) return false
+        val points = world.mapIndexed { i, p -> PosePoint(p.x, p.y, p.z, minOf(image[i].visibility ?: 0.0, image[i].presence ?: 0.0)) }
+        return UpperBodyPoseGeometry.angle(points, if (left) 11 else 12, if (left) 13 else 14, if (left) 15 else 16)?.let { it in band } == true
+    }
     fun visible(points: List<CameraLandmark>): Boolean = required.isNotEmpty() && required.all { index ->
         val point = points.getOrNull(index) ?: return@all false
         minOf(point.visibility ?: 0.0, point.presence ?: 0.0) >= 0.65 && point.x in 0.02..0.98 && point.y in 0.02..0.98
@@ -34,6 +46,8 @@ data class CameraCaptureGuide(val id: String, val direction: String, val framing
                 recipe == MeasurementRecipe.MANUAL && id in setOf("hip_adduction", "hip_abduction") -> setOf(23, 24, 25, 26, 27, 28)
                 recipe == MeasurementRecipe.MANUAL -> setOf(11, 12, 15, 16, 23, 24, 27, 28)
                 recipe == MeasurementRecipe.SQUAT -> recipe.cameraLandmarks + 0
+                recipe == MeasurementRecipe.FLY -> setOf(shoulder, elbow, wrist, if (left) 12 else 11)
+                recipe == MeasurementRecipe.EXTERNAL_ROTATION -> setOf(shoulder, elbow, wrist)
                 // Elbow angles use shoulder-elbow-wrist only: an upper-body selfie may crop the hip.
                 recipe in setOf(MeasurementRecipe.CURL, MeasurementRecipe.ROW, MeasurementRecipe.VERTICAL_PULL,
                     MeasurementRecipe.SHOULDER_PRESS, MeasurementRecipe.TRICEPS_EXTENSION, MeasurementRecipe.CHEST_PRESS) ->
@@ -53,11 +67,16 @@ data class CameraCaptureGuide(val id: String, val direction: String, val framing
                 MeasurementRecipe.CHEST_PRESS -> if (id == "chest_press") CameraMotion.ELBOW_PRESS else CameraMotion.ELBOW_FOLD
                 MeasurementRecipe.LATERAL_RAISE -> CameraMotion.SHOULDER_RAISE
                 MeasurementRecipe.SQUAT -> CameraMotion.SQUAT_KNEE_FLEXION
+                MeasurementRecipe.PULLOVER -> CameraMotion.PULLOVER_REACH
+                MeasurementRecipe.FLY -> if (id == "machine_fly") CameraMotion.FLY_OPEN else CameraMotion.FLY_CLOSED
                 else -> null
             }
             return CameraCaptureGuide("camera-$id-v1", direction,
                 "폰을 고정해 보이는 관절이 화면 가장자리 밖으로 나가지 않게 맞춰요. 셀카 화면은 반전돼도 $side 해부학적 관절을 관측해요.",
-                required, contract.startDescription + ". 관측 범위 밖 자세는 평가하지 않아요.", metric)
+                required, contract.startDescription + ". 관측 범위 밖 자세는 평가하지 않아요.", metric,
+                // External rotation turns the forearm about the upper arm, which a phone camera cannot
+                // judge reliably; it only checks the elbow is set at about 90 degrees beside the body.
+                if (recipe == MeasurementRecipe.EXTERNAL_ROTATION) 75.0..105.0 else null)
         }
     }
 }

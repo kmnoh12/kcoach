@@ -23,7 +23,9 @@ enum class CameraPoseFamily(
     STAND_ARMS_DOWN_SIDE(false, 0.0, 0.0 to 4.0),
     STAND_ARMS_DOWN_FRONT(true, 0.0, 8.0 to 6.0),
     STAND_ELBOW_BENT_SIDE(false, 8.0, -6.0 to 100.0),
-    OVERHEAD_EXTENSION_SIDE(false, 4.0, 170.0 to -20.0),
+    OVERHEAD_EXTENSION_SIDE(false, 0.0, 170.0 to -70.0),
+    CABLE_OVERHEAD_EXTENSION_SIDE(false, 30.0, 130.0 to -140.0),
+    EXTERNAL_ROTATION_SIDE(false, 0.0, 0.0 to 90.0),
     PREACHER_SIDE(false, 10.0, 45.0 to 40.0),
     INCLINE_ARMS_DOWN_SIDE(false, 45.0, 0.0 to 0.0),
     INCLINE_PRESS_SIDE(false, 45.0, 180.0 to 180.0),
@@ -79,11 +81,12 @@ object CameraPoseGuide {
             MeasurementRecipe.FLY -> if (id == "machine_fly") CameraPoseFamily.ARMS_OPEN_FRONT else CameraPoseFamily.SEATED_ARMS_FORWARD_SIDE
             MeasurementRecipe.PULLOVER -> CameraPoseFamily.PULLOVER_SIDE
             MeasurementRecipe.TRICEPS_EXTENSION -> when (id) {
-                "cable_overhead_extension", "rope_overhead_extension", "dumbbell_triceps_extension" -> CameraPoseFamily.OVERHEAD_EXTENSION_SIDE
+                "cable_overhead_extension", "rope_overhead_extension" -> CameraPoseFamily.CABLE_OVERHEAD_EXTENSION_SIDE
+                "dumbbell_triceps_extension" -> CameraPoseFamily.OVERHEAD_EXTENSION_SIDE
                 "ez_lying_extension" -> CameraPoseFamily.LYING_EXTENSION_SIDE
                 else -> CameraPoseFamily.STAND_ELBOW_BENT_SIDE
             }
-            MeasurementRecipe.EXTERNAL_ROTATION -> CameraPoseFamily.STAND_ELBOW_BENT_SIDE
+            MeasurementRecipe.EXTERNAL_ROTATION -> CameraPoseFamily.EXTERNAL_ROTATION_SIDE
             MeasurementRecipe.SQUAT -> CameraPoseFamily.SQUAT_SIDE
             MeasurementRecipe.MANUAL -> null
         }

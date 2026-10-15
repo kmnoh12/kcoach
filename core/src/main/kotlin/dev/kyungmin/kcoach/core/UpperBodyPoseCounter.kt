@@ -8,7 +8,11 @@ enum class CameraMotion(val restDegrees: Double, val excursionDegrees: Double, v
     ELBOW_FOLD(145.0, 85.0, false),
     ELBOW_PRESS(100.0, 150.0, true),
     SHOULDER_RAISE(25.0, 65.0, true),
-    SQUAT_KNEE_FLEXION(160.0, 110.0, false);
+    SQUAT_KNEE_FLEXION(160.0, 110.0, false),
+    // Shoulder-driven lifts: the elbow barely moves, so the arm is measured at the shoulder.
+    PULLOVER_REACH(150.0, 100.0, false),
+    FLY_OPEN(145.0, 110.0, false),
+    FLY_CLOSED(105.0, 140.0, true);
 
     fun atRest(angle: Double) = if (increasing) angle <= restDegrees else angle >= restDegrees
     fun departed(angle: Double) = if (increasing) angle >= excursionDegrees else angle <= excursionDegrees
@@ -37,8 +41,10 @@ object UpperBodyPoseGeometry {
         val wrist = if (left) 15 else 16
         val hip = if (left) 23 else 24
         val knee = if (left) 25 else 26; val ankle = if (left) 27 else 28
+        val otherShoulder = if (left) 12 else 11
         val indices = when (motion) {
-            CameraMotion.SHOULDER_RAISE -> listOf(elbow, shoulder, hip)
+            CameraMotion.SHOULDER_RAISE, CameraMotion.PULLOVER_REACH -> listOf(elbow, shoulder, hip)
+            CameraMotion.FLY_OPEN, CameraMotion.FLY_CLOSED -> listOf(elbow, shoulder, otherShoulder)
             CameraMotion.SQUAT_KNEE_FLEXION -> listOf(hip, knee, ankle)
             else -> listOf(shoulder, elbow, wrist)
         }

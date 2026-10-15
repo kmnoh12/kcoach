@@ -53,6 +53,37 @@ class CameraCaptureGuideTest {
         assertFalse(CameraCaptureGuide.forExercise("dumbbell_lateral_raise", true).visible(points))
         assertFalse(CameraCaptureGuide.forExercise("squat", true).visible(points))
     }
+    private fun world(vararg joints: Pair<Int, Triple<Double, Double, Double>>): List<CameraLandmark> {
+        val list = MutableList(33) { CameraLandmark(0.0, 0.0, 0.0, 1.0, 1.0) }
+        joints.forEach { (i, p) -> list[i] = CameraLandmark(p.first, p.second, p.third, 1.0, 1.0) }
+        return list
+    }
+    private val visibleImage = List(33) { CameraLandmark(0.5, 0.5, 0.0, 1.0, 1.0) }
+
+    @Test fun shoulderDrivenLiftsHaveStartChecksInsteadOfAManualTick() {
+        // Left shoulder at the origin, right shoulder to its right, hip below (MediaPipe world y points down).
+        val base = arrayOf(11 to Triple(0.0, 0.0, 0.0), 12 to Triple(-0.4, 0.0, 0.0), 23 to Triple(0.0, 0.5, 0.0), 15 to Triple(0.6, 0.0, 0.0))
+        val open = world(*base, 13 to Triple(0.3, 0.0, 0.0))
+        val forward = world(*base, 13 to Triple(0.0, 0.0, -0.3))
+        assertTrue(CameraCaptureGuide.forExercise("machine_fly", true).startReady(visibleImage, open, true))
+        assertFalse(CameraCaptureGuide.forExercise("machine_fly", true).startReady(visibleImage, forward, true))
+        assertTrue(CameraCaptureGuide.forExercise("machine_reverse_fly", true).startReady(visibleImage, forward, true))
+        assertFalse(CameraCaptureGuide.forExercise("machine_reverse_fly", true).startReady(visibleImage, open, true))
+        val overhead = world(*base, 13 to Triple(0.0, -0.3, 0.0))
+        val atChest = world(*base, 13 to Triple(0.0, 0.0, -0.3))
+        assertTrue(CameraCaptureGuide.forExercise("dumbbell_pullover", true).startReady(visibleImage, overhead, true))
+        assertFalse(CameraCaptureGuide.forExercise("dumbbell_pullover", true).startReady(visibleImage, atChest, true))
+    }
+
+    @Test fun externalRotationOnlyChecksTheElbowSetUpAndHoldsLonger() {
+        val guide = CameraCaptureGuide.forExercise("external_rotation", true)
+        assertNull(guide.metric); assertEquals(1000L, guide.readyHoldMs)
+        val bent = world(11 to Triple(0.0, 0.0, 0.0), 13 to Triple(0.0, 0.3, 0.0), 15 to Triple(0.0, 0.3, -0.25))
+        val straight = world(11 to Triple(0.0, 0.0, 0.0), 13 to Triple(0.0, 0.3, 0.0), 15 to Triple(0.0, 0.55, -0.05))
+        assertTrue(guide.startReady(visibleImage, bent, true))
+        assertFalse(guide.startReady(visibleImage, straight, true))
+        assertEquals(200L, CameraCaptureGuide.forExercise("dumbbell_curl", true).readyHoldMs)
+    }
     @Test fun completeCandidateKeepsActualFrameBoundariesAndIncompleteOrHiddenMotionDoesNotCount() {
         val frames = listOf(frame(1000, 160.0), frame(1200, 160.0), frame(1400, 120.0), frame(1600, 60.0),
             frame(1800, 100.0), frame(2000, 160.0))

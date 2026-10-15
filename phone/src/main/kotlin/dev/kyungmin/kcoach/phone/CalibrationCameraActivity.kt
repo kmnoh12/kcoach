@@ -354,10 +354,9 @@ class CalibrationCameraActivity : ComponentActivity() {
             val guide = CameraCaptureGuide.forExercise(exerciseId, previewLeft)
             val pose = normalized.singleOrNull()
             val worldPose = world.singleOrNull()
-            val readyMetric = if (pose != null && worldPose != null) guide.observedMetric(pose, worldPose, previewLeft) else null
-            val poseCandidate = pose != null && guide.visible(pose) && (guide.metric == null || readyMetric?.let { guide.metric!!.atRest(it) } == true)
+            val poseCandidate = pose != null && worldPose != null && guide.startReady(pose, worldPose, previewLeft)
             if (poseCandidate) { if (poseReadySinceNs == null) poseReadySinceNs = cameraNs } else poseReadySinceNs = null
-            poseReady = poseReadySinceNs?.let { cameraNs - it >= 200_000_000L } == true
+            poseReady = poseReadySinceNs?.let { cameraNs - it >= guide.readyHoldMs * 1_000_000L } == true
             if (capture == null && !starting) main.post { if (cameraReady) status.text = when {
                 normalized.size > 1 -> "여러 사람이 보여요. 한 사람만 화면에 들어오게 맞춰 주세요."
                 poseReady -> if (guide.metric == CameraMotion.SQUAT_KNEE_FLEXION) "전신 선 자세 후보 · 시작 자세를 직접 확인하고 촬영해 주세요"
