@@ -92,9 +92,14 @@ class CalibrationCameraActivity : ComponentActivity() {
     }
     private val exerciseId get() = intent.getStringExtra("exerciseId").orEmpty()
     private val exerciseName get() = intent.getStringExtra("exerciseName").orEmpty()
+    /** Denied with "don't ask again": the system dialog no longer appears, so the button opens app settings. */
+    private var permissionBlocked = false
     private val permission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) { ui = ui.copy(permissionNeeded = false); bindCamera() }
-        else ui = ui.copy(status = "촬영하려면 카메라 권한이 필요해요.", permissionNeeded = true)
+        else {
+            permissionBlocked = !shouldShowRequestPermissionRationale(Manifest.permission.CAMERA)
+            ui = ui.copy(permissionNeeded = true, status = if (permissionBlocked) "설정 › 권한에서 카메라를 허용해 주세요." else "촬영하려면 카메라 권한이 필요해요.")
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -111,7 +116,7 @@ class CalibrationCameraActivity : ComponentActivity() {
                 openWearingSettings = { if (capture == null && !starting) startActivity(Intent(this, WorkoutProfileActivity::class.java)) },
                 stop = { stopCapture(null) },
                 retrySave = { ui = ui.copy(saveRetry = false); worker.execute { saveStoppedCapture() } },
-                requestPermission = { permission.launch(Manifest.permission.CAMERA) },
+                requestPermission = ::requestCameraPermission,
                 copyError = ::copyFailureReport)
         }
         ContextCompat.registerReceiver(this, clockReceiver, IntentFilter(PhoneWearListenerService.ACTION_CAPTURE_CLOCK).apply {
@@ -124,6 +129,10 @@ class CalibrationCameraActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        // Permission granted from system settings while this screen was away: start the camera now.
+        if (ui.permissionNeeded && ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            permissionBlocked = false; ui = ui.copy(permissionNeeded = false, status = "카메라 준비 중…"); bindCamera()
+        }
         // The user may have changed the defaults in settings; an ongoing capture keeps its binding.
         if (capture == null && preparedCapture == null && !starting) loadWearing()
     }
@@ -149,6 +158,12 @@ class CalibrationCameraActivity : ComponentActivity() {
 
     companion object { private const val AUTO_START_MS = 1500L }
 
+    private fun requestCameraPermission() {
+        if (permissionBlocked) startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            android.net.Uri.fromParts("package", packageName, null)))
+        else permission.launch(Manifest.permission.CAMERA)
+    }
+
     private fun copyFailureReport() {
         val report = ui.failureReport ?: return
         (getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager)
@@ -156,10 +171,15 @@ class CalibrationCameraActivity : ComponentActivity() {
         Toast.makeText(this, "오류 정보를 복사했어요", Toast.LENGTH_SHORT).show()
     }
 
-    /** Main thread, once per analyzed frame while not capturing: green held long enough starts capture by itself. */
-    private fun autoStart(ready: Boolean) {
+    /**
+     * Main thread, once per analyzed frame while not capturing: green held long enough starts capture by itself.
+     * Only a frame whose geometry really leaves the start pose re-arms; the readiness hold restarting
+     * (screen resumed, wearing reloaded) is not a pose break and must not start another capture.
+     */
+    private fun autoStart(ready: Boolean, poseBroken: Boolean) {
         val now = SystemClock.uptimeMillis()
-        if (!ready) { readySinceMs = null; autoStartArmed = true; overlay.ringSinceMs = null; return }
+        if (poseBroken) autoStartArmed = true
+        if (!ready) { readySinceMs = null; overlay.ringSinceMs = null; return }
         if (!autoStartArmed || !cameraReady || wearing == null || capture != null || preparedCapture != null || starting ||
             finalizer.pending != null) { readySinceMs = null; overlay.ringSinceMs = null; return }
         val since = readySinceMs ?: now.also { readySinceMs = it }
@@ -217,6 +237,8 @@ class CalibrationCameraActivity : ComponentActivity() {
         starting = true
         ui = ui.copy(status = "워치 응답을 확인하는 중…")
         Wearable.getNodeClient(this).connectedNodes.addOnSuccessListener { nodes ->
+            // Left the screen while the watch was checked: never start a capture with no camera frames.
+            if (!lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) { starting = false; return@addOnSuccessListener }
             if (nodes.isEmpty()) { starting = false; ui = ui.copy(status = "워치를 연결한 뒤 자세를 다시 잡아 주세요.", blocked = true); return@addOnSuccessListener }
             val onLeft = selected.side == "LEFT"
             val wearing = selected.placement
@@ -252,6 +274,9 @@ class CalibrationCameraActivity : ComponentActivity() {
                     probe(next.id, "START")
                     main.post {
                         ui = ui.copy(recording = true, stopEnabled = true, status = "워치의 동시 촬영 지원과 응답을 확인하는 중…")
+                        if (!lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) {
+                            stopCapture("Camera screen left foreground"); return@post
+                        }
                         main.postDelayed({ if (preparedCapture?.id == next.id) stopCapture("Watch reference capture support not confirmed") }, 5_000)
                         startWhenReady(next)
                     }
@@ -328,9 +353,9 @@ class CalibrationCameraActivity : ComponentActivity() {
             poseReady = poseReadySinceNs?.let { cameraNs - it >= guide.readyHoldMs * 1_000_000L } == true
             val ready = poseReady; val people = normalized.size
             if (capture == null && preparedCapture == null && !starting) main.post {
-                autoStart(ready)
+                autoStart(ready, !poseCandidate)
                 // A refused start keeps its reason on screen until the user breaks the pose and tries again.
-                if (!ready && ui.blocked) ui = ui.copy(blocked = false)
+                if (!poseCandidate && ui.blocked) ui = ui.copy(blocked = false)
                 if (cameraReady && !ui.blocked && finalizer.pending == null && !ui.saving) ui = ui.copy(status = when {
                     wearing == null -> "워치 착용 정보를 먼저 저장해 주세요"
                     people > 1 -> "한 사람만 화면에 들어오게 해 주세요"
