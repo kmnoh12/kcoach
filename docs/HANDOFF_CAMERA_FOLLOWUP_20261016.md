@@ -162,4 +162,4 @@ KCOACH_CAMERA_FIELD_DIR="$PWD/work/camera-field-5f3dd894" "$T/gradle-8.11.1/bin/
 
 ## 후속 작업 결과
 
-이후 로컬 검사·빌드와 추가 보완 결과는 [폰 0.2.2 공개 후보](CAMERA_FOLLOWUP_RELEASE_022.md)에 기록했다. 원래 인계 내용과 기존 미커밋 변경은 보존했으며 공개 승인은 아직 받지 않았다.
+이후 로컬 검사·빌드와 추가 보완 결과는 [폰 0.2.2 공개 후보](CAMERA_FOLLOWUP_RELEASE_022.md)에 기록했다. 원래 인계 내용과 기존 미커밋 변경은 보존했다. 이후 사용자 승인으로 `13f66ff`를 커밋·공개했고 p0.2.2-w0.2.0의 latest manifest/실제 APK 해시까지 검증했다. 실기 확인은 여전히 남아 있다.
