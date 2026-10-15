@@ -93,7 +93,8 @@ class CalibrationResultActivity : ComponentActivity() {
                     watch == null -> "${counted}회로 저장했어요. 워치 기록을 받는 중이에요."
                     watch != counted -> "${counted}회로 저장했어요. 워치는 ${watch}회로 세서 서로 달라요. 아래에서 어긋난 구간을 확인해 주세요."
                     else -> "${counted}회로 저장했어요. 워치도 ${watch}회로 세서 일치해요."
-                }
+                } + if (review.references.any { it.eligibleForLearning } && reviews.confirmationSource(id) == CalibrationReviewStore.SOURCE_VIDEO_WINDOWS)
+                    " 영상에서 찾은 반복 ${review.references.count { it.eligibleForLearning }}개를 보정 자료로 저장했어요." else ""
                 review.revision to CapturePlaybackUi(id, capture.exerciseName,
                     captures.videoFile(id).takeIf { capture.videoComplete && it.isFile }?.absolutePath,
                     end, heights, intervals, review.countReference?.reps, watch, message,
@@ -127,6 +128,13 @@ class CalibrationResultActivity : ComponentActivity() {
         }.getOrNull()
     }
 
+    /** Worker thread. Labels only appear when the video windows add up to the user's confirmed total. */
+    private fun promote(id: String) {
+        val rejected = answers.load(id).filter { it.candidate.side == MismatchSide.VIDEO_ONLY && !it.realRep }
+            .map { it.candidate.span }.toSet()
+        reviews.promoteVideoProposals(id, rejected)
+    }
+
     private fun answerMismatch(startMs: Int, endMs: Int, videoOnly: Boolean, realRep: Boolean) {
         val id = selected ?: return
         if (busy || clip?.id != id) return
@@ -134,6 +142,7 @@ class CalibrationResultActivity : ComponentActivity() {
         busy = true
         worker.execute {
             val result = answers.save(id, candidate, realRep)
+            if (result.isSuccess) promote(id)
             main.post {
                 if (isDestroyed) return@post
                 busy = false
@@ -174,6 +183,7 @@ class CalibrationResultActivity : ComponentActivity() {
         busy = true; val expected = revision
         worker.execute {
             val result = reviews.saveCount(id, count, expected)
+            if (result.isSuccess) promote(id)
             main.post {
                 if (isDestroyed) return@post
                 busy = false

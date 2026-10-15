@@ -31,10 +31,14 @@ class CalibrationReviewStore(private val context: Context) {
             require(capture.status != CalibrationCaptureStatus.RECORDING)
             val current = load(id).getOrThrow()
             require(current.revision == expectedRevision) { "Review changed; reload it" }
-            require(current.references.size <= actualReps) { "Confirmed boundaries exceed the actual total" }
-            val next = current.copy(revision = current.revision + 1,
-                countReference = SetCountReference(capture.setId, capture.attemptId, actualReps, System.currentTimeMillis()))
-            write(next)
+            // Labels made from video windows follow the user's total, so a corrected total discards them for a rebuild.
+            val rebuild = current.references.size > actualReps && confirmationSource(id) == SOURCE_VIDEO_WINDOWS
+            require(rebuild || current.references.size <= actualReps) { "Confirmed boundaries exceed the actual total" }
+            val count = SetCountReference(capture.setId, capture.attemptId, actualReps, System.currentTimeMillis())
+            val next = if (rebuild) current.copy(revision = current.revision + 1, countReference = count, references = emptyList(),
+                cameraMetrics = null, squatMetrics = null)
+            else current.copy(revision = current.revision + 1, countReference = count)
+            write(next, if (rebuild) emptyList() else null)
             next
         }
     }
@@ -58,7 +62,8 @@ class CalibrationReviewStore(private val context: Context) {
     }
 
     fun saveCycles(id: String, cycles: List<RepCycle>, alignmentReviewed: Boolean, expectedRevision: Long,
-        simultaneousArmsReviewed: Boolean = false, nonRepIntervals: List<NonRepInterval>? = null): Result<CalibrationReview> = synchronized(lock) {
+        simultaneousArmsReviewed: Boolean = false, nonRepIntervals: List<NonRepInterval>? = null,
+        confirmationSource: String = SOURCE_USER_REVIEWED): Result<CalibrationReview> = synchronized(lock) {
         runCatching {
             val capture = captures.load(id).getOrThrow()
             require(capture.status == CalibrationCaptureStatus.REVIEW_PENDING && capture.videoComplete)
@@ -129,8 +134,44 @@ class CalibrationReviewStore(private val context: Context) {
             val squatMetrics = if (squat) CameraSquatAnalyzer.analyze(frames, eligibleCameraCycles, capture.watchOnLeft) else null
             val next = current.copy(revision = current.revision + 1, references = references, cameraMetrics = metrics,
                 nonRepIntervals = excluded, squatMetrics = squatMetrics)
-            write(next, cycles)
+            write(next, cycles, confirmationSource)
             next
+        }
+    }
+
+    /** Who produced the saved boundaries: the user marking them, or video windows backed by the user's confirmed total. */
+    fun confirmationSource(id: String): String = synchronized(lock) {
+        runCatching {
+            val current = load(id).getOrThrow()
+            if (current.revision == 0L) SOURCE_USER_REVIEWED
+            else JSONObject(File(directory(id), "review-${current.revision}.json").readText()).optString("confirmationSource", SOURCE_USER_REVIEWED)
+        }.getOrDefault(SOURCE_USER_REVIEWED)
+    }
+
+    /**
+     * Turns the video's own repetition windows into reviewed labels when they add up to the user's confirmed total
+     * (after dropping windows the user rejected). Needs a clock alignment that passes automatically; the existing
+     * camera, sensor and alignment gates in [saveCycles] still decide what is eligible for learning.
+     * Boundaries the user marked by hand are never replaced. Returns null when nothing was promoted.
+     */
+    fun promoteVideoProposals(id: String, rejected: Set<RepSpan>, proposals: List<RepCycle>? = null): Result<CalibrationReview?> = synchronized(lock) {
+        runCatching {
+            val current = load(id).getOrThrow()
+            val count = current.countReference?.reps ?: return@runCatching null
+            if (current.references.isNotEmpty() && confirmationSource(id) != SOURCE_VIDEO_WINDOWS) return@runCatching null
+            val capture = captures.load(id).getOrThrow()
+            if (capture.status != CalibrationCaptureStatus.REVIEW_PENDING || !capture.videoComplete) return@runCatching null
+            val written = captures.motionFrames(id).getOrThrow().filter { it.videoFrameWritten }
+            val found = proposals ?: CameraRepProposals.propose(written, capture.exerciseId, capture.watchOnLeft)
+            val byNs = written.associateBy { it.cameraTimestampNs }
+            val spans = found.map { cycle ->
+                val start = byNs[cycle.startNs]?.videoPresentationUs; val end = byNs[cycle.endNs]?.videoPresentationUs
+                if (start == null || end == null || end <= start) null else RepSpan((start / 1000).toInt(), (end / 1000).toInt())
+            }
+            val selected = RepPromotion.select(found, spans, rejected, count) ?: return@runCatching null
+            if (alignment(id).getOrNull() == null) return@runCatching null
+            if (current.references.isNotEmpty() && cameraCycles(id).getOrNull() == selected) return@runCatching null
+            saveCycles(id, selected, true, current.revision, confirmationSource = SOURCE_VIDEO_WINDOWS).getOrThrow()
         }
     }
 
@@ -143,7 +184,7 @@ class CalibrationReviewStore(private val context: Context) {
         }
     }
 
-    private fun write(review: CalibrationReview, cameraCycles: List<RepCycle>? = null) {
+    private fun write(review: CalibrationReview, cameraCycles: List<RepCycle>? = null, source: String? = null) {
         val json = JSONObject().put("schemaVersion", 1).put("captureId", review.captureId).put("revision", review.revision)
             .put("count", review.countReference?.let { JSONObject().put("reps", it.reps).put("reviewedAtMs", it.reviewedAtMs) } ?: JSONObject.NULL)
             .put("cameraCycles", cycles(cameraCycles ?: cameraCycles(review.captureId).getOrThrow()))
@@ -152,7 +193,7 @@ class CalibrationReviewStore(private val context: Context) {
             .put("cameraObservedMetrics", review.cameraMetrics?.let(::encodeMetrics) ?: JSONObject.NULL)
             .put("cameraSquatMetrics", review.squatMetrics?.let(::encodeSquatMetrics) ?: JSONObject.NULL)
             .put("cameraProposalOrigin", context.getSharedPreferences("camera-rep-proposals", Context.MODE_PRIVATE).getString(review.captureId, null)?.let(::JSONArray) ?: JSONObject.NULL)
-            .put("confirmationSource", "USER_REVIEWED_VIDEO")
+            .put("confirmationSource", source ?: confirmationSource(review.captureId))
             .put("references", JSONArray(review.references.map { reference -> JSONObject()
                 .put("cycle", cycles(listOf(reference.cycle)).getJSONObject(0)).put("uncertaintyNs", reference.alignmentUncertaintyNs ?: JSONObject.NULL)
                 .put("alignmentVerified", reference.alignmentVerified).put("sensorCovered", reference.sensorCoverageComplete)
@@ -249,5 +290,9 @@ class CalibrationReviewStore(private val context: Context) {
         require(id.matches(Regex("paired-[A-Za-z0-9-]{1,100}")))
         return File(context.filesDir, "calibration-captures/$id")
     }
-    companion object { private val lock = Any() }
+    companion object {
+        private val lock = Any()
+        const val SOURCE_USER_REVIEWED = "USER_REVIEWED_VIDEO"
+        const val SOURCE_VIDEO_WINDOWS = "VIDEO_WINDOWS_MATCHING_CONFIRMED_COUNT"
+    }
 }
