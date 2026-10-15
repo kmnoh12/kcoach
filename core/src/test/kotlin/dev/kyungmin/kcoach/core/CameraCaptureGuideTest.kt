@@ -44,6 +44,15 @@ class CameraCaptureGuideTest {
         assertFalse(guide.visible(points)); points[15] = points[15].copy(presence = 1.0, x = 1.2)
         assertFalse(guide.visible(points))
     }
+    @Test fun elbowAngleExercisesPassWithTheHipOutOfAnUpperBodySelfieFrame() {
+        val points = frame(1000, 160.0).imageLandmarks.single().toMutableList()
+        listOf(23, 24, 25, 26, 27, 28).forEach { points[it] = points[it].copy(y = 1.3, visibility = 0.0) }
+        for (id in listOf("dumbbell_curl", "cable_seated_row", "lat_pull_down", "dumbbell_shoulder_press", "cable_pushdown"))
+            assertTrue(CameraCaptureGuide.forExercise(id, true).visible(points), id)
+        // The shoulder-raise angle is measured against the torso, so the hip stays required.
+        assertFalse(CameraCaptureGuide.forExercise("dumbbell_lateral_raise", true).visible(points))
+        assertFalse(CameraCaptureGuide.forExercise("squat", true).visible(points))
+    }
     @Test fun completeCandidateKeepsActualFrameBoundariesAndIncompleteOrHiddenMotionDoesNotCount() {
         val frames = listOf(frame(1000, 160.0), frame(1200, 160.0), frame(1400, 120.0), frame(1600, 60.0),
             frame(1800, 100.0), frame(2000, 160.0))

@@ -75,6 +75,8 @@ class CalibrationCameraActivity : ComponentActivity() {
     private var frameIndex = 0L
     private var timestampSource = CameraTimestampSource.UNKNOWN
     private var counter: UpperBodyPoseCounter? = null
+    private val guideFamily by lazy { CameraPoseGuide.familyFor(exerciseId) }
+    private val guideSmoother = CameraPoseGuideSmoother()
     private val finalizer by lazy { CalibrationCaptureFinalizer(store) }
     private var lastClockWindowAtMs = 0L
     private val clockReceiver = object : BroadcastReceiver() {
@@ -387,7 +389,16 @@ class CalibrationCameraActivity : ComponentActivity() {
                 if (videoUs >= 120_000_000L) stopCapture(null)
             }
             val frameWidth = bitmap.width; val frameHeight = bitmap.height
-            main.post { overlay.points = normalized.singleOrNull().orEmpty(); overlay.frameWidth = frameWidth; overlay.frameHeight = frameHeight; overlay.invalidate() }
+            // Start-pose pictogram follows the user's own shoulder and size; readiness stays the angle check above.
+            val figure = guideFamily?.takeIf { capture == null && !starting }?.let { family ->
+                val anchor = normalized.singleOrNull()?.let { CameraPoseGuide.measure(it, frameWidth.toDouble(), frameHeight.toDouble(), family, previewLeft) }
+                guideSmoother.update(anchor, modelMs)?.let { CameraPoseGuide.build(family, it) }
+            }
+            val matched = poseReady
+            main.post {
+                overlay.points = normalized.singleOrNull().orEmpty(); overlay.frameWidth = frameWidth; overlay.frameHeight = frameHeight
+                overlay.update(figure, matched); overlay.invalidate()
+            }
         } catch (error: Throwable) {
             val storageFull = captureStorageFull(error)
             val hadCapture = capture != null || preparedCapture != null
@@ -463,17 +474,98 @@ class CalibrationCameraActivity : ComponentActivity() {
         var points: List<CameraLandmark> = emptyList()
         var frameWidth = 1
         var frameHeight = 1
-        private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(30, 210, 190); strokeWidth = 5f }
+        private var figure: GuideFigure? = null
+        private var matchedSinceMs: Long? = null
+        private val dp = resources.displayMetrics.density
+        private val accent = Color.rgb(45, 212, 191)
+        private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = accent; strokeWidth = 3 * dp; strokeCap = Paint.Cap.ROUND }
+        private val dot = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
+        private val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = accent; style = Paint.Style.STROKE; strokeWidth = 1.5f * dp }
+        private val shape = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND }
+        private val badge = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(64, 220, 120) }
+        private val tick = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE; style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND; strokeWidth = 4 * dp
+        }
+
+        fun update(next: GuideFigure?, matched: Boolean) {
+            figure = next
+            matchedSinceMs = if (matched) matchedSinceMs ?: SystemClock.uptimeMillis() else null
+        }
+
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
             val scale = minOf(width.toFloat() / frameWidth, height.toFloat() / frameHeight)
             val dx = (width - frameWidth * scale) / 2; val dy = (height - frameHeight * scale) / 2
+            drawGuide(canvas, scale, dx, dy)
+            // Mirrored selfie preview: landmarks are in the unmirrored frame.
+            fun vx(x: Double) = dx + (1 - x).toFloat() * frameWidth * scale
+            fun vy(y: Double) = dy + y.toFloat() * frameHeight * scale
+            fun confidence(p: CameraLandmark) = minOf(p.visibility ?: 0.0, p.presence ?: 0.0)
             val edges = listOf(11 to 12, 11 to 13, 13 to 15, 12 to 14, 14 to 16, 11 to 23, 12 to 24, 23 to 24, 23 to 25, 25 to 27, 24 to 26, 26 to 28)
             edges.forEach { (a, b) ->
                 val first = points.getOrNull(a) ?: return@forEach; val second = points.getOrNull(b) ?: return@forEach
-                if (minOf(first.visibility ?: 0.0, first.presence ?: 0.0, second.visibility ?: 0.0, second.presence ?: 0.0) < 0.6) return@forEach
-                canvas.drawLine(dx + (1 - first.x).toFloat() * frameWidth * scale, dy + first.y.toFloat() * frameHeight * scale,
-                    dx + (1 - second.x).toFloat() * frameWidth * scale, dy + second.y.toFloat() * frameHeight * scale, paint)
+                val c = minOf(confidence(first), confidence(second))
+                if (c < 0.2) return@forEach
+                line.alpha = if (c < 0.6) 60 else 166
+                canvas.drawLine(vx(first.x), vy(first.y), vx(second.x), vy(second.y), line)
+            }
+            edges.flatMap { listOf(it.first, it.second) }.toSet().forEach { index ->
+                val p = points.getOrNull(index) ?: return@forEach
+                val c = confidence(p)
+                if (c < 0.2) return@forEach
+                // Weak joints stay visible but small and faint, so the user sees what is not tracked.
+                val strong = c >= 0.6
+                dot.alpha = if (strong) 245 else 110; ring.alpha = if (strong) 255 else 110
+                val r = (if (strong) 4.5f else 3f) * dp
+                canvas.drawCircle(vx(p.x), vy(p.y), r, dot); canvas.drawCircle(vx(p.x), vy(p.y), r, ring)
+            }
+        }
+
+        private fun drawGuide(canvas: Canvas, scale: Float, dx: Float, dy: Float) {
+            val shown = figure ?: return
+            val since = matchedSinceMs
+            val held = since?.let { SystemClock.uptimeMillis() - it } ?: 0L
+            // Green with a check, then fades out once the start pose is confirmed.
+            val fade = when { since == null || held < 600 -> 1f; held < 900 -> 1f - (held - 600) / 300f; else -> return }
+            if (since != null) postInvalidateOnAnimation()
+            val color = if (since != null) Color.rgb(90, 222, 132) else Color.rgb(205, 209, 207)
+            val alpha = ((if (since != null) 0.42f else 0.36f) * fade * 255).toInt()
+            fun gx(p: GuidePoint) = dx + (frameWidth - p.x).toFloat() * scale
+            fun gy(p: GuidePoint) = dy + p.y.toFloat() * scale
+            fun limb(l: GuideLimb, extra: Float = 0f) {
+                shape.style = Paint.Style.STROKE; shape.strokeWidth = l.width.toFloat() * scale + extra
+                for (i in 0 until l.points.size - 1) canvas.drawLine(gx(l.points[i]), gy(l.points[i]), gx(l.points[i + 1]), gy(l.points[i + 1]), shape)
+            }
+            shape.color = color
+            canvas.saveLayerAlpha(null, alpha / 2)
+            shown.limbs.filter { !it.primary }.forEach { limb(it) }
+            canvas.restore()
+            canvas.saveLayerAlpha(null, alpha)
+            if (shown.torso.size == 2) {
+                shape.style = Paint.Style.STROKE; shape.strokeWidth = shown.torsoWidth.toFloat() * scale
+                canvas.drawLine(gx(shown.torso[0]), gy(shown.torso[0]), gx(shown.torso[1]), gy(shown.torso[1]), shape)
+            } else {
+                val path = android.graphics.Path().apply {
+                    moveTo(gx(shown.torso[0]), gy(shown.torso[0])); shown.torso.drop(1).forEach { lineTo(gx(it), gy(it)) }; close()
+                }
+                shape.style = Paint.Style.FILL; shape.pathEffect = android.graphics.CornerPathEffect(6 * dp)
+                canvas.drawPath(path, shape); shape.pathEffect = null
+            }
+            shape.style = Paint.Style.FILL
+            canvas.drawCircle(gx(shown.head), gy(shown.head), shown.headRadius.toFloat() * scale, shape)
+            shown.limbs.filter { it.primary }.forEach { l ->
+                // A dark edge keeps a target arm readable where it crosses the torso in side views.
+                if (shown.torso.size == 2) { shape.color = Color.rgb(20, 24, 23); limb(l, 3 * dp); shape.color = color }
+                limb(l)
+            }
+            canvas.restore()
+            if (since != null) {
+                val cx = width / 2f; val cy = 44 * dp; val r = 22 * dp
+                badge.alpha = (235 * fade).toInt(); tick.alpha = (255 * fade).toInt()
+                canvas.drawCircle(cx, cy, r, badge)
+                canvas.drawPath(android.graphics.Path().apply {
+                    moveTo(cx - r * .42f, cy); lineTo(cx - r * .1f, cy + r * .34f); lineTo(cx + r * .45f, cy - r * .3f)
+                }, tick)
             }
         }
     }

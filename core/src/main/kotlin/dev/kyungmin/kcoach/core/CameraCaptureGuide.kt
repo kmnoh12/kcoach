@@ -34,6 +34,10 @@ data class CameraCaptureGuide(val id: String, val direction: String, val framing
                 recipe == MeasurementRecipe.MANUAL && id in setOf("hip_adduction", "hip_abduction") -> setOf(23, 24, 25, 26, 27, 28)
                 recipe == MeasurementRecipe.MANUAL -> setOf(11, 12, 15, 16, 23, 24, 27, 28)
                 recipe == MeasurementRecipe.SQUAT -> recipe.cameraLandmarks + 0
+                // Elbow angles use shoulder-elbow-wrist only: an upper-body selfie may crop the hip.
+                recipe in setOf(MeasurementRecipe.CURL, MeasurementRecipe.ROW, MeasurementRecipe.VERTICAL_PULL,
+                    MeasurementRecipe.SHOULDER_PRESS, MeasurementRecipe.TRICEPS_EXTENSION, MeasurementRecipe.CHEST_PRESS) ->
+                    setOf(shoulder, elbow, wrist)
                 else -> setOf(shoulder, elbow, wrist, hip)
             }
             val direction = when (recipe) {
