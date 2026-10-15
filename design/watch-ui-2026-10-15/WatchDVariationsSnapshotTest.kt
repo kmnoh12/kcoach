@@ -16,6 +16,45 @@ import java.io.File
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34], qualifiers = "w216dp-h216dp-round-xhdpi")
 class WatchDVariationsSnapshotTest {
+    @Test fun renderD2WithTheWholeSecondPage() {
+        val output = File("build/outputs/watch-design").apply { mkdirs() }
+        val context = RuntimeEnvironment.getApplication()
+        fun render(view: View): Bitmap {
+            val exact = View.MeasureSpec.makeMeasureSpec(432, View.MeasureSpec.EXACTLY)
+            view.measure(exact, exact); view.layout(0, 0, 432, 432)
+            return Bitmap.createBitmap(432, 432, Bitmap.Config.ARGB_8888).also { view.draw(Canvas(it)) }
+        }
+        fun save(bitmap: Bitmap, name: String) = File(output, "$name.png").outputStream().use {
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
+        }
+        val primary = render(DVariationView(context, 1))
+        val details = render(D2DetailsPreview(context))
+        save(details, "draft-d2-details")
+        val board = Bitmap.createBitmap(1000, 650, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(board)
+        canvas.drawColor(Color.rgb(24, 26, 29))
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; textSize = 32f; typeface = Typeface.DEFAULT_BOLD }
+        canvas.drawText("D2 · 첫 화면과 아래로 넘긴 화면", 40f, 48f, paint)
+        paint.textSize = 22f; paint.color = Color.rgb(183, 190, 199); paint.typeface = Typeface.DEFAULT
+        canvas.drawText("현재 세트와 기록할 횟수 확인 · 각 화면은 워치 전체 영역 사용", 40f, 82f, paint)
+        listOf(primary, details).forEachIndexed { index, bitmap ->
+            val x = if (index == 0) 52f else 516f
+            paint.textSize = 25f; paint.color = Color.WHITE; paint.typeface = Typeface.DEFAULT_BOLD
+            canvas.drawText(if (index == 0) "첫 화면 · 운동 중" else "아래로 · 현재 세트 조작", x + 12f, 132f, paint)
+            canvas.save()
+            canvas.clipPath(Path().apply { addCircle(x + 216f, 370f, 214f, Path.Direction.CW) })
+            canvas.drawBitmap(bitmap, x, 154f, null)
+            canvas.restore()
+            paint.style = Paint.Style.STROKE; paint.strokeWidth = 1f; paint.color = Color.rgb(73, 78, 87)
+            canvas.drawCircle(x + 216f, 370f, 214f, paint)
+            paint.style = Paint.Style.FILL
+        }
+        paint.textSize = 21f; paint.color = Color.rgb(183, 190, 199); paint.typeface = Typeface.DEFAULT
+        canvas.drawText("추가 화면 구성 제안 · 표시 값은 비교용 · 앱 미적용", 40f, 626f, paint)
+        save(board, "comparison-d2-pages")
+        board.recycle(); primary.recycle(); details.recycle()
+    }
+
     @Test fun renderD1WithoutBpmAndVerifyTargetColorBoundary() {
         val output = File("build/outputs/watch-design").apply { mkdirs() }
         fun render(reps: Int, target: Int = 20): Bitmap {
@@ -178,6 +217,43 @@ class WatchDVariationsSnapshotTest {
         canvas.drawText("D의 큰 횟수 + 하단 중량·심박 유지 · 비교용 예시 · 앱 미적용", 40f, 1144f, paint)
         save(board, "comparison-d-variations")
         board.recycle(); images.forEach { it.recycle() }
+    }
+}
+
+/** Proposed second page only. Buttons are drawn for visual review, without command bindings. */
+private class D2DetailsPreview(context: Context) : View(context) {
+    private val white = Color.rgb(245, 247, 250)
+    private val muted = Color.rgb(164, 177, 190)
+    private val green = Color.rgb(0, 230, 140)
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private fun text(canvas: Canvas, value: String, baseline: Float, sp: Float,
+        color: Int = white, bold: Boolean = false) {
+        paint.style = Paint.Style.FILL; paint.color = color; paint.textAlign = Paint.Align.CENTER
+        paint.textSize = sp * resources.displayMetrics.scaledDensity
+        paint.typeface = if (bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+        paint.fontFeatureSettings = "tnum"
+        canvas.drawText(value, 216f, baseline, paint)
+    }
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        canvas.drawColor(Color.BLACK)
+        text(canvas, "10:09", 38f, 12f, muted)
+        text(canvas, "덤벨 컬", 85f, 16f, bold = true)
+        text(canvas, "1세트 · 현재 8회", 122f, 12f, muted)
+        // Each proposed action occupies 48dp in height on this 216dp / 432px preview.
+        paint.color = green
+        canvas.drawRoundRect(RectF(76f, 150f, 356f, 246f), 22f, 22f, paint)
+        text(canvas, "세트 마치기", 190f, 15f, Color.rgb(3, 20, 13), true)
+        text(canvas, "8회로 기록", 223f, 12f, Color.rgb(3, 20, 13))
+        paint.color = Color.rgb(27, 33, 39)
+        canvas.drawRoundRect(RectF(76f, 258f, 356f, 354f), 22f, 22f, paint)
+        text(canvas, "횟수 수정", 316f, 15f, white, true)
+        paint.color = muted; paint.style = Paint.Style.STROKE; paint.strokeWidth = 2.5f
+        paint.strokeCap = Paint.Cap.ROUND
+        canvas.drawLine(210f, 374f, 216f, 369f, paint)
+        canvas.drawLine(216f, 369f, 222f, 374f, paint)
+        paint.style = Paint.Style.FILL
+        text(canvas, "위로 · 횟수 화면", 404f, 11f, muted)
     }
 }
 
