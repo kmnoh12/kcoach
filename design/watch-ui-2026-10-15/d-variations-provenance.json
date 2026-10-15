@@ -1,0 +1,28 @@
+{
+  "capture_type": "Native Android Canvas design rendering; not physical capture or app implementation",
+  "base_design": "D, user-selected direction",
+  "drafts": [
+    "D1",
+    "D2",
+    "D3",
+    "D4"
+  ],
+  "viewport_px": [
+    432,
+    432
+  ],
+  "viewport_dp": [
+    216,
+    216
+  ],
+  "sample": {
+    "exercise": "덤벨 컬",
+    "set": 1,
+    "weight_kg": 10,
+    "reps": 8,
+    "target_reps": 20,
+    "heart_rate_bpm": 112,
+    "clock": "10:09 (example)"
+  },
+  "production_source_modified": false
+}
