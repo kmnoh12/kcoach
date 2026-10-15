@@ -95,7 +95,64 @@ class CalibrationResultScreenTest {
         var research = 0
         compose.setContent { CalibrationResultScreen(clip.copy(confirmedCount = 10, watchCount = 9), emptyList(), false, {}, {}, {}, { research++ }) }
         assertEquals(0,research)
-        compose.onNodeWithText("다른 횟수의 구간 확인").performScrollTo().performClick()
+        compose.onNodeWithText("반복 구간 표시").performScrollTo().performClick()
         assertEquals(1,research)
+    }
+
+    private val rows = listOf(
+        CaptureRowUi("a", "케이블 외회전", "10월 15일 오후 11:02 · 10회 확인"),
+        CaptureRowUi("b", "케이블 외회전", "10월 15일 오후 10:41 · 횟수 확인 전"),
+        CaptureRowUi("c", "바벨 바이셉 컬", "10월 14일 오후 9:12 · 중단됨"))
+
+    @Test fun listShowsDateAndStateAndLongPressStartsSelectionWithABottomDeleteBar() {
+        var deleted: Set<String>? = null; var opened: String? = null
+        compose.setContent { CalibrationResultScreen(null, rows, false, { opened = it }, {}, {}, {}, deleteClips = { deleted = it }) }
+        compose.onNodeWithText("10월 15일 오후 10:41 · 횟수 확인 전").assertExists()
+        compose.onNodeWithContentDescription("뒤로").assertExists()
+        compose.onNodeWithText("바벨 바이셉 컬").performClick(); assertEquals("c", opened)
+        compose.onNodeWithText("10월 15일 오후 11:02 · 10회 확인").performTouchInput { longClick() }
+        compose.onNodeWithText("1개 선택됨").assertExists()
+        compose.onNodeWithText("삭제 · 1개").assertExists()
+        compose.onNodeWithText("10월 15일 오후 10:41 · 횟수 확인 전").performClick()
+        compose.onNodeWithText("2개 선택됨").assertExists()
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/capture-list-selecting.png")
+        compose.onNodeWithText("전체").performClick()
+        compose.onNodeWithText("3개 선택됨").assertExists()
+        compose.onNodeWithText("전체").performClick()
+        compose.onNodeWithText("촬영을 선택해 주세요").assertExists()
+        compose.onNodeWithText("전체").performClick()
+        compose.onNodeWithText("삭제 · 3개").performClick()
+        compose.onNodeWithText("3개 촬영을 삭제할까요?").assertExists()
+        assertNull(deleted)
+        compose.onNodeWithText("삭제", useUnmergedTree = true).performClick()
+        assertEquals(setOf("a", "b", "c"), deleted)
+        compose.onNodeWithText("3개 선택됨").assertDoesNotExist()
+    }
+
+    @Test fun cancelLeavesSelectionModeWithoutDeleting() {
+        var deleted: Set<String>? = null
+        compose.setContent { CalibrationResultScreen(null, rows, false, {}, {}, {}, {}, deleteClips = { deleted = it }) }
+        compose.onNodeWithText("바벨 바이셉 컬").performTouchInput { longClick() }
+        compose.onNodeWithText("취소").performClick()
+        compose.onNodeWithText("1개 선택됨").assertDoesNotExist()
+        compose.onNodeWithText("저장한 촬영").assertExists()
+        assertNull(deleted)
+    }
+
+    @Test fun detailHasABackArrowAnExerciseSpecificGraphTitleAndAConfirmedDelete() {
+        var back = 0; var deleted = 0
+        val shown = clip.copy(graphTitle = "영상 속 팔뚝 방향", confirmedCount = 11, watchCount = 10,
+            message = "11회로 저장했어요. 워치는 10회로 세서 서로 달라요. 어디서 갈렸는지 반복 구간을 표시해 주세요.")
+        compose.setContent { CalibrationResultScreen(shown, rows, false, {}, {}, { back++ }, {}, deleteClip = { deleted++ }) }
+        compose.onNodeWithText("영상 속 팔뚝 방향").performScrollTo().assertExists()
+        compose.onNodeWithText("영상 속 손목 높이").assertDoesNotExist()
+        compose.onNodeWithText("11회로 저장했어요. 워치는 10회로 세서 서로 달라요. 어디서 갈렸는지 반복 구간을 표시해 주세요.").assertExists()
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/capture-detail-mismatch.png")
+        compose.onNodeWithContentDescription("뒤로").performClick(); assertEquals(1, back)
+        compose.onNodeWithContentDescription("삭제").performClick()
+        compose.onNodeWithText("이 촬영을 삭제할까요?").assertExists()
+        compose.onNodeWithText("취소").performClick(); assertEquals(0, deleted)
+        compose.onNodeWithContentDescription("삭제").performClick()
+        compose.onNodeWithText("삭제", useUnmergedTree = true).performClick(); assertEquals(1, deleted)
     }
 }

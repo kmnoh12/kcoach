@@ -11,6 +11,10 @@ import androidx.compose.runtime.*
 import dev.kyungmin.kcoach.core.*
 import dev.kyungmin.kcoach.phone.ui.CalibrationResultScreen
 import dev.kyungmin.kcoach.phone.ui.CapturePlaybackUi
+import dev.kyungmin.kcoach.phone.ui.CaptureRowUi
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.concurrent.Executors
 
 /** Ordinary count confirmation. This activity never calls saveCycles or verifies alignment for the user. */
@@ -23,7 +27,8 @@ class CalibrationResultActivity : ComponentActivity() {
     private var loading by mutableStateOf(false)
     private var loadError by mutableStateOf<String?>(null)
     private var clip by mutableStateOf<CapturePlaybackUi?>(null)
-    private var clips by mutableStateOf(emptyList<Pair<String, String>>())
+    private var clips by mutableStateOf(emptyList<CaptureRowUi>())
+    private var notice by mutableStateOf<String?>(null)
     private var busy by mutableStateOf(false)
     private var revision = 0L
     private var generation = 0
@@ -33,9 +38,10 @@ class CalibrationResultActivity : ComponentActivity() {
         selected = if (savedInstanceState != null) savedInstanceState.getString("captureId") else intent.getStringExtra("captureId")
         setContent {
             BackHandler(selected != null) { selected = null; clip = null; refresh() }
-            CalibrationResultScreen(clip, clips, busy, select = { selected = it; clip = null; refresh() }, answer = ::saveCount,
+            CalibrationResultScreen(clip, clips, busy, select = { selected = it; clip = null; notice = null; refresh() }, answer = ::saveCount,
                 back = { if (selected != null) { selected = null; clip = null; refresh() } else finish() },
                 loading = loading, error = loadError, retry = ::refresh,
+                deleteClips = ::deleteCaptures, deleteClip = { selected?.let { deleteCaptures(setOf(it)) } }, notice = notice,
                 research = { startActivity(Intent(this, CalibrationReviewActivity::class.java).apply { selected?.let { putExtra("captureId", it) } }) })
         }
     }
@@ -57,11 +63,11 @@ class CalibrationResultActivity : ComponentActivity() {
                 val review = reviews.load(id).getOrThrow()
                 val frames = captures.motionFrames(id).getOrThrow().filter { it.videoFrameWritten }
                 val end = frames.lastOrNull()?.videoPresentationUs?.div(1000)?.toInt() ?: 0
-                val wrist = if (capture.watchOnLeft) 15 else 16
+                val signal = CameraGraphSignal.forExercise(capture.exerciseId)
                 val heights = frames.mapNotNull { frame ->
-                    val p = frame.imageLandmarks.singleOrNull()?.getOrNull(wrist)
-                    if (p == null || minOf(p.visibility ?: 0.0, p.presence ?: 0.0) < CameraCaptureGuide.MIN_CONFIDENCE ||
-                        p.x !in .02.. .98 || p.y !in .02.. .98) null else (frame.videoPresentationUs/1000).toInt() to (1-p.y).toFloat()
+                    val value = frame.imageLandmarks.singleOrNull()
+                        ?.let { signal.value(it, frame.width.toDouble(), frame.height.toDouble(), capture.watchOnLeft) } ?: return@mapNotNull null
+                    (frame.videoPresentationUs / 1000).toInt() to value.toFloat()
                 }
                 val proposals = CameraRepProposals.propose(frames, capture.exerciseId, capture.watchOnLeft)
                 val byNs = frames.associateBy { it.cameraTimestampNs }
@@ -70,20 +76,21 @@ class CalibrationResultActivity : ComponentActivity() {
                     if (start == null || stop == null) null else (start/1000).toInt() to (stop/1000).toInt()
                 }
                 val watch = captures.sensor(id).getOrNull()?.manifest?.payload?.get(WirePayloadKeys.WATCH_REPS)?.toIntOrNull()
+                val counted = review.countReference?.reps
                 val message = when {
-                    review.countReference == null -> "영상을 보고 실제 횟수를 확인해 주세요."
-                    watch == null -> "횟수 저장 완료 · 워치 기록 수신 대기"
-                    watch != review.countReference.reps -> "워치 횟수와 달라요. 영상을 다시 확인해 주세요."
-                    else -> "횟수 저장 완료 · 반복 구간은 아직 확인 전이에요."
+                    counted == null -> "영상을 보고 실제로 한 횟수를 알려 주세요."
+                    watch == null -> "${counted}회로 저장했어요. 워치 기록을 받는 중이에요."
+                    watch != counted -> "${counted}회로 저장했어요. 워치는 ${watch}회로 세서 서로 달라요. 어디서 갈렸는지 반복 구간을 표시해 주세요."
+                    else -> "${counted}회로 저장했어요. 워치도 ${watch}회로 세서 일치해요."
                 }
                 review.revision to CapturePlaybackUi(id, capture.exerciseName,
                     captures.videoFile(id).takeIf { capture.videoComplete && it.isFile }?.absolutePath,
                     end, heights, intervals, review.countReference?.reps, watch, message,
                     captures.performance(id)?.let { raw -> org.json.JSONObject(raw).getJSONArray("windows").let { rows ->
                         (0 until rows.length()).joinToString("\n") { rows.getString(it) }
-                    } }.orEmpty())
+                    } }.orEmpty(), signal.title)
             }
-            val list = runCatching { if (id == null) captures.list().map { it.id to it.exerciseName } else null }
+            val list = runCatching { if (id == null) captures.list().map { row(it) } else null }
             main.post {
                 if (isDestroyed || request != generation) return@post
                 loading = false
@@ -94,6 +101,32 @@ class CalibrationResultActivity : ComponentActivity() {
             }
         }
     }
+    private fun row(capture: CalibrationCapture): CaptureRowUi {
+        val date = SimpleDateFormat("M월 d일 a h:mm", Locale.KOREAN).format(Date(capture.createdAtMs))
+        val state = reviews.load(capture.id).getOrNull()?.countReference?.reps?.let { "${it}회 확인" }
+            ?: if (capture.status == CalibrationCaptureStatus.INTERRUPTED) "중단됨" else "횟수 확인 전"
+        return CaptureRowUi(capture.id, capture.exerciseName, "$date · $state")
+    }
+
+    private fun deleteCaptures(ids: Set<String>) {
+        if (busy || ids.isEmpty()) return
+        busy = true; notice = null
+        worker.execute {
+            val outcome = CalibrationCaptureDeletion(this).delete(ids)
+            main.post {
+                if (isDestroyed) return@post
+                busy = false
+                notice = when {
+                    outcome.blocked.isEmpty() -> "${outcome.deleted.size}개 촬영을 삭제했어요."
+                    outcome.deleted.isEmpty() -> "삭제하지 못했어요. ${outcome.blocked.values.first()} 남겨 뒀어요."
+                    else -> "${outcome.deleted.size}개 삭제했어요. ${outcome.blocked.size}개는 ${outcome.blocked.values.first()} 남겨 뒀어요."
+                }
+                if (selected in outcome.deleted) { selected = null; clip = null }
+                refresh()
+            }
+        }
+    }
+
     private fun saveCount(count: Int) {
         val id = selected ?: return
         if (busy || clip?.id != id) return

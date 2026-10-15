@@ -32,7 +32,7 @@ class CalibrationResultActivityTest {
             compose.onNodeWithText("아직 촬영 자료가 없어요.").assertDoesNotExist()
             compose.onNodeWithText("다시 불러오기").performClick()
             awaitText("촬영 자료를 읽지 못했어요. 다시 시도해 주세요.")
-            compose.onNodeWithText("뒤로").performClick()
+            compose.onNodeWithContentDescription("뒤로").performClick()
             awaitText("아직 촬영 자료가 없어요.")
         }
     }
@@ -51,7 +51,7 @@ class CalibrationResultActivityTest {
             assertTrue(CalibrationReviewStore(app).cameraCycles(capture.id).getOrThrow().isEmpty())
             scenario.recreate()
             awaitText("확인한 횟수")
-            compose.onNodeWithText("뒤로").performScrollTo().performClick()
+            compose.onNodeWithContentDescription("뒤로").performClick()
             awaitText("저장한 촬영")
             scenario.recreate()
             awaitText("저장한 촬영")

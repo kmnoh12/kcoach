@@ -217,6 +217,16 @@ class CalibrationCaptureStore(private val context: Context) {
         }
     }
 
+    /** Removes one capture's folder (video, frames, reviews, sensor link). The raw watch file in the shared inbox is left alone. */
+    fun delete(id: String): Result<Unit> = synchronized(lock) {
+        runCatching {
+            val directory = directory(id)
+            if (directory.exists()) check(directory.deleteRecursively()) { "Could not delete $id" }
+            cursors.keys.removeAll { it.startsWith(directory.absolutePath) }
+            Unit
+        }
+    }
+
     private fun directory(id: String): File {
         require(id.matches(Regex("paired-[A-Za-z0-9-]{1,100}")))
         return File(root, id)
