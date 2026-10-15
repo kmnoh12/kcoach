@@ -37,7 +37,12 @@ data class CapturePlaybackUi(
     val heights: List<Pair<Int, Float>>, val intervals: List<Pair<Int, Int>>,
     val confirmedCount: Int? = null, val watchCount: Int? = null, val message: String = "", val diagnostics: String = "",
     val graphTitle: String = "영상 속 손목 높이",
+    /** Windows where the video and the watch disagree; empty when they agree or the watch log cannot be aligned. */
+    val mismatches: List<MismatchRowUi> = emptyList(), val watchSpansKnown: Boolean = false,
 )
+
+/** [answer] is the user's reply to "did you really do a rep here?"; null until they tap. */
+data class MismatchRowUi(val startMs: Int, val endMs: Int, val videoOnly: Boolean, val answer: Boolean? = null)
 
 /** One saved capture in the list: [meta] is the date and the confirmation state. */
 data class CaptureRowUi(val id: String, val name: String, val meta: String)
@@ -49,6 +54,7 @@ fun CalibrationResultScreen(
     select: (String) -> Unit, answer: (Int) -> Unit, back: () -> Unit, research: () -> Unit,
     loading: Boolean = false, error: String? = null, retry: () -> Unit = {},
     deleteClips: (Set<String>) -> Unit = {}, deleteClip: () -> Unit = {}, notice: String? = null,
+    answerMismatch: (startMs: Int, endMs: Int, videoOnly: Boolean, realRep: Boolean) -> Unit = { _, _, _, _ -> },
 ) {
     var researchVisible by remember { mutableStateOf(false) }
     var other by remember(clip?.id) { mutableStateOf(false) }
@@ -92,7 +98,7 @@ fun CalibrationResultScreen(
                             longClick = { if (!selecting) { selecting = true; picked = setOf(row.id) } })
                     }
                 } else {
-                    ClipDetail(clip, busy, other, number, { other = it }, { number = it }, answer, research, playbackMs) { playbackMs = it }
+                    ClipDetail(clip, busy, other, number, { other = it }, { number = it }, answer, research, playbackMs, answerMismatch) { playbackMs = it }
                 }
                 if (researchVisible) {
                     clip?.diagnostics?.takeIf { it.isNotBlank() }?.let { Text(it, color = KColors.Soft, fontSize = 12.sp) }
@@ -180,7 +186,8 @@ private fun CaptureRow(row: CaptureRowUi, selecting: Boolean, picked: Boolean, c
 @Composable
 private fun ClipDetail(
     clip: CapturePlaybackUi, busy: Boolean, other: Boolean, number: String, setOther: (Boolean) -> Unit, setNumber: (String) -> Unit,
-    answer: (Int) -> Unit, research: () -> Unit, playbackMs: Int, progress: (Int) -> Unit,
+    answer: (Int) -> Unit, research: () -> Unit, playbackMs: Int,
+    answerMismatch: (Int, Int, Boolean, Boolean) -> Unit, progress: (Int) -> Unit,
 ) {
     Column {
         Text(clip.confirmedCount?.let { "${it}회" } ?: "10회", color = KColors.Accent, fontSize = 64.sp, fontWeight = FontWeight.Medium)
@@ -193,7 +200,7 @@ private fun ClipDetail(
     Text(clip.graphTitle, color = KColors.Soft, fontSize = 13.sp)
     SignalGraph(clip, playbackMs)
     Text(if (clip.intervals.isEmpty()) "자동으로 표시한 반복 구간이 없어요. 영상을 보고 횟수를 확인해 주세요."
-        else "민트 구간은 영상에서 찾은 반복 후보예요.", color = KColors.Muted, fontSize = 12.sp)
+        else "민트 구간은 영상에서 찾은 반복 후보예요.${if (clip.mismatches.isEmpty()) "" else " 붉은 구간은 워치와 어긋난 곳이에요."}", color = KColors.Muted, fontSize = 12.sp)
     Text("10회 했나요?", color = KColors.White, fontSize = 22.sp)
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         val chosen = clip.confirmedCount
@@ -212,8 +219,33 @@ private fun ClipDetail(
     if (clip.message.isNotBlank()) Text(clip.message, color = KColors.Soft, fontSize = 14.sp)
     val mismatch = clip.confirmedCount != null && (clip.confirmedCount != 10 ||
         clip.watchCount != null && clip.watchCount != clip.confirmedCount)
-    if (mismatch) ResultAction("반복 구간 표시", enabled = !busy, action = research)
+    if (mismatch) MismatchSection(clip, busy, answerMismatch)
+    if (mismatch) ResultAction("반복 구간 직접 표시", enabled = !busy, action = research)
     if (busy) Text("저장 중…", color = KColors.Muted)
+}
+
+@Composable
+private fun MismatchSection(clip: CapturePlaybackUi, busy: Boolean, answer: (Int, Int, Boolean, Boolean) -> Unit) {
+    Text("워치와 영상이 어긋난 구간", color = KColors.White, fontSize = 18.sp)
+    when {
+        !clip.watchSpansKnown -> Text("워치 기록의 시간을 영상에 맞추지 못해 구간을 비교할 수 없어요.", color = KColors.Muted, fontSize = 13.sp)
+        clip.mismatches.isEmpty() -> Text("영상과 워치가 반복 구간을 서로 다르게 찾은 곳이 없어요.", color = KColors.Muted, fontSize = 13.sp)
+        else -> {
+            Text("답은 이 기기에만 저장하고, 반복 라벨로는 쓰지 않아요.", color = KColors.Muted, fontSize = 12.sp)
+            clip.mismatches.forEach { row ->
+                Column(Modifier.fillMaxWidth().clip(KShape.Control).background(KColors.Surface).padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val range = "%.1f~%.1f초".format(row.startMs / 1000.0, row.endMs / 1000.0)
+                    Text("$range · ${if (row.videoOnly) "영상에서만 찾은 구간" else "워치에서만 찾은 구간"}", color = KColors.White, fontSize = 15.sp)
+                    Text("이 구간에서 실제로 1회 했나요?", color = KColors.Soft, fontSize = 13.sp)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        ResultAction("맞아요", Modifier.weight(1f), !busy, selected = row.answer == true) { answer(row.startMs, row.endMs, row.videoOnly, true) }
+                        ResultAction("아니에요", Modifier.weight(1f), !busy, selected = row.answer == false) { answer(row.startMs, row.endMs, row.videoOnly, false) }
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -271,6 +303,10 @@ private fun SignalGraph(clip: CapturePlaybackUi, playbackMs: Int) {
         fun x(ms: Int) = size.width * ms / duration
         clip.intervals.forEach { (start, end) ->
             drawRect(KColors.AccentWash, Offset(x(start), 0f), androidx.compose.ui.geometry.Size((x(end)-x(start)).coerceAtLeast(1f), size.height))
+        }
+        clip.mismatches.forEach { row ->
+            drawRect(KColors.Red.copy(alpha = .22f), Offset(x(row.startMs), 0f),
+                androidx.compose.ui.geometry.Size((x(row.endMs) - x(row.startMs)).coerceAtLeast(1f), size.height))
         }
         if (clip.heights.size > 1) {
             val low = clip.heights.minOf { it.second }; val span = (clip.heights.maxOf { it.second } - low).coerceAtLeast(.01f)

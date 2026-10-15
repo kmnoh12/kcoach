@@ -62,6 +62,12 @@ class CalibrationCaptureStore(private val context: Context) {
 
     fun videoFile(id: String): File = File(directory(id), "reference.mp4")
 
+    /** A small user-owned file inside the capture folder, so it is deleted together with the capture. */
+    fun userFile(id: String, name: String): File {
+        require(name.matches(Regex("[a-z-]{1,40}\\.json")))
+        return File(directory(id), name)
+    }
+
     fun savePerformance(id: String, lines: List<String>): Result<Unit> = synchronized(lock) { runCatching {
         require(lines.size <= 180 && lines.all { it.length <= 1024 })
         val file = File(directory(id), "performance.json")

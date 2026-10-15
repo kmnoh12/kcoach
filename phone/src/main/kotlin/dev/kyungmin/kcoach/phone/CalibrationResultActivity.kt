@@ -12,6 +12,7 @@ import dev.kyungmin.kcoach.core.*
 import dev.kyungmin.kcoach.phone.ui.CalibrationResultScreen
 import dev.kyungmin.kcoach.phone.ui.CapturePlaybackUi
 import dev.kyungmin.kcoach.phone.ui.CaptureRowUi
+import dev.kyungmin.kcoach.phone.ui.MismatchRowUi
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -23,6 +24,7 @@ class CalibrationResultActivity : ComponentActivity() {
     private val main = Handler(Looper.getMainLooper())
     private val captures by lazy { CalibrationCaptureStore(this) }
     private val reviews by lazy { CalibrationReviewStore(this) }
+    private val answers by lazy { MismatchAnswerStore(captures) }
     private var selected by mutableStateOf<String?>(null)
     private var loading by mutableStateOf(false)
     private var loadError by mutableStateOf<String?>(null)
@@ -41,7 +43,7 @@ class CalibrationResultActivity : ComponentActivity() {
             CalibrationResultScreen(clip, clips, busy, select = { selected = it; clip = null; notice = null; refresh() }, answer = ::saveCount,
                 back = { if (selected != null) { selected = null; clip = null; refresh() } else finish() },
                 loading = loading, error = loadError, retry = ::refresh,
-                deleteClips = ::deleteCaptures, deleteClip = { selected?.let { deleteCaptures(setOf(it)) } }, notice = notice,
+                answerMismatch = ::answerMismatch, deleteClips = ::deleteCaptures, deleteClip = { selected?.let { deleteCaptures(setOf(it)) } }, notice = notice,
                 research = { startActivity(Intent(this, CalibrationReviewActivity::class.java).apply { selected?.let { putExtra("captureId", it) } }) })
         }
     }
@@ -75,12 +77,18 @@ class CalibrationResultActivity : ComponentActivity() {
                     val start = byNs[cycle.startNs]?.videoPresentationUs; val stop = byNs[cycle.endNs]?.videoPresentationUs
                     if (start == null || stop == null) null else (start/1000).toInt() to (stop/1000).toInt()
                 }
-                val watch = captures.sensor(id).getOrNull()?.manifest?.payload?.get(WirePayloadKeys.WATCH_REPS)?.toIntOrNull()
+                val sensor = captures.sensor(id).getOrNull()
+                val watch = sensor?.manifest?.payload?.get(WirePayloadKeys.WATCH_REPS)?.toIntOrNull()
+                val watchSpans = watchSpans(id, capture, sensor, frames)
+                val videoSpans = intervals.filter { it.second > it.first }.map { RepSpan(it.first, it.second) }
+                val saved = answers.load(id).associate { it.candidate to it.realRep }
+                val mismatches = if (watchSpans == null) emptyList() else RepMismatchFinder.find(videoSpans, watchSpans)
+                    .map { MismatchRowUi(it.span.startMs, it.span.endMs, it.side == MismatchSide.VIDEO_ONLY, saved[it]) }
                 val counted = review.countReference?.reps
                 val message = when {
                     counted == null -> "영상을 보고 실제로 한 횟수를 알려 주세요."
                     watch == null -> "${counted}회로 저장했어요. 워치 기록을 받는 중이에요."
-                    watch != counted -> "${counted}회로 저장했어요. 워치는 ${watch}회로 세서 서로 달라요. 어디서 갈렸는지 반복 구간을 표시해 주세요."
+                    watch != counted -> "${counted}회로 저장했어요. 워치는 ${watch}회로 세서 서로 달라요. 아래에서 어긋난 구간을 확인해 주세요."
                     else -> "${counted}회로 저장했어요. 워치도 ${watch}회로 세서 일치해요."
                 }
                 review.revision to CapturePlaybackUi(id, capture.exerciseName,
@@ -88,7 +96,8 @@ class CalibrationResultActivity : ComponentActivity() {
                     end, heights, intervals, review.countReference?.reps, watch, message,
                     captures.performance(id)?.let { raw -> org.json.JSONObject(raw).getJSONArray("windows").let { rows ->
                         (0 until rows.length()).joinToString("\n") { rows.getString(it) }
-                    } }.orEmpty(), signal.title)
+                    } }.orEmpty(), signal.title,
+                    mismatches = mismatches, watchSpansKnown = watchSpans != null)
             }
             val list = runCatching { if (id == null) captures.list().map { row(it) } else null }
             main.post {
@@ -101,6 +110,35 @@ class CalibrationResultActivity : ComponentActivity() {
             }
         }
     }
+    /** Watch repetitions found offline in the raw log, on the video clock; null when the clocks cannot be aligned. */
+    private fun watchSpans(id: String, capture: CalibrationCapture, sensor: ReceivedCapture?, frames: List<CameraPoseFrame>): List<RepSpan>? {
+        sensor ?: return null
+        val mapping = reviews.alignment(id).getOrNull() ?: return null
+        val clock = VideoClockMap(frames.map { it.cameraTimestampNs to it.videoPresentationUs })
+        return runCatching {
+            PaperPeakRepAnalyzer.analyze(sensor.validated.document, capture.exerciseId).cycles.mapNotNull { cycle ->
+                val start = clock.videoMs(mapping.phoneTimeNs(cycle.startNs, capture.phoneClockId, mapping.start.watchClockId))
+                val end = clock.videoMs(mapping.phoneTimeNs(cycle.endNs, capture.phoneClockId, mapping.start.watchClockId))
+                if (start == null || end == null || end <= start) null else RepSpan(start, end)
+            }
+        }.getOrNull()
+    }
+
+    private fun answerMismatch(startMs: Int, endMs: Int, videoOnly: Boolean, realRep: Boolean) {
+        val id = selected ?: return
+        if (busy || clip?.id != id) return
+        val candidate = MismatchCandidate(RepSpan(startMs, endMs), if (videoOnly) MismatchSide.VIDEO_ONLY else MismatchSide.WATCH_ONLY)
+        busy = true
+        worker.execute {
+            val result = answers.save(id, candidate, realRep)
+            main.post {
+                if (isDestroyed) return@post
+                busy = false
+                result.onSuccess { refresh() }.onFailure { notice = "답을 저장하지 못했어요. 다시 눌러 주세요." }
+            }
+        }
+    }
+
     private fun row(capture: CalibrationCapture): CaptureRowUi {
         val date = SimpleDateFormat("M월 d일 a h:mm", Locale.KOREAN).format(Date(capture.createdAtMs))
         val state = reviews.load(capture.id).getOrNull()?.countReference?.reps?.let { "${it}회 확인" }

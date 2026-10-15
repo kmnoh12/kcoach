@@ -95,8 +95,29 @@ class CalibrationResultScreenTest {
         var research = 0
         compose.setContent { CalibrationResultScreen(clip.copy(confirmedCount = 10, watchCount = 9), emptyList(), false, {}, {}, {}, { research++ }) }
         assertEquals(0,research)
-        compose.onNodeWithText("반복 구간 표시").performScrollTo().performClick()
+        compose.onNodeWithText("반복 구간 직접 표시").performScrollTo().performClick()
         assertEquals(1,research)
+    }
+
+    @Test fun mismatchWindowsAreAnsweredPerWindowAndNeverBecomeLabelsHere() {
+        val sent = mutableListOf<List<Any>>()
+        val rowsUi = listOf(MismatchRowUi(2500, 4500, videoOnly = true), MismatchRowUi(9000, 11000, videoOnly = false, answer = false))
+        compose.setContent { CalibrationResultScreen(clip.copy(confirmedCount = 10, watchCount = 9, mismatches = rowsUi, watchSpansKnown = true),
+            emptyList(), false, {}, {}, {}, {}, answerMismatch = { a, b, c, d -> sent.add(listOf(a, b, c, d)) }) }
+        compose.onNodeWithText("2.5~4.5초 · 영상에서만 찾은 구간").performScrollTo().assertExists()
+        compose.onNodeWithText("9.0~11.0초 · 워치에서만 찾은 구간").assertExists()
+        compose.onNodeWithText("답은 이 기기에만 저장하고, 반복 라벨로는 쓰지 않아요.").assertExists()
+        compose.onAllNodesWithText("맞아요")[1 + 0].performScrollTo()
+        compose.onAllNodesWithText("맞아요").filter(hasClickAction()).let { nodes ->
+            nodes[nodes.fetchSemanticsNodes().size - 2].performClick()
+        }
+        assertEquals(listOf(listOf(2500, 4500, true, true)), sent)
+    }
+
+    @Test fun unalignedWatchLogSaysTheWindowsCannotBeComparedInsteadOfShowingNone() {
+        compose.setContent { CalibrationResultScreen(clip.copy(confirmedCount = 10, watchCount = 9, watchSpansKnown = false),
+            emptyList(), false, {}, {}, {}, {}) }
+        compose.onNodeWithText("워치 기록의 시간을 영상에 맞추지 못해 구간을 비교할 수 없어요.").performScrollTo().assertExists()
     }
 
     private val rows = listOf(
