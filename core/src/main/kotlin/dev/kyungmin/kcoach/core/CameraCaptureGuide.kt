@@ -12,9 +12,14 @@ data class CameraCaptureGuide(val id: String, val direction: String, val framing
         if (!visible(image)) return false
         metric?.let { motion -> return observedMetric(image, world, left)?.let(motion::atRest) == true }
         val band = readyElbowBand ?: return true
-        if (world.size != 33) return false
+        return elbowSetupAngle(image, world, left)?.let { it in band } == true
+    }
+
+    /** Elbow angle (shoulder-elbow-wrist) in world coordinates, the start check for rotation lifts that have no movement metric. */
+    private fun elbowSetupAngle(image: List<CameraLandmark>, world: List<CameraLandmark>, left: Boolean): Double? {
+        if (world.size != 33 || image.size != 33) return null
         val points = world.mapIndexed { i, p -> PosePoint(p.x, p.y, p.z, minOf(image[i].visibility ?: 0.0, image[i].presence ?: 0.0)) }
-        return UpperBodyPoseGeometry.angle(points, if (left) 11 else 12, if (left) 13 else 14, if (left) 15 else 16)?.let { it in band } == true
+        return UpperBodyPoseGeometry.angle(points, if (left) 11 else 12, if (left) 13 else 14, if (left) 15 else 16)
     }
     fun visible(points: List<CameraLandmark>): Boolean = required.isNotEmpty() && required.all { index ->
         val point = points.getOrNull(index) ?: return@all false
@@ -28,8 +33,10 @@ data class CameraCaptureGuide(val id: String, val direction: String, val framing
             StartJoint(index, point?.visibility, point?.presence, point?.let(::inFrame) == true,
                 point != null && minOf(point.visibility ?: 0.0, point.presence ?: 0.0) >= MIN_CONFIDENCE && inFrame(point))
         }
-        val angle = if (image.size == 33 && world.size == 33 && joints.all { it.ok }) observedMetric(image, world, left) else null
-        return StartDiagnosis(joints, angle, angle?.let { metric?.atRest(it) }, startReady(image, world, left))
+        val seen = image.size == 33 && world.size == 33 && joints.all { it.ok }
+        val angle = if (!seen) null else if (metric != null) observedMetric(image, world, left) else if (readyElbowBand != null) elbowSetupAngle(image, world, left) else null
+        val atRest = angle?.let { value -> metric?.atRest(value) ?: readyElbowBand?.let { value in it } }
+        return StartDiagnosis(joints, angle, atRest, startReady(image, world, left), readyElbowBand)
     }
 
     private fun inFrame(point: CameraLandmark) = point.x in 0.02..0.98 && point.y in 0.02..0.98
@@ -183,9 +190,10 @@ data class StartJoint(val index: Int, val visibility: Double?, val presence: Dou
 }
 
 /** [angle] is the guide's movement metric when every required joint is seen; [atRest] says whether it satisfies the start pose. */
-data class StartDiagnosis(val joints: List<StartJoint>, val angle: Double?, val atRest: Boolean?, val ready: Boolean) {
+data class StartDiagnosis(val joints: List<StartJoint>, val angle: Double?, val atRest: Boolean?, val ready: Boolean,
+    val requiredBand: ClosedFloatingPointRange<Double>? = null) {
     /** The first thing blocking readiness, in plain words, or null when ready. */
     val blocker: String? get() = joints.firstOrNull { !it.ok }?.let {
         if (!it.inFrame) "관절 ${it.index}번이 화면 밖" else "관절 ${it.index}번 신뢰도 ${"%.2f".format(it.confidence)}"
-    } ?: if (atRest == false) "각도 ${"%.0f".format(angle)}° 시작 범위 밖" else if (!ready) "각도를 못 구함" else null
+    } ?: if (atRest == false) "각도 ${"%.0f".format(angle)}° 시작 범위 밖${requiredBand?.let { " (${it.start.toInt()}~${it.endInclusive.toInt()}°)" } ?: ""}" else if (!ready) "각도를 못 구함" else null
 }

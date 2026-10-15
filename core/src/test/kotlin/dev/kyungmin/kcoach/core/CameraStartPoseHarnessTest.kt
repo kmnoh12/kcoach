@@ -129,4 +129,17 @@ class CameraStartPoseHarnessTest {
         file.writeText(out.toString())
         assertTrue(file.length() > 0)
     }
+
+    @Test fun diagnosisReportsTheElbowAngleForRotationLiftsThatHaveNoMovementMetric() {
+        val c = cases(true).first { it.id == "external_rotation" }
+        assertNull(c.guide.metric)
+        val (image, world) = landmarks(c.family, true, near = .95, far = .30)
+        val ok = c.guide.diagnose(image, world, true)
+        assertNotNull(ok.angle); assertEquals(true, ok.atRest); assertTrue(ok.ready)
+        // A forearm pointing along the camera axis flattens the model's depth estimate; the overlay must show that angle.
+        val straightArm = world.toMutableList().also { it[15] = it[13].copy(x = it[13].x - (it[11].x - it[13].x), y = it[13].y - (it[11].y - it[13].y)) }
+        val bad = c.guide.diagnose(image, straightArm, true)
+        assertEquals(false, bad.atRest); assertFalse(bad.ready)
+        assertTrue(bad.blocker!!.contains("75~105"), bad.blocker)
+    }
 }

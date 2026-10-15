@@ -521,7 +521,7 @@ class CalibrationCameraActivity : ComponentActivity() {
                 canvas.drawText(text, 12 * dp, y, debugText); y += 15 * dp
             }
             d.joints.forEach { row("#${it.index} vis=${it.visibility?.let { v -> "%.2f".format(v) }} pres=${it.presence?.let { v -> "%.2f".format(v) }}${if (it.inFrame) "" else " OUT"}", it.ok) }
-            row("angle=${d.angle?.let { "%.0f°".format(it) } ?: "-"} atRest=${d.atRest ?: "-"} ≥${CameraCaptureGuide.MIN_CONFIDENCE}", d.ready)
+            row("angle=${d.angle?.let { "%.0f°".format(it) } ?: "-"}${d.requiredBand?.let { " (${it.start.toInt()}~${it.endInclusive.toInt()}°)" } ?: ""} atRest=${d.atRest ?: "-"} ≥${CameraCaptureGuide.MIN_CONFIDENCE}", d.ready)
         }
 
         override fun onDraw(canvas: Canvas) {
