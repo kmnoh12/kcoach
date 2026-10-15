@@ -81,6 +81,9 @@ class CalibrationResultActivity : ComponentActivity() {
                 val watch = sensor?.manifest?.payload?.get(WirePayloadKeys.WATCH_REPS)?.toIntOrNull()
                 val watchSpans = watchSpans(id, capture, sensor, frames)
                 val videoSpans = intervals.filter { it.second > it.first }.map { RepSpan(it.first, it.second) }
+                val trailingSuspect = sensor?.let { received ->
+                    runCatching { TrailingRepSuspicion.suspectLast(PhoneRepAnalyzer.analyze(received.validated.document, capture.exerciseId).events) }.getOrDefault(false)
+                } ?: false
                 val saved = answers.load(id).associate { it.candidate to it.realRep }
                 val mismatches = if (watchSpans == null) emptyList() else RepMismatchFinder.find(videoSpans, watchSpans)
                     .map { MismatchRowUi(it.span.startMs, it.span.endMs, it.side == MismatchSide.VIDEO_ONLY, saved[it]) }
@@ -97,7 +100,7 @@ class CalibrationResultActivity : ComponentActivity() {
                     captures.performance(id)?.let { raw -> org.json.JSONObject(raw).getJSONArray("windows").let { rows ->
                         (0 until rows.length()).joinToString("\n") { rows.getString(it) }
                     } }.orEmpty(), signal.title,
-                    mismatches = mismatches, watchSpansKnown = watchSpans != null)
+                    mismatches = mismatches, watchSpansKnown = watchSpans != null, trailingSuspect = trailingSuspect)
             }
             val list = runCatching { if (id == null) captures.list().map { row(it) } else null }
             main.post {

@@ -120,6 +120,15 @@ class CalibrationResultScreenTest {
         compose.onNodeWithText("워치 기록의 시간을 영상에 맞추지 못해 구간을 비교할 수 없어요.").performScrollTo().assertExists()
     }
 
+    @Test fun aSuspectLastRepShowsANoteWithoutChangingTheCount() {
+        var answer = -1
+        compose.setContent { CalibrationResultScreen(clip.copy(confirmedCount = 10, watchCount = 11, watchSpansKnown = true, trailingSuspect = true),
+            emptyList(), false, {}, { answer = it }, {}, {}) }
+        compose.onNodeWithText("워치가 센 마지막 1회는 다른 반복보다 느리고 약해서, 시계를 본 동작일 수 있어요. 실제로 한 반복이 아니라면 횟수를 다시 확인해 주세요.")
+            .performScrollTo().assertExists()
+        assertEquals(-1, answer)
+    }
+
     private val rows = listOf(
         CaptureRowUi("a", "케이블 외회전", "10월 15일 오후 11:02 · 10회 확인"),
         CaptureRowUi("b", "케이블 외회전", "10월 15일 오후 10:41 · 횟수 확인 전"),

@@ -39,6 +39,8 @@ data class CapturePlaybackUi(
     val graphTitle: String = "영상 속 손목 높이",
     /** Windows where the video and the watch disagree; empty when they agree or the watch log cannot be aligned. */
     val mismatches: List<MismatchRowUi> = emptyList(), val watchSpansKnown: Boolean = false,
+    /** The watch's last rep is slow and gentle compared with the set, like a glance at the watch. Informational only. */
+    val trailingSuspect: Boolean = false,
 )
 
 /** [answer] is the user's reply to "did you really do a rep here?"; null until they tap. */
@@ -227,6 +229,8 @@ private fun ClipDetail(
 @Composable
 private fun MismatchSection(clip: CapturePlaybackUi, busy: Boolean, answer: (Int, Int, Boolean, Boolean) -> Unit) {
     Text("워치와 영상이 어긋난 구간", color = KColors.White, fontSize = 18.sp)
+    if (clip.trailingSuspect) Text("워치가 센 마지막 1회는 다른 반복보다 느리고 약해서, 시계를 본 동작일 수 있어요. 실제로 한 반복이 아니라면 횟수를 다시 확인해 주세요.",
+        color = KColors.Accent, fontSize = 13.sp)
     when {
         !clip.watchSpansKnown -> Text("워치 기록의 시간을 영상에 맞추지 못해 구간을 비교할 수 없어요.", color = KColors.Muted, fontSize = 13.sp)
         clip.mismatches.isEmpty() -> Text("영상과 워치가 반복 구간을 서로 다르게 찾은 곳이 없어요.", color = KColors.Muted, fontSize = 13.sp)
