@@ -31,7 +31,8 @@ fi
 # A successful shrink/build does not guarantee the JNI entry points survive R8.
 # Run the existing APK inspection before any push or public release. This does
 # not verify native initialization or pose detection on the user's phone.
-python3 tools/verify_mediapipe_jni.py phone/build/outputs/apk/ota/phone-ota.apk
+python3 tools/verify_mediapipe_jni.py phone/build/outputs/apk/ota/phone-ota.apk \
+    --mapping phone/build/outputs/mapping/ota/mapping.txt
 
 # Both installed apps use this certificate. A different key would make an
 # in-place update fail even if the APK/version/manifest were otherwise valid.
