@@ -152,3 +152,14 @@ STOP/END, 단일 세트 완료/휴식은 전체 운동 완료로 표시하지 �
 WatchLifecycleSnapshotTest.renderD2StartAndWorkoutComplete 한 개만 실행해 성공했다.
 Robolectric native Android Canvas 렌더를 직접 열어 두 원형 화면의 잘림/문구/곡률을 확인했다.
 앱 코드 적용, APK 빌드, 실기기 검증, 배포는 수행하지 않았다.
+
+
+## 사용자 정정 — 워치는 대기, 시작은 폰
+
+이전 시작 전 루틴/운동 시작 버튼 시안은 채택하지 않는다. PHONE_WATCH_FLOW.md의 동선이 우선한다.
+대기 시안에서는 루틴과 버튼을 제거하고 폰 연결 대기 문구/점 영역만 표시했다.
+실제 연결 후에는 운동 시작 대기 문구를 사용하며, 폰 시작 명령 후 운동 화면으로 이동한다.
+이번 이미지는 점 순환의 정지 프레임이며 앱의 실제 애니메이션이 구현된 것은 아니다.
+전용 renderD2WaitingAndWorkoutComplete 한 개만 실행해 렌더를 확인한다.
+
+해당 renderD2WaitingAndWorkoutComplete는 성공했다. 대기 PNG를 열어 원형 안의 문구/점과 버튼이 없는 상태를 확인했다.

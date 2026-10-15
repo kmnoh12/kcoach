@@ -16,7 +16,7 @@ import java.io.File
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34], qualifiers = "w216dp-h216dp-round-xhdpi")
 class WatchLifecycleSnapshotTest {
-    @Test fun renderD2StartAndWorkoutComplete() {
+    @Test fun renderD2WaitingAndWorkoutComplete() {
         val output = File("build/outputs/watch-design").apply { mkdirs() }
         fun save(bitmap: Bitmap, name: String) = File(output, "$name.png").outputStream().use {
             bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
@@ -27,7 +27,7 @@ class WatchLifecycleSnapshotTest {
             view.measure(exact, exact); view.layout(0, 0, 432, 432)
             Bitmap.createBitmap(432, 432, Bitmap.Config.ARGB_8888).also { view.draw(Canvas(it)) }
         }
-        save(images[0], "draft-d2-before-workout")
+        save(images[0], "draft-d2-before-workout-waiting")
         save(images[1], "draft-d2-workout-complete")
         val board = Bitmap.createBitmap(1000, 650, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(board)
@@ -35,11 +35,11 @@ class WatchLifecycleSnapshotTest {
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; textSize = 32f; typeface = Typeface.DEFAULT_BOLD }
         canvas.drawText("D2 · 운동 전과 전체 운동 완료", 40f, 48f, paint)
         paint.textSize = 22f; paint.color = Color.rgb(183, 190, 199); paint.typeface = Typeface.DEFAULT
-        canvas.drawText("폰과 같은 버튼 곡률 6dp · 상태마다 필요한 내용만", 40f, 82f, paint)
+        canvas.drawText("워치는 대기 · 루틴 준비와 운동 시작은 폰에서", 40f, 82f, paint)
         images.forEachIndexed { index, bitmap ->
             val x = if (index == 0) 52f else 516f
             paint.textSize = 25f; paint.color = Color.WHITE; paint.typeface = Typeface.DEFAULT_BOLD
-            canvas.drawText(if (index == 0) "운동 전 · 준비된 루틴이 있을 때" else "마지막 세트 후 · 전체 운동 종료", x + 12f, 132f, paint)
+            canvas.drawText(if (index == 0) "운동 전 · 폰 연결을 기다리는 상태" else "마지막 세트 후 · 전체 운동 종료", x + 12f, 132f, paint)
             canvas.save()
             canvas.clipPath(Path().apply { addCircle(x + 216f, 370f, 214f, Path.Direction.CW) })
             canvas.drawBitmap(bitmap, x, 154f, null)
@@ -49,8 +49,8 @@ class WatchLifecycleSnapshotTest {
             paint.style = Paint.Style.FILL
         }
         paint.textSize = 21f; paint.color = Color.rgb(183, 190, 199); paint.typeface = Typeface.DEFAULT
-        canvas.drawText("구성 제안 · 루틴/운동명은 예시 · 전체 종료는 폰 확인 후 · 앱 미적용", 40f, 626f, paint)
-        save(board, "comparison-d2-start-complete")
+        canvas.drawText("구성 제안 · 점 애니메이션의 한 장면 · 앱 미적용", 40f, 626f, paint)
+        save(board, "comparison-d2-waiting-complete")
         board.recycle(); images.forEach { it.recycle() }
     }
 }
@@ -79,10 +79,11 @@ private class LifecyclePreview(context: Context, private val finished: Boolean) 
             text(canvas, "수고했어요", 224f, 14f, muted)
             text(canvas, "폰에서 기록을 확인하세요", 259f, 12f, muted)
         } else {
-            text(canvas, "운동 준비", 95f, 14f, muted)
-            text(canvas, "상체 루틴", 159f, 24f, white, true)
-            text(canvas, "첫 운동", 201f, 12f, muted)
-            text(canvas, "덤벨 컬", 241f, 16f, white, true)
+            text(canvas, "폰 연결 대기 중", 218f, 17f, white)
+            paint.color = green; paint.style = Paint.Style.FILL
+            // Static frame of the proposed dot cycle. Production animation is not implemented here.
+            for (x in listOf(196f, 216f, 236f)) canvas.drawCircle(x, 258f, 4f, paint)
+            return
         }
         paint.color = green; paint.style = Paint.Style.FILL
         val radius = 6f * resources.displayMetrics.density
