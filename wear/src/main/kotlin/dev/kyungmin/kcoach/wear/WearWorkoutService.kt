@@ -903,6 +903,7 @@ class WearWorkoutService : Service(), SensorEventListener {
         pausedRestRemainingMs = 0L
         if (incomingSessionId != sessionId) heartRate = 0
         if (sessionId != incomingSessionId) { tempoPolicy = dev.kyungmin.kcoach.core.TempoFeedbackPolicy(); lastTempoAlertNs = 0L }
+        WatchHomeStore(this).leaveCompletion()
         sessionId = incomingSessionId
         exerciseId = incomingExerciseId
         exerciseName = intent.getStringExtra("exerciseName").orEmpty().ifBlank { exerciseId.replace('_', ' ') }
@@ -1232,6 +1233,8 @@ class WearWorkoutService : Service(), SensorEventListener {
             WearSync.PATH_COMPLETE,
             WearSync.completion(sessionId, exerciseId, setIndex, reps, heartRate, phase, captureSampleCount),
         )
+        if (phase == "COMPLETE" && !sessionId.startsWith("calibration-")) WatchHomeStore(this).complete(sessionId)
+        else WatchHomeStore(this).leaveCompletion()
         restEndAtMs = 0L
         closeSessionId(sessionId)
         resetSessionFields()
@@ -1946,6 +1949,8 @@ class WearWorkoutService : Service(), SensorEventListener {
             putExtra("heartRate", heartRate)
             putExtra("captureSampleCount", captureSampleCount.coerceAtMost(MAX_CAPTURE_SAMPLES))
             putExtra("phase", currentPhase())
+            putExtra("completedSessionId", WatchHomeStore(this@WearWorkoutService).completion()?.sessionId.orEmpty())
+            putExtra("showCompletion", WatchHomeStore(this@WearWorkoutService).showsCompletion())
             putExtra("trackingProfileId", trackingProfile.id)
             putExtra("personalized", trackingProfile.calibrationProfileVersion != null)
             putExtra("patternShadowCommandId", patternShadowCommandId)

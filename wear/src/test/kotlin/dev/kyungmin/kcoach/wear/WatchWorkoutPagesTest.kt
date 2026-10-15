@@ -64,7 +64,7 @@ class WatchWorkoutPagesTest {
         assertEquals(432, scroll.scrollY)
         update(); measure(root)
         assertEquals("New sensor values must not pull the user back to the counter", 432, scroll.scrollY)
-        val details = descendants(root).filterIsInstance<TextView>().single { it.text == "실제 횟수 입력 · 완료" }
+        val details = descendants(root).filterIsInstance<TextView>().single { it.text.startsWith("세트 마치기") }
         val visible = android.graphics.Rect()
         assertTrue("Manual action must be visible after switching to controls", details.getGlobalVisibleRect(visible))
         assertTrue(visible.height() > 0)
