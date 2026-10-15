@@ -79,4 +79,11 @@ class CameraPoseGuideTest {
         assertNotNull(smoother.update(null, 200))
         assertNull(smoother.update(null, 400))
     }
+
+    @Test fun obliqueGuideScalesBodySizeByTheForeshortenedShoulderWidth() {
+        val points = pose(11 to (300.0 to 250.0), 12 to (200.0 to 250.0), 13 to (300.0 to 330.0), 14 to (200.0 to 330.0))
+        val front = assertNotNull(CameraPoseGuide.measure(points, w, h, CameraPoseFamily.STAND_ARMS_DOWN_FRONT, left = true))
+        val oblique = assertNotNull(CameraPoseGuide.measure(points, w, h, CameraPoseFamily.EXTERNAL_ROTATION_OBLIQUE, left = true))
+        assertEquals(front.bodyHeight / 0.7, oblique.bodyHeight, 1e-6)
+    }
 }

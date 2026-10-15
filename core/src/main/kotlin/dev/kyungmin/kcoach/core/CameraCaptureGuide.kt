@@ -82,6 +82,7 @@ data class CameraCaptureGuide(val id: String, val direction: String, val framing
                 MeasurementRecipe.VERTICAL_PULL -> "후면 사선 · $side 팔과 상체, 기구에 가리지 않는 위치"
                 MeasurementRecipe.LATERAL_RAISE, MeasurementRecipe.FLY -> "정면/사선 · $side 팔 전체와 골반"
                 MeasurementRecipe.SQUAT -> "측면 · 머리부터 발까지 전신"
+                MeasurementRecipe.EXTERNAL_ROTATION -> "45° 사선 · 몸을 비스듬히 돌려 $side 어깨·팔꿈치·손목이 보이게 (완전 측면은 손목이 가려져요)"
                 MeasurementRecipe.MANUAL -> if (id in setOf("hip_adduction", "hip_abduction")) "정면 · 골반부터 양발까지" else "측면/사선 · 수행 부위와 기구의 움직임 전체"
                 else -> "$side 쪽 측면/사선 · 어깨부터 골반까지, 팔과 기구가 겹치지 않는 위치"
             }
@@ -113,6 +114,7 @@ data class CameraCaptureGuide(val id: String, val direction: String, val framing
                 MeasurementRecipe.LATERAL_RAISE -> "정면 · 상체와 골반이 보이게"
                 MeasurementRecipe.FLY -> "정면 · 양어깨와 ${arm}이 보이게"
                 MeasurementRecipe.VERTICAL_PULL -> "뒤쪽 사선 · 상체와 ${arm}이 보이게"
+                MeasurementRecipe.EXTERNAL_ROTATION -> "45° 사선 · ${arm}이 보이게"
                 else -> "$side · 상체와 ${arm}이 보이게"
             }
         }

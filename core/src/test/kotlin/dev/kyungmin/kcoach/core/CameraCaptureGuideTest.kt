@@ -113,4 +113,11 @@ class CameraCaptureGuideTest {
         val frames = listOf(frame(1000, 160.0), frame(1200, 160.0), frame(1400, 120.0), frame(2600, 60.0), frame(2800, 160.0))
         assertTrue(CameraRepProposals.propose(frames, "dumbbell_curl", true).isEmpty())
     }
+
+    @Test fun externalRotationAsksForAFortyFiveDegreeViewWithAMatchingPictogram() {
+        val guide = CameraCaptureGuide.forExercise("external_rotation", true)
+        assertEquals("45° 사선 · 왼팔이 보이게", guide.headline)
+        assertTrue(guide.direction.contains("45°") && !guide.direction.contains("측면/사선"))
+        assertEquals(CameraPoseFamily.EXTERNAL_ROTATION_OBLIQUE, CameraPoseGuide.familyFor("external_rotation"))
+    }
 }

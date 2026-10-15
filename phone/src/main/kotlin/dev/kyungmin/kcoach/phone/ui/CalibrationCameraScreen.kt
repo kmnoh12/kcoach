@@ -157,7 +157,7 @@ private fun ActionButton(label: String, color: Color, content: Color, onClick: (
 @Composable
 private fun MiniPictogram(family: CameraPoseFamily, modifier: Modifier) {
     val figure = remember(family) {
-        val anchor = if (family.front) GuideAnchor(GuidePoint(.13, 0.0), GuidePoint(-.13, 0.0), 1.0, 1)
+        val anchor = if (family.front) GuideAnchor(GuidePoint(.13 * family.widthScale, 0.0), GuidePoint(-.13 * family.widthScale, 0.0), 1.0, 1)
         else GuideAnchor(GuidePoint(0.0, 0.0), GuidePoint(0.0, 0.0), 1.0, 1)
         CameraPoseGuide.build(family, anchor)
     }
