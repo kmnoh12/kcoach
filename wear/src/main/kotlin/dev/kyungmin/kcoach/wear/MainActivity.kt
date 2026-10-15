@@ -22,7 +22,6 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import android.widget.EditText
@@ -259,6 +258,8 @@ class MainActivity : Activity() {
         root.addView(phaseText)
         exerciseText = label(exerciseName, 17f, Color.WHITE, true).apply {
             gravity = Gravity.CENTER
+            maxLines = 2
+            ellipsize = android.text.TextUtils.TruncateAt.END
         }
         root.addView(exerciseText)
         setText = label("폰에서 운동을 시작하면 현재 세트가 표시돼요", 11f, Color.rgb(150, 160, 170)).apply {
@@ -293,13 +294,22 @@ class MainActivity : Activity() {
             background = rounded(Color.rgb(18, 35, 30), 14)
             setOnClickListener { showManualCount() }
         }
-        root.addView(manualButton, LinearLayout.LayoutParams(-1, -2))
+        root.addView(View(this), LinearLayout.LayoutParams(1, 0, 1f))
+        root.addView(label("아래로 내려 더 보기", 10f, Color.rgb(150, 160, 170)).apply {
+            gravity = Gravity.CENTER
+        })
 
         val details = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(0, 8, 0, 16)
+            setPadding(24, 26, 24, 32)
+            setBackgroundColor(Color.BLACK)
         }
+        details.addView(label("운동 조작", 15f, Color.WHITE, true).apply {
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, 12)
+        })
+        details.addView(manualButton, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = 8 })
         workoutControlButton = label("", 12f, Color.rgb(0, 210, 185), true).apply {
             gravity = Gravity.CENTER
             setPadding(8, 10, 8, 10)
@@ -354,10 +364,6 @@ class MainActivity : Activity() {
             }
         }
         details.addView(pendingManualButton)
-        details.addView(label("화면을 내려 심박수와 센서 상태 확인", 10f, Color.rgb(110, 115, 120)).apply {
-            gravity = Gravity.CENTER
-            setPadding(0, 18, 0, 0)
-        })
         updateStateText = label("업데이트는 폰 앱에서 확인해 주세요", 11f, Color.WHITE).apply {
             gravity = Gravity.CENTER
             setPadding(18, 10, 18, 10)
@@ -371,10 +377,6 @@ class MainActivity : Activity() {
             topMargin = 18
             bottomMargin = 8
         })
-        root.addView(ScrollView(this).apply {
-            isFillViewport = false
-            addView(details)
-        }, LinearLayout.LayoutParams(-1, 0, 1f))
         val frame = FrameLayout(this)
         frame.setBackgroundColor(Color.BLACK)
         frame.addView(root, FrameLayout.LayoutParams(-1, -1))
@@ -383,7 +385,7 @@ class MainActivity : Activity() {
             isClickable = false
         }
         frame.addView(restRing, FrameLayout.LayoutParams(-1, -1))
-        return frame
+        return WorkoutPagesView(this, frame, details).apply { setBackgroundColor(Color.BLACK) }
     }
 
     private fun requestPermissionsIfNeeded() {
@@ -499,7 +501,8 @@ class MainActivity : Activity() {
 
     private fun recordShadowFrameCommit() {
         if (!running || shadowCommandId.isBlank() || shadowEventIndex < 0 || shadowEmissionNs < 0 ||
-            !shadowText.isAttachedToWindow || !shadowText.isHardwareAccelerated || !window.decorView.hasWindowFocus()) return
+            !shadowText.isAttachedToWindow || !shadowText.isHardwareAccelerated || !window.decorView.hasWindowFocus() ||
+            !shadowText.getGlobalVisibleRect(android.graphics.Rect())) return
         val identity = "$sessionId|$setId|$attemptId|$shadowCommandId|$shadowEventIndex|$shadowEmissionNs"
         if (frameCommitPending == identity) return
         frameCommitPending = identity
@@ -509,7 +512,8 @@ class MainActivity : Activity() {
             val submittedAt = android.os.SystemClock.elapsedRealtimeNanos()
             runOnUiThread {
                 if (isFinishing || isDestroyed || sessionId != session || setId != set || attemptId != attempt ||
-                    shadowCommandId != command || shadowEventIndex != index || shadowEmissionNs != emission) return@runOnUiThread
+                    shadowCommandId != command || shadowEventIndex != index || shadowEmissionNs != emission ||
+                    !shadowText.getGlobalVisibleRect(android.graphics.Rect())) return@runOnUiThread
                 startService(Intent(this, WearWorkoutService::class.java)
                     .putExtra(WearWorkoutService.EXTRA_COMMAND, "PATTERN_FRAME_COMMIT")
                     .putExtra("session", session).putExtra("setId", set).putExtra("attemptId", attempt)
