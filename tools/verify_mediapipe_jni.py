@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Inspect real APK DEX declarations required by MediaPipe 0.10.35 JNI.
+"""Inspect APK DEX declarations required by MediaPipe JNI and Flogger startup.
 
 This checks release shrinking, not native initialization or pose accuracy.
 """
@@ -27,13 +27,23 @@ def inspect(apk: Path, sdk: Path, java: Path) -> dict:
             "String typeName": r"(?m)^\.field[^\n]* typeName:Ljava/lang/String;\s*$",
             "byte[] value": r"(?m)^\.field[^\n]* value:\[B\s*$",
         },
+        # Flogger discovers its enclosing class from real stack frames. These
+        # methods must survive optimization, not merely have retrace metadata.
+        "com.google.common.flogger.FluentLogger": {
+            "static forEnclosingClass()": r"(?m)^\.method[^\n]*\bstatic\b[^\n]* forEnclosingClass\(\)Lcom/google/common/flogger/FluentLogger;\s*$",
+        },
+        "com.google.common.flogger.backend.system.StackBasedCallerFinder": {
+            "findLoggingClass(Class)": r"(?m)^\.method[^\n]* findLoggingClass\(Ljava/lang/Class;\)Ljava/lang/String;\s*$",
+        },
     }
     checks = {}
     for class_name, members in requirements.items():
         result = subprocess.run(prefix + [class_name, str(apk)], text=True, capture_output=True, timeout=60)
         checks[class_name] = {name: result.returncode == 0 and re.search(pattern, result.stdout) is not None
                               for name, pattern in members.items()}
-    return {"apk": str(apk), "apkSha256": hashlib.sha256(apk.read_bytes()).hexdigest(), "jniDeclarations": checks,
+    return {"apk": str(apk), "apkSha256": hashlib.sha256(apk.read_bytes()).hexdigest(),
+            "jniDeclarations": {name: members for name, members in checks.items() if name.startswith("com.google.mediapipe.")},
+            "floggerStackDeclarations": {name: members for name, members in checks.items() if name.startswith("com.google.common.flogger.")},
             "allRequiredDeclarationsPresent": all(all(members.values()) for members in checks.values()),
             "nativeInitializationVerified": False, "poseDetectionVerified": False}
 

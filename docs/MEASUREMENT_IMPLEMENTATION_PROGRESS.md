@@ -1,5 +1,29 @@
 # 측정 개편 구현 진행
 
+## 2026-10-15 사용자 POSE_INIT 예외 확보·Flogger/R8 재현 수정
+
+사용자가 폰 0.7.5/SDK 37/arm64-v8a의 실제 오류를 제공했다:
+ExceptionInInitializerError → IllegalStateException(`no caller found on the stack for: S2.c`).
+보관한 공개 0.7.5 APK SHA-256은 manifest의
+`9758a5f70b1419ba6f7c1d95034352ddc52e551d561cb0d40e913a9896432c00`과 일치하고,
+DEX의 S2.c에서 동일 예외를 던지는 로거 초기화 코드를 확인했다. 현재 mapping의 S2.c는 다른 클래스라
+과거 APK를 현재 mapping으로 잘못 역추적하지 않았다.
+
+- 실제 의존성 Flogger 0.6/기본 backend와 최소 static 로거 초기화로 재현했다.
+  축소 전 정상, R8 9.3.16 classfile 최적화 후 같은 예외 실패,
+  폰 proguard의 `-keep class com.google.common.flogger.** { *; }` 추가 후 정상이다.
+  work/flogger-repro/run-baseline.log와 run-fixed.log, current-rules-focused.log에 각각 남겼다.
+- 재실행 도구 tools/verify_flogger_r8.py는 실제 jar와 폰의 keep 규칙으로 같은 초기화를 검사한다.
+  이 작은 JVM 검사가 AGP OTA DEX나 MediaPipe native 초기화를 대신하지는 않는다.
+- [MediaPipe 공식 이슈 6138](https://github.com/google-ai-edge/mediapipe/issues/6138)에서도
+  같은 예외와 Flogger 보존을 포함한 해결 사례/유지보수자 확인이 있다. 관절 임계값/모델/SDK는 바꾸지 않았다.
+- APK 검사에 FluentLogger.forEnclosingClass와 StackBasedCallerFinder.findLoggingClass를 추가했다.
+  기존 0.7.5는 JNI 4개가 있어도 새 스택 메서드 검사에서 실패한다. 최종 릴리스에서 새 축소 APK를 검사한다.
+  공개 전 두 APK의 인증서 SHA-256도 기존 설치본과 비교한다.
+
+이 시점은 소스 수정/대상 재현 검사 완료이며 새 APK/실기 성공 선언이 아니다.
+모든 구현 후 한 번의 최종 전체 검사/lint/OTA와 통합 배포를 진행한다. 새 리뷰 JSON은 생성하지 않았다.
+
 ## 2026-10-15 추가 G12 전신 관측 연결
 
 [G12 구현/한계/검사](G12_CAMERA_IMPLEMENTATION.md)를 따른다.

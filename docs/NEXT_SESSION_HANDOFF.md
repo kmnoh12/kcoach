@@ -2,6 +2,11 @@
 
 ## 2026-10-15 원래 세션의 최신 소스
 
+사용자가 실제 0.7.5 POSE_INIT 예외를 제공했다. Flogger 0.6/R8 초기화의 동일 예외를 최소 코드로 재현하고
+Flogger keep 규칙으로 통과시켰다. [진행 기록 첫 항목](MEASUREMENT_IMPLEMENTATION_PROGRESS.md)이 현재 원인/검사다.
+아래의 “상세 예외 없음”은 이전 이력이며 이제 같은 오류 정보를 다시 요구하지 않는다.
+새 APK의 native 초기화/실물 몸 인식 성공은 아직 별도다.
+
 현재 사용자 흐름은 [측정 흐름](MEASUREMENT_FLOW.md), 이번 후속 검사는
 [진행 기록 첫 항목](MEASUREMENT_IMPLEMENTATION_PROGRESS.md)을 따른다.
 [전체 범위 대조](FINAL_SCOPE_AUDIT.md)의 내부 정지 라벨 UI는 프레임 지정·수정·삭제와

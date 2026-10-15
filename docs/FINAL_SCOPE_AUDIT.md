@@ -12,7 +12,7 @@ START_WRIST_ORIENTATION_PLAN.md, AI_COACH_PLAN.md, WORKOUT_RESULT_UX.md와 이�
 | 기본 43종의 동작 그룹·시작/1회/위상·수동 설명 | core MeasurementRecipe/ExerciseTrackingProfiles, MeasurementRecipeTest | 명세/공통 엔진 연결 있음. 설치 폰의 모든 커스텀 종목 조건은 미확인 |
 | 손목 관측 불가 7종·추가 미등록 운동 수동 | ManualSetCommand, phone ManualSetIntegrationTest, wear ManualWatchFlowTest/ManualWatchUiTest | 0회/목표와 실제 분리/영속 요청/ACK/중복/충돌 경로 있음. 실기 오프라인 전달은 미확인 |
 | 원본 수집·검증 저장·ACK·시도/설정 보존 | WearWorkoutService, CaptureInbox, SetAnalysisStore, AnalysisRecoveryTest | 폰/워치 경로와 품질/복구 대상 검사 있음. 실제 절전·재부팅·센서율/전력 수치는 미확인 |
-| 폰 영상/관절/워치 원본·시계 연결 | CalibrationCameraActivity/CalibrationCaptureStore/CaptureClockStore, CaptureClockStoreTest | 연결 코드 있음. 사용자 폰 0.7.5의 POSE_INIT 실패가 해결되지 않아 실제 수집 성공을 주장할 수 없음 |
+| 폰 영상/관절/워치 원본·시계 연결 | CalibrationCameraActivity/CalibrationCaptureStore/CaptureClockStore, CaptureClockStoreTest | 연결 코드 있음. 사용자 0.7.5 예외로 Flogger/R8 초기화 실패를 재현하고 keep 규칙을 수정함. 새 APK의 실제 수집 성공은 아직 미확인 |
 | 사람 반복 라벨·제외/분할/합치기·출처/revision | CalibrationReviewActivity/CalibrationReviewStore, CalibrationReviewStoreTest | 실제 프레임 구간·완전 반복과 준비/불완전 등 제외 구간을 별도 보존. 내부 정지 UI와 편집 보존도 후속 연결·대상 검사됨 |
 | 촬영 저장 실패·영상만 삭제·선택 ZIP | CalibrationCaptureFinalizer/CalibrationVideoRetention/CalibrationEvidenceExport | 같은 시도 재시도/영상·로그 보존/출처 유지/선택 원본 내보내기 대상 검사 있음 |
 | 기존/논문 피크/개인 패턴 비교 | PaperPeakRepAnalyzer, ReviewedPatternAnalyzer/Detector, ReviewedPatternValidation | 후보/비교 경로 있음. 실제 Watch8 정답 자료가 없어 최적 후보 선정·정확도 개선은 미완료 |
@@ -38,12 +38,15 @@ START_WRIST_ORIENTATION_PLAN.md, AI_COACH_PLAN.md, WORKOUT_RESULT_UX.md와 이�
 2. **추가 G12 스쿼트 카메라 계약 — 후속 소프트웨어 연결됨.** [G12 구현](G12_CAMERA_IMPLEMENTATION.md)은
    5개 촬영 진입 항목/공통 레시피·선 자세/완전 왕복 후보·상대 관절각·골반 영상 이동·영속 저장/ZIP을 연결했다.
    워치 수동 정책과 기존 43종은 유지한다. 대상 검사 통과이며 사용자 폰 초기화/실제 전신 관측은 미확인이다.
-3. **사용자 폰 관절 엔진 초기화 실패.** POSE_INIT 내부 오류를 아직 받지 못했다.
-   기존 APK의 JNI 선언/라이브러리/모델 존재가 사용자 폰 실행 성공을 증명하지 않는다.
-   오류 정보가 없는 동안 근거 없는 SDK/R8/자세 임계값 변경으로 해결 처리하지 않는다.
+3. **사용자 폰 관절 엔진 초기화 실패 — 원인 재현·소스 수정됨.** 사용자가 0.7.5의
+   ExceptionInInitializerError → IllegalStateException(`no caller found on the stack for: S2.c`)를 제공했다.
+   실제 Flogger 0.6 초기화를 R8 classfile 최적화하면 같은 예외로 실패하고, 폰의 Flogger keep 규칙을
+   추가하면 통과한다. 기존 0.7.5 APK의 JNI 4개는 있지만 필수 Flogger 메서드 보존은 실패했다.
+   tools/verify_flogger_r8.py는 이 경로만 검사하며 MediaPipe native/사용자 폰 몸 인식 성공은 별도다.
 4. 위 구현 뒤 최종 전체 테스트/lint/OTA를 tools/release.sh의 한 실행에서 진행한다.
-   빌드 뒤 공개 전에 기존 verify_mediapipe_jni.py로 축소 APK의 필수 JNI 선언 4개도 검사하며,
-   실패하면 push/공개 전에 중단한다. 스크립트 구문과 기존 옛 APK에서의 검사 실행만 확인했다.
+   빌드 뒤 공개 전에 verify_mediapipe_jni.py로 필수 JNI 4개와 Flogger 스택 메서드 2개를 검사하며,
+   두 APK의 서명도 기존 공개 0.7.5의 인증서 SHA-256과 일치해야 push/공개한다.
+   스크립트 구문과 기존 옛 APK에서의 검사 실행만 확인했다.
    새 APK 빌드나 사용자 폰의 native 초기화/몸 인식 성공을 확인한 것은 아니다.
    공개됐다 초안으로 돌린 phone code 36/watch code 34는 재사용하지 않는다.
    새 소스 버전은 phone 0.7.7(code 37)/watch 0.2.7(code 35)로 준비했다. 아직 새 APK 빌드·공개는 아니다.
