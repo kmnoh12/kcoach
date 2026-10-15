@@ -21,6 +21,11 @@ fi
     :core:test :updates:testDebugUnitTest :phone:testDebugUnitTest :wear:testDebugUnitTest \
     :phone:lint :wear:lint :phone:assembleOta :wear:assembleOta
 
+# A successful shrink/build does not guarantee the JNI entry points survive R8.
+# Run the existing APK inspection before any push or public release. This does
+# not verify native initialization or pose detection on the user's phone.
+python3 tools/verify_mediapipe_jni.py phone/build/outputs/apk/ota/phone-ota.apk
+
 version() { sed -n "s/.*$2 = \"\{0,1\}\([^\"]*\)\"\{0,1\}$/\1/p" "$1/build.gradle.kts" | head -1; }
 PHONE_CODE=$(version phone versionCode)
 PHONE_NAME=$(version phone versionName)

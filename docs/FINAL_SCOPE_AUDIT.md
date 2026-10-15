@@ -42,6 +42,9 @@ START_WRIST_ORIENTATION_PLAN.md, AI_COACH_PLAN.md, WORKOUT_RESULT_UX.md와 이�
    기존 APK의 JNI 선언/라이브러리/모델 존재가 사용자 폰 실행 성공을 증명하지 않는다.
    오류 정보가 없는 동안 근거 없는 SDK/R8/자세 임계값 변경으로 해결 처리하지 않는다.
 4. 위 구현 뒤 최종 전체 테스트/lint/OTA를 tools/release.sh의 한 실행에서 진행한다.
+   빌드 뒤 공개 전에 기존 verify_mediapipe_jni.py로 축소 APK의 필수 JNI 선언 4개도 검사하며,
+   실패하면 push/공개 전에 중단한다. 스크립트 구문과 기존 옛 APK에서의 검사 실행만 확인했다.
+   새 APK 빌드나 사용자 폰의 native 초기화/몸 인식 성공을 확인한 것은 아니다.
    공개됐다 초안으로 돌린 phone code 36/watch code 34는 재사용하지 않는다.
    새 소스 버전은 phone 0.7.7(code 37)/watch 0.2.7(code 35)로 준비했다. 아직 새 APK 빌드·공개는 아니다.
    기존 reviews/2026-10-14-start-wrist-context.json은 그때 작성된 미커밋 기록을 재생성 없이 보존했다.
