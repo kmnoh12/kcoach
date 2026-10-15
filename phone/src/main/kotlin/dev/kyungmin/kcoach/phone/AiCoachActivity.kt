@@ -15,7 +15,7 @@ class AiCoachActivity : ComponentActivity() {
         val auth = ChatGptAuth.get(applicationContext)
         val controller = AiCoachController.get(applicationContext)
         val actions = AiCoachActions(::finish, { startActivity(Intent(this, SettingsActivity::class.java)) },
-            controller::saveProfile, controller::linkRecords, controller::send, controller::cancel)
+            controller::saveProfile, controller::linkRecords, controller::send, controller::cancel, controller::importDeviceBody)
         setContent {
             val connection = auth.state.value
             LaunchedEffect(connection.activeProfileId, connection.connected, connection.connectionRevision) {

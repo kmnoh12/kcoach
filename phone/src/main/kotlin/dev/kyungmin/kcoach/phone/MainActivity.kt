@@ -72,6 +72,7 @@ import dev.kyungmin.kcoach.phone.ui.RecordsScreen
 import dev.kyungmin.kcoach.phone.ui.FloatingTabBar
 import dev.kyungmin.kcoach.phone.ui.RoutineDetailActions
 import dev.kyungmin.kcoach.phone.ui.RoutineDetailScreen
+import dev.kyungmin.kcoach.phone.ui.WorkoutPreparationPanel
 import dev.kyungmin.kcoach.phone.ui.RoutineRowUi
 import dev.kyungmin.kcoach.phone.ui.RunningUi
 import dev.kyungmin.kcoach.phone.ui.SetField
@@ -253,6 +254,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 PhoneWearListenerService.ACTION_PAIR -> {
+                    updateWearConnectionStatus()
                     wearLiveStatus?.apply {
                         if (tag != WATCH_PANEL_TELEMETRY) {
                             text = "Watch8 연결됨"
@@ -262,6 +264,7 @@ class MainActivity : ComponentActivity() {
                 }
                 PhoneWearListenerService.ACTION_WATCH_UI_READY -> {
                     watchUiReady = true
+                    updateWearConnectionStatus()
                     wearLiveStatus?.apply {
                         if (tag != WATCH_PANEL_TELEMETRY) {
                             text = "Watch8 연결됨 · 운동 시작 가능"
@@ -458,6 +461,10 @@ class MainActivity : ComponentActivity() {
     private var recordMonth: YearMonth = YearMonth.of(2026, 7)
     private var ticker: Runnable? = null
     private var watchUiReady = false
+    private var defaultWorkoutWearing by mutableStateOf<WorkoutWearingSelection?>(null)
+    private var workoutWearingReadFailed by mutableStateOf(false)
+    private var preparationConnection by mutableStateOf("워치 연결 확인 중")
+    private var preparationAnswers by mutableStateOf<Map<String, String>>(emptyMap())
     private var pendingWatchStartPayload: String? = null
     private var calibrationSessionId: String? = null
     private var activeCalibrationExerciseId: String? = null
@@ -530,6 +537,11 @@ class MainActivity : ComponentActivity() {
             Context.RECEIVER_NOT_EXPORTED,
         )
         historyCache = null
+        val defaults = WorkoutWearingStore(this).defaultSelection()
+        val answers = WorkoutWearingStore(this).preparationAnswers()
+        defaultWorkoutWearing = defaults.getOrNull()
+        preparationAnswers = answers.getOrDefault(emptyMap())
+        workoutWearingReadFailed = defaults.isFailure || answers.isFailure
         lastWorkoutResult?.let { result ->
             hydrateResultAnalyses(result)
             persistLastWorkoutResult(result)
@@ -658,6 +670,7 @@ class MainActivity : ComponentActivity() {
         stopTicker()
         currentScreen = Screen.ROUTINE
         selectedRoutine = routine
+        updateWearConnectionStatus()
         if (active == null && activeWorkout == null) prepareRoutineForWatch(routine)
 
         val reload = { showRoutine(routine, reorderMode, active, onExit) }
@@ -684,7 +697,7 @@ class MainActivity : ComponentActivity() {
                 active?.takeIf { it.routine === routine }?.let(::persistActiveWorkout)
                 Toast.makeText(this, "순서를 바꿨어요", Toast.LENGTH_SHORT).show()
             },
-            primary = { if (active != null) showMyMountainDecision() else showStartGuide(routine) },
+            primary = { if (active != null) showMyMountainDecision() else startWorkout(routine) },
             addExercise = {
                 openLibrary(
                     onSelect = {
@@ -706,6 +719,7 @@ class MainActivity : ComponentActivity() {
                     primaryIcon = if (active != null) KIcon.Flag else KIcon.Play,
                     showHandle = reorderMode,
                     actions = actions,
+                    preparationContent = if (active == null) ({ RoutinePreparation(routine) }) else null,
                 )
             }
         }
@@ -717,6 +731,7 @@ class MainActivity : ComponentActivity() {
     private fun showFreeWorkout() {
         stopTicker()
         currentScreen = Screen.FREE
+        updateWearConnectionStatus()
         val reload = { showFreeWorkout() }
         val rows = freeExercises.mapIndexed { index, item ->
             RoutineRowUi(
@@ -733,7 +748,7 @@ class MainActivity : ComponentActivity() {
             menu = { index -> showExerciseMenu(freeRoutine(), index, null, reload) },
             move = { from, to -> freeExercises.add(to, freeExercises.removeAt(from)) },
             moveFinished = { Toast.makeText(this, "순서를 바꿨어요", Toast.LENGTH_SHORT).show() },
-            primary = { showStartGuide(freeRoutine()) },
+            primary = { startWorkout(freeRoutine()) },
             addExercise = {
                 openLibrary(
                     onSelect = {
@@ -754,7 +769,7 @@ class MainActivity : ComponentActivity() {
                     primaryIcon = KIcon.Play,
                     showHandle = false,
                     actions = actions,
-                    placeholderHeight = if (freeExercises.isEmpty()) 410.dp else 250.dp,
+                    preparationContent = { RoutinePreparation(freeRoutine()) },
                     addFilled = freeExercises.isEmpty(),
                 )
             }
@@ -1169,13 +1184,28 @@ class MainActivity : ComponentActivity() {
         showScaffold(ComposeView(this).apply {
             setContent {
                 val wearing = if (activeWorkout != null) WorkoutWearingStore(this@MainActivity).selection(activeWorkout!!.sessionId).getOrNull()
-                    else WorkoutWearingStore(this@MainActivity).lastSelection().getOrNull()
+                    else defaultWorkoutWearing
                 MenuScreen(BuildConfig.VERSION_NAME, actions, wearing)
             }
         }, null, RootTab.MENU)
     }
 
-    private fun showStartGuide(
+    @Composable
+    private fun RoutinePreparation(routine: WorkoutRoutine) {
+        WorkoutPreparationPanel(
+            exerciseIds = routine.exercises.map { it.exercise.id }, wearing = defaultWorkoutWearing,
+            connection = preparationConnection, wearingReadFailed = workoutWearingReadFailed,
+            answers = preparationAnswers,
+            onAnswer = { id, answer ->
+                WorkoutWearingStore(this).savePreparationAnswer(id, answer)
+                    .onSuccess { preparationAnswers = it }
+                    .onFailure { Toast.makeText(this, "준비 설정을 저장하지 못했어요. 기존 선택을 유지해요.", Toast.LENGTH_LONG).show() }
+            },
+            openProfile = { startActivity(Intent(this, WorkoutProfileActivity::class.java)) },
+        )
+    }
+
+    private fun startWorkout(
         routine: WorkoutRoutine,
         startExerciseIndex: Int = 0,
         startSetIndex: Int = 0,
@@ -1185,63 +1215,63 @@ class MainActivity : ComponentActivity() {
             Toast.makeText(this, "보정을 종료한 뒤 운동을 시작해 주세요", Toast.LENGTH_LONG).show()
             return
         }
-        fun start(wearing: WorkoutWearingSelection?) {
-            if (sessionStore.loadActive().getOrNull() != null) {
-                activeWorkout = restoreActiveWorkout()
-                if (activeWorkout != null) showActiveWorkout()
-                return
-            }
-            previewWorkout = null
-            val safeExerciseIndex = startExerciseIndex.coerceIn(
-                0,
-                routine.exercises.lastIndex.coerceAtLeast(0),
-            )
-            val safeSetIndex = startSetIndex.coerceIn(
-                0,
-                routine.exercises.getOrNull(safeExerciseIndex)
-                    ?.sets?.lastIndex?.coerceAtLeast(0) ?: 0,
-            )
-            val workout = ActiveWorkout(
-                routine = routine.copy(exercises = routine.exercises.map { item ->
-                    item.copy(sets = item.sets.map { it.copy(completed = false, performedReps = null, repSource = null, setId = java.util.UUID.randomUUID().toString(), attemptId = java.util.UUID.randomUUID().toString(), identityRequired = true) }.toMutableList())
-                }.toMutableList()),
-                exerciseIndex = safeExerciseIndex,
-                setIndex = safeSetIndex,
-            )
-            WorkoutWearingStore(this).beginSession(workout.sessionId, wearing).onFailure {
-                Toast.makeText(this, "착용 상태를 저장하지 못했어요. 다시 시작해 주세요.", Toast.LENGTH_LONG).show()
-                return
-            }
-            activeWorkout = workout
-            if (!persistActiveWorkout(workout)) {
-                activeWorkout = restoreActiveWorkout()
-                if (activeWorkout != null) showActiveWorkout()
-                return
-            }
-            val first = workout.routine.exercises.getOrNull(safeExerciseIndex)
-            if (first != null) {
-                val startPayload = PhoneSessionController.command(workoutSnapshot(workout), "START")
-                if (watchUiReady) {
-                    sendWear(WearSync.PATH_COMMAND, startPayload)
-                    activeLiveStatus?.text = "워치 앱 준비 완료 · 운동 시작"
-                } else {
-                    pendingWatchStartPayload = startPayload
-                    activeLiveStatus?.text = "워치 연결 중 · 워치 앱을 열어 주세요"
-                    wearLiveStatus?.apply {
-                        text = "워치 연결 중 · 워치 앱을 열어 주세요"
-                        setTextColor(amber)
-                    }
-                    syncWorkingSet(workout)
+        if (sessionStore.loadActive().getOrNull() != null) {
+            activeWorkout = restoreActiveWorkout()
+            if (activeWorkout != null) showActiveWorkout()
+            return
+        }
+        val wearing = runCatching {
+            val settings = WorkoutWearingStore(this)
+            WorkoutPreparation.selection(settings.defaultSelection().getOrThrow(),
+                routine.exercises.map { it.exercise.id }, settings.preparationAnswers().getOrThrow())
+        }.getOrElse {
+            Toast.makeText(this, "착용 설정을 불러오지 못했어요. 프로필 설정을 확인해 주세요.", Toast.LENGTH_LONG).show()
+            return
+        }
+        previewWorkout = null
+        val safeExerciseIndex = startExerciseIndex.coerceIn(
+            0,
+            routine.exercises.lastIndex.coerceAtLeast(0),
+        )
+        val safeSetIndex = startSetIndex.coerceIn(
+            0,
+            routine.exercises.getOrNull(safeExerciseIndex)
+                ?.sets?.lastIndex?.coerceAtLeast(0) ?: 0,
+        )
+        val workout = ActiveWorkout(
+            routine = routine.copy(exercises = routine.exercises.map { item ->
+                item.copy(sets = item.sets.map { it.copy(completed = false, performedReps = null, repSource = null, setId = java.util.UUID.randomUUID().toString(), attemptId = java.util.UUID.randomUUID().toString(), identityRequired = true) }.toMutableList())
+            }.toMutableList()),
+            exerciseIndex = safeExerciseIndex,
+            setIndex = safeSetIndex,
+        )
+        WorkoutWearingStore(this).beginSession(workout.sessionId, wearing).onFailure {
+            Toast.makeText(this, "착용 상태를 저장하지 못했어요. 다시 시작해 주세요.", Toast.LENGTH_LONG).show()
+            return
+        }
+        activeWorkout = workout
+        if (!persistActiveWorkout(workout)) {
+            activeWorkout = restoreActiveWorkout()
+            if (activeWorkout != null) showActiveWorkout()
+            return
+        }
+        val first = workout.routine.exercises.getOrNull(safeExerciseIndex)
+        if (first != null) {
+            val startPayload = PhoneSessionController.command(workoutSnapshot(workout), "START")
+            if (watchUiReady) {
+                sendWear(WearSync.PATH_COMMAND, startPayload)
+                activeLiveStatus?.text = "워치 앱 준비 완료 · 운동 시작"
+            } else {
+                pendingWatchStartPayload = startPayload
+                activeLiveStatus?.text = "워치 연결 중 · 워치 앱을 열어 주세요"
+                wearLiveStatus?.apply {
+                    text = "워치 연결 중 · 워치 앱을 열어 주세요"
+                    setTextColor(amber)
                 }
+                syncWorkingSet(workout)
             }
-            if (onStarted != null) onStarted(workout) else showActiveWorkout()
         }
-        showSheet { dismiss ->
-            dev.kyungmin.kcoach.phone.ui.WorkoutWearingStartSheet(
-                previous = WorkoutWearingStore(this).lastSelection().getOrNull(), cancel = dismiss,
-                start = { selection -> dismiss(); start(selection) }, startBasic = { dismiss(); start(null) },
-                exerciseIds = routine.exercises.map { it.exercise.id })
-        }
+        if (onStarted != null) onStarted(workout) else showActiveWorkout()
     }
 
     private fun prepareRoutineForWatch(routine: WorkoutRoutine) {
@@ -1667,14 +1697,14 @@ class MainActivity : ComponentActivity() {
             val plannedSet = routineExercise.sets.getOrNull(setIndex) ?: return
             if (!plannedSet.completed) {
                 if (activeWorkout !== workout) {
-                    showStartGuide(
+                    startWorkout(
                         routine = workout.routine,
                         startExerciseIndex = exerciseIndex,
                         startSetIndex = setIndex,
                     ) { startedWorkout ->
                         val startedExercise = startedWorkout.routine.exercises
-                            .getOrNull(startedWorkout.exerciseIndex) ?: return@showStartGuide
-                        val startedSet = startedExercise.sets.getOrNull(setIndex) ?: return@showStartGuide
+                            .getOrNull(startedWorkout.exerciseIndex) ?: return@startWorkout
+                        val startedSet = startedExercise.sets.getOrNull(setIndex) ?: return@startWorkout
                         requestSetCompletion(startedWorkout, startedExercise, setIndex, startedSet)
                     }
                     return
@@ -1776,7 +1806,7 @@ class MainActivity : ComponentActivity() {
         override fun onAllSetsDone(exerciseIndex: Int) {
             val workout = workout() ?: return
             if (activeWorkout !== workout) {
-                showStartGuide(workout.routine, startExerciseIndex = exerciseIndex) { started ->
+                startWorkout(workout.routine, startExerciseIndex = exerciseIndex) { started ->
                     started.routine.exercises.getOrNull(exerciseIndex)?.let { requestAllSetsCompletion(started, it) }
                 }
                 return
@@ -1886,9 +1916,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun updateWearConnectionStatus() {
-        if (wearLiveStatus == null) return
         Wearable.getNodeClient(this).connectedNodes
             .addOnSuccessListener { nodes ->
+                preparationConnection = if (nodes.isNotEmpty()) "워치 연결됨" else "워치 연결 안 됨 · 연결 후 자동으로 전달해요"
                 wearLiveStatus?.takeIf { it.tag == WATCH_PANEL_CONNECTION }?.apply {
                     text = if (nodes.isNotEmpty()) {
                         "Watch8 연결됨 · 운동 시작 가능"
@@ -1899,6 +1929,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
             .addOnFailureListener {
+                preparationConnection = "워치 연결을 확인하지 못했어요"
                 wearLiveStatus?.takeIf { it.tag == WATCH_PANEL_CONNECTION }?.apply {
                     text = "Watch8 연결 안 됨"
                     setTextColor(muted)

@@ -83,6 +83,25 @@ class AiCoachControllerTest {
     private fun answer(text: String, citations: List<String> = emptyList()) =
         JSONObject().put("answer", text).put("citations", JSONArray(citations)).toString()
 
+    @Test fun importingDeviceBodyUpdatesOnlyTheSelectedAccountWithoutAModelRequest() {
+        val auth = auth()
+        val store = AiCoachStore(app)
+        val original = store.saveProfile("fixture-client-a", AiCoachProfile(goal = "기존 목표"))
+        val other = store.saveProfile("fixture-client-b", AiCoachProfile(goal = "다른 계정"))
+        store.saveDeviceProfile(DeviceWorkoutProfile(AiCoachProfile(heightCm = 178.0, gender = "MALE")))
+        val transport = object : ChatGptWorkHttp {
+            override fun execute(accessToken: String, body: JSONObject, cancellation: ChatGptWorkCancellation,
+                onDelta: (String) -> Unit): ChatGptResponseResult = error("Import must not call a model")
+        }
+        val controller = AiCoachController(app, auth, transport)
+        bind(controller)
+        controller.importDeviceBody()
+        await("Imported profile did not reload") { !controller.state.value.busy && controller.state.value.profile?.heightCm == 178.0 }
+        assertEquals(original.id, controller.state.value.profile!!.id)
+        assertEquals("기존 목표", controller.state.value.profile!!.goal)
+        assertEquals(other, store.profile("fixture-client-b"))
+    }
+
     @Test fun explicitSendReadsOnlyLinkedEvidenceAndStoresTheValidatedCanonicalAnswer() {
         val auth = auth()
         val store = AiCoachStore(app)

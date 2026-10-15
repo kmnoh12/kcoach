@@ -42,7 +42,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -84,7 +83,7 @@ fun RoutineDetailScreen(
     primaryIcon: KIcon,
     showHandle: Boolean,
     actions: RoutineDetailActions,
-    placeholderHeight: Dp = 285.dp,
+    preparationContent: (@Composable () -> Unit)? = null,
     addFilled: Boolean = false,
 ) {
     val list = remember { mutableStateListOf<RoutineRowUi>().apply { addAll(rows) } }
@@ -111,7 +110,7 @@ fun RoutineDetailScreen(
                         }
                     }
                     Spacer(Modifier.height(18.dp))
-                    Box(Modifier.fillMaxWidth().height(placeholderHeight).clip(KShape.Control).background(KColors.Surface))
+                    preparationContent?.invoke()
                     Spacer(Modifier.height(10.dp))
                 }
             }

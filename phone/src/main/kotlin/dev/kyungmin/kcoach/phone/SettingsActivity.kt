@@ -22,7 +22,7 @@ class SettingsActivity : ComponentActivity() {
             chooseModel = auth::chooseModel,
             chooseEffort = auth::chooseEffort,
             saveTasks = { value -> auth.state.value.activeProfileId?.let { id -> taskStore.save(id, value); tasks.value = value } },
-            profile = { startActivity(Intent(this, AiCoachActivity::class.java).putExtra(AiCoachActivity.EXTRA_PROFILE, true)) },
+            profile = { startActivity(Intent(this, WorkoutProfileActivity::class.java)) },
         )
         setContent {
             val connection = auth.state.value

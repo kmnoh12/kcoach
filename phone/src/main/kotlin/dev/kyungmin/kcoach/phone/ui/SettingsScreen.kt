@@ -74,6 +74,11 @@ fun SettingsScreen(connection: ChatGptConnectionUi, modelUi: ChatGptModelSetting
                 Text("설정", color = KColors.White, fontSize = 28.sp, fontWeight = FontWeight.Medium)
             }
             Spacer(Modifier.height(28.dp))
+            OutlinedButton(onClick = actions.profile, modifier = Modifier.fillMaxWidth().height(50.dp), shape = KShape.Control) {
+                Text("내 운동 프로필 · 워치 착용", color = KColors.White)
+            }
+            Text("신체 정보와 평소 착용 상태를 폰에 저장해요. 로그인 없이 설정할 수 있어요.", color = KColors.Muted, fontSize = 13.sp)
+            Spacer(Modifier.height(16.dp))
             OutlinedButton(onClick = actions.tempo, modifier = Modifier.fillMaxWidth().height(50.dp), shape = KShape.Control) {
                 Text("운동별 템포 알림", color = KColors.White)
             }
@@ -116,7 +121,6 @@ fun SettingsScreen(connection: ChatGptConnectionUi, modelUi: ChatGptModelSetting
             Spacer(Modifier.height(18.dp))
             Text("모델과 추론 강도는 계정별로 저장돼요. 설정 변경만으로 한도가 소모되지는 않아요.", color = KColors.Muted, fontSize = 13.sp)
             Spacer(Modifier.height(8.dp))
-            TextButton(onClick = actions.profile) { Text("내 운동 프로필") }
             Text("운동 상담은 메뉴에서, GPT 보정 도움은 내 측정 엔진에서 요청해요", color = KColors.Muted, fontSize = 13.sp)
             Spacer(Modifier.height(20.dp))
             listOf(Triple("운동 상담", tasks.chatEnabled, { checked: Boolean -> tasks.copy(chatEnabled = checked) }),
