@@ -36,6 +36,21 @@ class CameraCaptureGuideTest {
             }
         }
     }
+    @Test fun everyExerciseGetsAOneOrTwoLineBriefInsteadOfAParagraph() {
+        (ExerciseMeasurementContracts.standard.keys + "squat").forEach { id ->
+            for (left in listOf(true, false)) {
+                val guide = CameraCaptureGuide.forExercise(id, left)
+                assertTrue(guide.headline.isNotBlank() && guide.headline.length <= 24, "$id ${guide.headline}")
+                val hint = guide.startHint
+                if (ExerciseMeasurementContracts.resolve(id).recipe == MeasurementRecipe.MANUAL) assertNull(hint, id)
+                else assertTrue(hint != null && hint.length <= 26, "$id $hint")
+            }
+        }
+        val curl = CameraCaptureGuide.forExercise("dumbbell_curl", true)
+        assertEquals("왼쪽 측면 · 상체와 왼팔이 보이게", curl.headline)
+        assertEquals("팔을 쭉 내린 상태에서 시작", curl.startHint)
+        assertEquals("오른쪽 측면 · 상체와 오른팔이 보이게", CameraCaptureGuide.forExercise("dumbbell_curl", false).headline)
+    }
     @Test fun mirroredPreviewDoesNotSwapTheObservedAnatomicalArmAndOcclusionBlocksReady() {
         val guide = CameraCaptureGuide.forExercise("dumbbell_curl", true)
         val points = frame(1000, 160.0).imageLandmarks.single().toMutableList()
