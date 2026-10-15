@@ -1,0 +1,15 @@
+{
+  "capture_type": "Native Android Canvas design proposal",
+  "selected_design": "D2 revised + second page",
+  "control_corner_radius_dp": 6,
+  "control_corner_radius_px": 12,
+  "phone_reference": "phone/src/main/kotlin/dev/kyungmin/kcoach/phone/ui/Motion.kt KShape.Control; applied by WorkoutScreen.kt",
+  "preserved": [
+    "first page",
+    "button bounds",
+    "text positions",
+    "colors",
+    "labels"
+  ],
+  "production_source_modified": false
+}

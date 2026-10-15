@@ -1,0 +1,36 @@
+{
+  "capture_type": "Native Android Canvas design preview",
+  "selected_design": "D1",
+  "changes": [
+    "remove bpm label only",
+    "count orange only above target"
+  ],
+  "heart_rate_position_px": {
+    "center_x": 287,
+    "baseline": 354
+  },
+  "colors": {
+    "at_or_below_target": "#00E68C",
+    "above_target": "#FF9800"
+  },
+  "checked_counts": [
+    [
+      19,
+      20
+    ],
+    [
+      20,
+      20
+    ],
+    [
+      21,
+      20
+    ],
+    [
+      13,
+      12
+    ]
+  ],
+  "same_pixels_outside_removed_label": true,
+  "production_source_modified": false
+}

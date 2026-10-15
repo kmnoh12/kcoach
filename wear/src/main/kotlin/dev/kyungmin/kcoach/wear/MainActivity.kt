@@ -22,14 +22,11 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import android.widget.EditText
 import android.text.InputType
 import android.text.InputFilter
-import android.text.TextWatcher
-import android.text.Editable
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.google.android.gms.tasks.Tasks
@@ -77,11 +74,26 @@ class MainActivity : Activity() {
     private var shadowEventIndex = -1
     private var shadowEmissionNs = -1L
     private var frameCommitPending = ""
+    private lateinit var face: WatchWorkoutFace
+    private lateinit var pages: WorkoutPagesView
+    private lateinit var detailsTitle: TextView
+    private lateinit var detailsSubtitle: TextView
+    private lateinit var editCountButton: TextView
+    private val homeStore by lazy { WatchHomeStore(this) }
+    private var phoneResultStatus = ""
+    private var phoneResultPending = false
+    private var resultGeneration = 0
+    private var displayedCompletionSession = ""
+    internal var resultOpener: (Intent, (Boolean) -> Unit) -> Unit = { request, done -> WatchPhoneResult.open(this, request, done) }
+    private val clockTicker = object : Runnable {
+        override fun run() { if (::face.isInitialized) face.clock.text = java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm")); handler.postDelayed(this, 30_000) }
+    }
     private lateinit var shadowText: TextView
 
     private val runtimeStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: android.content.Context, intent: Intent) {
             if (intent.action == WearWorkoutService.ACTION_STATE) applyRuntimeState(intent)
+            else if (intent.action == WatchHomeStore.ACTION_OVERVIEW) updateUi()
             else if (intent.action == WearWorkoutService.ACTION_WORKOUT_CONTROL) {
                 updateUi()
                 val message = when (intent.getStringExtra("status")) {
@@ -95,13 +107,8 @@ class MainActivity : Activity() {
         }
     }
 
-    private lateinit var exerciseText: TextView
-    private lateinit var setText: TextView
-    private lateinit var repText: TextView
-    private lateinit var heartText: TextView
     private lateinit var connectionText: TextView
     private lateinit var phaseText: TextView
-    private lateinit var repCaption: TextView
     private lateinit var restText: TextView
     private lateinit var restRing: RestProgressRing
     private lateinit var manualButton: TextView
@@ -126,12 +133,16 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         otaCoordinator = dev.kyungmin.kcoach.updates.OtaCoordinator.get(this)
         setContentView(buildUi())
-        unsubscribeUpdates = otaCoordinator.observe { state -> updateStateText?.text = state.message }
+        unsubscribeUpdates = otaCoordinator.observe { state ->
+            updateStateText?.text = state.message
+            updateStateText?.visibility = if (otaCoordinator.store.local()?.phase == dev.kyungmin.kcoach.updates.OtaPhase.USER_ACTION_REQUIRED) View.VISIBLE else View.GONE
+        }
         emulatorBridge.start()
         startService(Intent(this, WearCommandService::class.java))
         startService(Intent(this, WearWorkoutService::class.java))
         registerReceiver(runtimeStateReceiver, IntentFilter(WearWorkoutService.ACTION_STATE).apply {
             addAction(WearWorkoutService.ACTION_WORKOUT_CONTROL)
+            addAction(WatchHomeStore.ACTION_OVERVIEW)
         }, android.content.Context.RECEIVER_NOT_EXPORTED)
         if (!isEmulator) requestPermissionsIfNeeded()
         updateUi()
@@ -200,6 +211,10 @@ class MainActivity : Activity() {
         shadowCount = intent.getIntExtra("patternShadowCount", 0)
         shadowEventIndex = intent.getIntExtra("patternShadowEventIndex", -1)
         shadowEmissionNs = intent.getLongExtra("patternShadowEmissionNs", -1L)
+        if (running || resting || paused || sessionId.isNotBlank()) {
+            homeStore.leaveCompletion()
+            resultGeneration += 1; phoneResultPending = false; phoneResultStatus = ""
+        }
         updateScreenPolicy()
         updateUi()
         handler.removeCallbacks(restUiTicker)
@@ -210,10 +225,14 @@ class MainActivity : Activity() {
         super.onResume()
         updateScreenPolicy()
         otaCoordinator.attach(this)
+        handler.removeCallbacks(clockTicker)
+        handler.post(clockTicker)
+        updateUi()
     }
 
     override fun onPause() {
         otaCoordinator.detach(this)
+        handler.removeCallbacks(clockTicker)
         super.onPause()
     }
 
@@ -225,6 +244,8 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        resultGeneration += 1
+        handler.removeCallbacks(clockTicker)
         unsubscribeUpdates?.invoke()
         handler.removeCallbacks(restUiTicker)
         runCatching { unregisterReceiver(runtimeStateReceiver) }
@@ -233,158 +254,56 @@ class MainActivity : Activity() {
     }
 
     private fun buildUi(): View {
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(18, 18, 18, 18)
-            setBackgroundColor(Color.BLACK)
-        }
-        root.addView(label("KCOACH WEAR", 11f, Color.rgb(0, 229, 255)).apply {
-            typeface = Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER
-        })
-        connectionText = label("○ 스마트폰 연결 대기", 11f, Color.rgb(255, 177, 0)).apply {
-            gravity = Gravity.CENTER
-            setPadding(16, 4, 16, 4)
-            background = rounded(Color.rgb(30, 32, 36), 16)
-        }
-        root.addView(connectionText, LinearLayout.LayoutParams(-2, -2).apply {
-            topMargin = 4
-            bottomMargin = 6
-        })
-        phaseText = label("운동 대기 중!", 15f, Color.WHITE, true).apply {
-            gravity = Gravity.CENTER
-            setPadding(0, 4, 0, 6)
-        }
-        root.addView(phaseText)
-        exerciseText = label(exerciseName, 17f, Color.WHITE, true).apply {
-            gravity = Gravity.CENTER
-        }
-        root.addView(exerciseText)
-        setText = label("폰에서 운동을 시작하면 현재 세트가 표시돼요", 11f, Color.rgb(150, 160, 170)).apply {
-            gravity = Gravity.CENTER
-            setPadding(0, 4, 0, 6)
-        }
-        root.addView(setText)
-
-        val repCard = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(12, 8, 12, 8)
-            background = rounded(Color.rgb(18, 22, 26), 20, Color.rgb(40, 48, 56), 1)
-        }
-        repCaption = label("현재 횟수 / 이번 세트 목표", 9f, Color.rgb(150, 160, 170)).apply {
-            gravity = Gravity.CENTER
-        }
-        repCard.addView(repCaption)
-        repText = label("-- / --회", 32f, Color.rgb(150, 160, 170), true).apply {
-            gravity = Gravity.CENTER
-        }
-        repCard.addView(repText)
-        root.addView(repCard, LinearLayout.LayoutParams(-1, -2).apply {
-            topMargin = 6
-            bottomMargin = 5
-        })
-        shadowText = label("", 11f, Color.rgb(0, 210, 185), true).apply { gravity = Gravity.CENTER; visibility = View.GONE }
-        root.addView(shadowText)
-        manualButton = label("실제 횟수 입력", 12f, Color.rgb(0, 230, 118), true).apply {
-            gravity = Gravity.CENTER
-            setPadding(12, 8, 12, 8)
-            background = rounded(Color.rgb(18, 35, 30), 14)
-            setOnClickListener { showManualCount() }
-        }
-        root.addView(manualButton, LinearLayout.LayoutParams(-1, -2))
-
+        face = WatchWorkoutFace(this)
+        face.action.setOnClickListener { openFinishedWorkout() }
         val details = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(0, 8, 0, 16)
+            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(dp(38), dp(28), dp(38), dp(30)); setBackgroundColor(Color.BLACK)
         }
-        workoutControlButton = label("", 12f, Color.rgb(0, 210, 185), true).apply {
-            gravity = Gravity.CENTER
-            setPadding(8, 10, 8, 10)
-            background = rounded(Color.rgb(18, 35, 30), 14)
-            setOnClickListener { requestWorkoutControl() }
+        fun add(view: TextView, action: Boolean = false) {
+            details.addView(view, LinearLayout.LayoutParams(-1, if (action) dp(48) else -2).apply { bottomMargin = dp(6) })
         }
-        details.addView(workoutControlButton)
-        directionBypassButton = label("방향 확인 없이 직접 시작", 12f, Color.rgb(0, 210, 185), true).apply {
-            gravity = Gravity.CENTER; setPadding(8, 10, 8, 10)
-            background = rounded(Color.rgb(18, 35, 30), 14)
-            setOnClickListener {
-                startService(Intent(this@MainActivity, WearWorkoutService::class.java)
-                    .putExtra(WearWorkoutService.EXTRA_COMMAND, "START_DIRECTION_BYPASS")
-                    .putExtra("session", sessionId).putExtra("setId", setId).putExtra("attemptId", attemptId))
-            }
+        fun button(text: String, primary: Boolean = false, click: () -> Unit) = label(text, 15f,
+            if (primary) Color.rgb(6, 26, 19) else WatchWorkoutFace.WHITE, true).apply {
+            gravity = Gravity.CENTER; minHeight = dp(48); isFocusable = true
+            background = rounded(if (primary) WatchWorkoutFace.GREEN else Color.rgb(24, 29, 33), 6)
+            setOnClickListener { click() }
         }
-        details.addView(directionBypassButton)
-        tempoText = label("", 11f, Color.rgb(0, 210, 185), true).apply { gravity = Gravity.CENTER }
-        details.addView(tempoText)
-        tempoMuteButton = label("이번 세트 템포 알림 끄기", 12f, Color.rgb(0, 210, 185), true).apply {
-            gravity = Gravity.CENTER; setPadding(8, 10, 8, 10)
-            background = rounded(Color.rgb(18, 35, 30), 14)
-            setOnClickListener {
-                startService(Intent(this@MainActivity, WearWorkoutService::class.java)
-                    .putExtra(WearWorkoutService.EXTRA_COMMAND, "TEMPO_MUTE")
-                    .putExtra("session", sessionId).putExtra("setId", setId).putExtra("attemptId", attemptId))
-            }
-        }
-        details.addView(tempoMuteButton)
-        heartText = label("❤️ -- bpm", 12f, Color.rgb(255, 82, 82), true).apply {
-            gravity = Gravity.CENTER
-        }
-        details.addView(heartText)
-        restText = label("", 13f, Color.rgb(255, 177, 0), true).apply {
-            gravity = Gravity.CENTER
-            setPadding(0, 10, 0, 0)
-        }
-        details.addView(restText)
-        pendingManualButton = label("보관 중인 횟수", 11f, Color.rgb(255, 177, 0)).apply {
-            gravity = Gravity.CENTER
-            setPadding(8, 8, 8, 8)
-            setOnClickListener {
-                val pending = manualOutbox.unresolved()
-                AlertDialog.Builder(this@MainActivity).setTitle("보관 중인 횟수")
-                    .setMessage(pending.joinToString("\n") { entry ->
-                        "${entry.command.setIndex + 1}세트 · ${entry.command.performedReps}회 · " + when (entry.ack?.status) {
-                            null -> "연결 후 전송"
-                            ManualSetStatus.CONFLICT -> "폰 기록과 다름 · 폰 ${entry.ack.currentReps ?: "—"}회"
-                            else -> "세트가 변경됨 · 폰에서 확인 필요"
-                        }
-                    }).setPositiveButton("닫기", null).show()
-            }
-        }
-        details.addView(pendingManualButton)
-        details.addView(label("화면을 내려 심박수와 센서 상태 확인", 10f, Color.rgb(110, 115, 120)).apply {
-            gravity = Gravity.CENTER
-            setPadding(0, 18, 0, 0)
-        })
-        updateStateText = label("업데이트는 폰 앱에서 확인해 주세요", 11f, Color.WHITE).apply {
-            gravity = Gravity.CENTER
-            setPadding(18, 10, 18, 10)
-            // Only resume an OS confirmation for a phone-requested transaction; never check independently.
-            setOnClickListener {
-                if (otaCoordinator.store.local()?.phase == dev.kyungmin.kcoach.updates.OtaPhase.USER_ACTION_REQUIRED)
-                    otaCoordinator.confirmInstall(this@MainActivity)
-            }
-        }
-        details.addView(updateStateText, LinearLayout.LayoutParams(-2, -2).apply {
-            topMargin = 18
-            bottomMargin = 8
-        })
-        root.addView(ScrollView(this).apply {
-            isFillViewport = false
-            addView(details)
-        }, LinearLayout.LayoutParams(-1, 0, 1f))
-        val frame = FrameLayout(this)
-        frame.setBackgroundColor(Color.BLACK)
-        frame.addView(root, FrameLayout.LayoutParams(-1, -1))
-        restRing = RestProgressRing().apply {
-            visibility = View.GONE
-            isClickable = false
-        }
+        detailsTitle = label("", 16f, Color.WHITE, true).apply { gravity = Gravity.CENTER }; add(detailsTitle)
+        detailsSubtitle = label("", 12f, WatchWorkoutFace.MUTED).apply { gravity = Gravity.CENTER }; add(detailsSubtitle)
+        manualButton = button("세트 마치기", true) { finishCurrentSet() }; add(manualButton, true)
+        editCountButton = button("횟수 수정") { showManualCount(editOnly = true) }; add(editCountButton, true)
+        workoutControlButton = button("휴식 끝내고 다음 세트", true) { requestWorkoutControl() }; add(workoutControlButton, true)
+        directionBypassButton = button("직접 시작") {
+            startService(Intent(this, WearWorkoutService::class.java).putExtra(WearWorkoutService.EXTRA_COMMAND, "START_DIRECTION_BYPASS")
+                .putExtra("session", sessionId).putExtra("setId", setId).putExtra("attemptId", attemptId))
+        }; add(directionBypassButton, true)
+        phaseText = label("", 12f, WatchWorkoutFace.ORANGE).apply { gravity = Gravity.CENTER }; add(phaseText)
+        connectionText = label("", 12f, WatchWorkoutFace.ORANGE).apply { gravity = Gravity.CENTER }; add(connectionText)
+        shadowText = label("", 11f, WatchWorkoutFace.MUTED).apply { gravity = Gravity.CENTER }; add(shadowText)
+        tempoText = label("", 12f, WatchWorkoutFace.MUTED).apply { gravity = Gravity.CENTER }; add(tempoText)
+        tempoMuteButton = button("템포 알림 끄기") {
+            startService(Intent(this, WearWorkoutService::class.java).putExtra(WearWorkoutService.EXTRA_COMMAND, "TEMPO_MUTE")
+                .putExtra("session", sessionId).putExtra("setId", setId).putExtra("attemptId", attemptId))
+        }; add(tempoMuteButton, true)
+        restText = label("", 12f, WatchWorkoutFace.MUTED).apply { gravity = Gravity.CENTER }; add(restText)
+        pendingManualButton = button("보관 중인 횟수") {
+            AlertDialog.Builder(this).setTitle("보관 중인 횟수").setMessage(manualOutbox.unresolved().joinToString("\n") {
+                "${it.command.setIndex + 1}세트 · ${it.command.performedReps}회 · " +
+                    if (it.ack?.status == ManualSetStatus.CONFLICT) "폰 기록과 달라요" else "폰에서 확인해 주세요"
+            }).setPositiveButton("닫기", null).show()
+        }; add(pendingManualButton, true)
+        updateStateText = button("폰이 요청한 업데이트 계속") { otaCoordinator.confirmInstall(this) }
+            .apply { visibility = View.GONE }; add(requireNotNull(updateStateText), true)
+        add(label("⌃ 위로 · 횟수 화면", 11f, WatchWorkoutFace.MUTED).apply { gravity = Gravity.CENTER })
+        val frame = FrameLayout(this).apply { setBackgroundColor(Color.BLACK); addView(face, FrameLayout.LayoutParams(-1, -1)) }
+        restRing = RestProgressRing().apply { visibility = View.GONE; isClickable = false }
         frame.addView(restRing, FrameLayout.LayoutParams(-1, -1))
-        return frame
+        pages = WorkoutPagesView(this, frame, details)
+        return pages
     }
+
+    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
     private fun requestPermissionsIfNeeded() {
         val permissions = listOf(Manifest.permission.BODY_SENSORS, Manifest.permission.ACTIVITY_RECOGNITION) +
@@ -401,105 +320,145 @@ class MainActivity : Activity() {
     }
 
     private fun updateUi() {
-        if (!::repText.isInitialized) return
-        shadowText.visibility = if (running && shadowCommandId.isNotEmpty()) View.VISIBLE else View.GONE
-        shadowText.text = "보정 후보 · ${shadowCount}회 (비교 중)"
-        recordShadowFrameCommit()
-        connectionText.text = if (paired) "● 스마트폰과 연결 완료" else "○ 스마트폰 연결 대기"
-        connectionText.setTextColor(if (paired) Color.rgb(0, 230, 118) else Color.rgb(255, 177, 0))
-        phaseText.text = when {
-            runtimePhase == "CAPTURE_RECOVERY_REQUIRED" -> "센서 기록 복구 필요"
-            runtimePhase == "MANUAL_PENDING" -> "횟수 저장 대기"
-            runtimePhase == "MANUAL_CONFLICT" -> "횟수를 확인해 주세요"
-            running && runtimePhase == "START_DIRECTION_WAITING" -> "준비 손목 방향 확인"
-            running && runtimePhase == "WORKING_START_CONFIRMED" -> "손목 방향 확인 · 운동 중"
-            running && runtimePhase == "WORKING_START_BYPASSED" -> "직접 시작 · 방향 미확인"
-            running && runtimePhase == "POSITIONING" -> "손목 안정 확인"
-            running && runtimePhase in setOf("PREPARING", "BASELINE") -> "센서 기준 확인"
-            running && runtimePhase == "CONTROLLED_REPS" -> "진동 후 동작 시작"
-            running -> "운동 진행 중"
-            resting -> "다음 운동"
-            paused -> "일시정지"
-            paired -> "운동 대기 중!"
-            else -> "스마트폰 연결 대기"
+        if (!::face.isInitialized) return
+        face.clock.text = java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
+        val active = running || resting || paused || sessionId.isNotBlank() && setId.isNotBlank()
+        val complete = !active && homeStore.showsCompletion()
+        if (complete && displayedCompletionSession != homeStore.completion()?.sessionId) {
+            displayedCompletionSession = homeStore.completion()?.sessionId.orEmpty()
+            resultGeneration += 1; phoneResultPending = false; phoneResultStatus = ""
         }
-        val hasActiveExercise = running || resting || paused || (sessionId.isNotBlank() && setId.isNotBlank())
-        directionBypassButton.visibility = if (running && runtimePhase == "START_DIRECTION_WAITING") View.VISIBLE else View.GONE
-        tempoText.visibility = if (hasActiveExercise && !resting && (tempoEnabled || tempoHint.isNotEmpty())) View.VISIBLE else View.GONE
-        tempoText.text = tempoHint.ifBlank { "템포 알림 · 검증된 개인 엔진의 유효 반복에서 사용" }
-        tempoMuteButton.visibility = if (hasActiveExercise && !resting && tempoEnabled) View.VISIBLE else View.GONE
-        val offered = workoutControls.offer()
-        val pendingControl = workoutControls.pending().firstOrNull()
-        workoutControlButton.visibility = if (pendingControl != null || workoutControls.supportsControls() &&
-            (resting && setId.isNotBlank() && attemptId.isNotBlank() || (!hasActiveExercise && offered != null))) View.VISIBLE else View.GONE
-        workoutControlButton.isEnabled = pendingControl == null && !paused
-        workoutControlButton.text = when {
-            pendingControl != null -> "요청 보관 중 · 연결 후 확인"
-            resting -> "휴식 끝내고 다음 세트"
-            else -> "${offered?.routineName.orEmpty()}\n워치에서 루틴 시작"
+        val count = displayedCount()
+        face.primary(!active || resting)
+        face.homeLayout(!active && !complete)
+        face.value.maxLines = if (complete) 2 else 1
+        face.showDivider = active && !resting
+        face.invalidate()
+        listOf(face.target, face.weight, face.unit, face.heart, face.heartRate).forEach { it.visibility = if (active) View.VISIBLE else View.GONE }
+        face.down.text = "⌄"; face.down.visibility = if (active || manualOutbox.unresolved().isNotEmpty()) View.VISIBLE else View.GONE
+        face.action.visibility = if (complete) View.VISIBLE else View.GONE
+        face.action.text = "폰에서 보기"; face.action.isEnabled = !phoneResultPending
+        face.action.alpha = if (phoneResultPending) 0.5f else 1f
+        face.hint.text = ""
+        face.value.textSize = if (active) 48f else 24f
+        face.value.setTextColor(WatchWorkoutFace.GREEN)
+        if (active) {
+            face.title.text = exerciseName
+            face.subtitle.text = when { resting -> "휴식"; paused -> "일시정지"; manualRequired -> "${setIndex + 1}세트 · 직접 기록"; else -> "${setIndex + 1}세트 · 자동 측정" }
+            face.target.text = "/ ${targetReps}회"
+            face.value.text = count?.toString() ?: "—"
+            face.value.setTextColor(if (count != null && count > targetReps) WatchWorkoutFace.ORANGE else WatchWorkoutFace.GREEN)
+            face.weight.text = weightKg?.let { if (it % 1.0 == 0.0) it.toInt().toString() else "%.1f".format(it) } ?: "—"
+            face.unit.text = "kg"; face.heart.text = "♥"; face.heartRate.text = heartRate.takeIf { it > 0 }?.toString() ?: "—"
+            face.hint.text = if (manualRequired && count == null) "아래로 · 횟수 기록" else ""
+            if (running && runtimePhase in setOf("POSITIONING", "PREPARING", "BASELINE", "START_DIRECTION_WAITING")) {
+                face.value.text = "준비"; face.value.textSize = 28f
+                face.hint.text = if (runtimePhase == "START_DIRECTION_WAITING") "손목 방향을 맞춰 주세요" else "손목을 잠시 멈춰 주세요"
+            }
+            if (resting) {
+                val left = RestCountdownCalculator.calculate(System.currentTimeMillis(), restEndAtMs, restSeconds).remainingSeconds
+                face.value.text = String.format("%d:%02d", left / 60, left % 60)
+                face.target.visibility = View.GONE
+                face.hint.text = "다음 세트 · ${targetReps}회"
+            }
+            if (paused) face.hint.text = "폰에서 계속할 수 있어요"
+        } else if (complete) {
+            face.title.text = "운동 완료"; face.subtitle.text = "수고했어요"
+            face.value.text = if (phoneResultStatus.isBlank()) "기록을 확인해 보세요" else phoneResultStatus
+            face.value.textSize = 14f; face.value.setTextColor(WatchWorkoutFace.WHITE)
+        } else {
+            face.title.text = "이번 주 운동"; face.subtitle.text = ""
+            face.value.text = homeStore.weekCount()?.let { "${it}회" } ?: "—"
+            face.value.textSize = 40f
+            val recent = homeStore.overview()?.optJSONObject("recent")
+            face.hint.text = recent?.let {
+                val date = java.time.Instant.ofEpochMilli(it.getLong("endedAtMs")).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+                "최근 · ${it.getString("routineName")}\n${date.monthValue}월 ${date.dayOfMonth}일"
+            } ?: "최근 기록이 아직 없어요"
+            // A missing overview is unknown, not an empty workout history.
+            if (homeStore.overview() == null) face.hint.text = "폰에서 기록을 확인하세요"
         }
-        exerciseText.visibility = if (hasActiveExercise) View.VISIBLE else View.GONE
-        exerciseText.text = if (hasActiveExercise) exerciseName else ""
-        val weightText = weightKg?.let { " · ${if (it % 1.0 == 0.0) it.toInt() else "%.1f".format(it)}kg" } ?: ""
-        setText.text = when {
-            runtimePhase == "CAPTURE_RECOVERY_REQUIRED" -> "센서 기록이 일부 없거나 손상됐어요"
-            running && runtimePhase == "START_DIRECTION_WAITING" -> "선택한 시작 손목 방향으로 2초 유지\n어렵다면 직접 시작할 수 있어요"
-            running && runtimePhase == "WORKING_START_UNCHECKED" ->
-                "시작 방향 미확인\n세트 ${setIndex + 1} · 목표 ${targetReps}회$weightText"
-            running && runtimePhase == "POSITIONING" ->
-                "준비 손목의 흔들림을 확인하고 있어요"
-            running && runtimePhase in setOf("PREPARING", "BASELINE") ->
-                "흔들림 없이 2초 유지해 주세요"
-            running && runtimePhase == "CONTROLLED_REPS" ->
-                "자연스러운 범위·속도로 5회$weightText"
-            running -> "세트 ${setIndex + 1} · 목표 ${targetReps}회$weightText"
-            resting -> "세트 ${setIndex + 1} 준비 · ${restSeconds}초 휴식"
-            paused -> "운동 일시정지 · 폰 명령 대기"
-            paired -> "폰에서 운동을 시작하면 현재 세트가 표시돼요"
+        detailsTitle.text = if (active) exerciseName else if (complete) "운동 완료" else "운동 기록"
+        detailsSubtitle.text = if (active) "${setIndex + 1}세트 · 현재 ${count?.let { "${it}회" } ?: "미입력"}" else ""
+        connectionText.text = "폰 연결이 끊겼어요 · 기록은 보관돼요"
+        connectionText.visibility = if (active && !paired) View.VISIBLE else View.GONE
+        phaseText.text = when (runtimePhase) {
+            "CAPTURE_RECOVERY_REQUIRED" -> "센서 기록 복구가 필요해요"
+            "MANUAL_PENDING" -> "폰에 기록 전달 중"
+            "MANUAL_CONFLICT" -> "폰과 워치의 횟수를 확인해 주세요"
             else -> ""
         }
-        val countdown = RestCountdownCalculator.calculate(
-            nowMs = System.currentTimeMillis(),
-            endAtMs = restEndAtMs,
-            totalSeconds = restSeconds,
-        )
-        repCaption.text = if (resting) "남은 휴식 / 전체 휴식" else if (manualRequired) "입력한 횟수 / 이번 세트 목표" else "추정 횟수 / 이번 세트 목표"
-        repText.text = when {
-            running && runtimePhase in setOf("POSITIONING", "PREPARING", "BASELINE", "START_DIRECTION_WAITING") -> "준비"
-            resting -> "${countdown.remainingSeconds} / ${countdown.totalSeconds}초"
-            manualRequired && manualStatus.isBlank() -> "— / ${targetReps}회"
-            hasActiveExercise -> "$reps / ${targetReps}회"
-            else -> "-- / --회"
-        }
-        repText.setTextColor(if (reps >= targetReps && running) Color.rgb(0, 229, 255) else if (hasActiveExercise) Color.rgb(0, 230, 118) else Color.rgb(150, 160, 170))
-        heartText.text = if (heartRate > 0) "❤️ $heartRate bpm" else "❤️ -- bpm"
-        manualButton.visibility = if (hasActiveExercise && !resting && setId.isNotBlank() && attemptId.isNotBlank() &&
-            !sessionId.startsWith("calibration-") && runtimePhase != "CAPTURE_RECOVERY_REQUIRED") View.VISIBLE else View.GONE
-        manualButton.isEnabled = manualStatus !in setOf("PENDING", "STALE", "NO_SESSION", "REJECTED")
+        phaseText.visibility = if (phaseText.text.isEmpty()) View.GONE else View.VISIBLE
+        val editable = active && !resting && !sessionId.startsWith("calibration-") && setId.isNotBlank() && attemptId.isNotBlank() && runtimePhase != "CAPTURE_RECOVERY_REQUIRED"
+        manualButton.visibility = if (editable) View.VISIBLE else View.GONE
+        editCountButton.visibility = if (editable) View.VISIBLE else View.GONE
+        val pending = manualStatus in setOf("PENDING", "STALE", "NO_SESSION", "REJECTED")
+        manualButton.isEnabled = !pending && !paused; editCountButton.isEnabled = !pending && !paused
         manualButton.text = when (manualStatus) {
-            "PENDING" -> "폰 저장 대기 · 입력 보관 중"
-            "CONFLICT" -> "폰 기록과 비교해 확정"
-            "STALE", "NO_SESSION", "REJECTED" -> "세트 변경 · 입력 보관됨"
-            "APPLIED", "DUPLICATE" -> "저장한 횟수 수정"
-            else -> "실제 횟수 입력 · 완료"
+            "PENDING" -> "폰에 기록 전달 중"
+            "CONFLICT" -> "횟수 확인"
+            "STALE", "NO_SESSION", "REJECTED" -> "폰에서 세트를 확인하세요"
+            "APPLIED", "DUPLICATE" -> "기록 수정"
+            else -> if (count == null) "횟수 입력" else "세트 마치기\n${count}회로 기록"
         }
-        val pending = manualOutbox.unresolved()
-        pendingManualButton.visibility = if (pending.isEmpty()) View.GONE else View.VISIBLE
-        pendingManualButton.text = "보관 중인 횟수 ${pending.size}건"
-        if (resting) {
-            val now = System.currentTimeMillis()
-            restText.text = "휴식 후 다음 세트를 자동으로 준비해요"
-            restRing.setWindow(restEndAtMs - restSeconds.coerceAtLeast(1) * 1_000L, restEndAtMs)
-            restRing.visibility = if (restEndAtMs > now) View.VISIBLE else View.GONE
-        } else {
-            restRing.visibility = View.GONE
-            if (!restText.text.toString().startsWith("다음 세트")) restText.text = ""
+        workoutControlButton.visibility = if (resting && workoutControls.supportsControls() && setId.isNotBlank() && attemptId.isNotBlank()) View.VISIBLE else View.GONE
+        workoutControlButton.isEnabled = workoutControls.pending().isEmpty() && !paused
+        workoutControlButton.text = if (workoutControls.pending().isEmpty()) "휴식 끝내고 다음 세트" else "폰에 요청 전달 중"
+        directionBypassButton.visibility = if (running && runtimePhase == "START_DIRECTION_WAITING") View.VISIBLE else View.GONE
+        // Tempo and diagnostics stay in secondary controls, never below the main counter.
+        tempoText.visibility = View.GONE
+        tempoMuteButton.visibility = if (active && !resting && tempoEnabled) View.VISIBLE else View.GONE
+        shadowText.visibility = if (running && shadowCommandId.isNotBlank()) View.VISIBLE else View.GONE
+        shadowText.text = "보정 비교 · ${shadowCount}회"; recordShadowFrameCommit()
+        pendingManualButton.visibility = if (manualOutbox.unresolved().isEmpty()) View.GONE else View.VISIBLE
+        pendingManualButton.text = "보관 중인 횟수 ${manualOutbox.unresolved().size}건"
+        restText.visibility = View.GONE
+        if (resting && restEndAtMs > System.currentTimeMillis()) {
+            restRing.setWindow(restEndAtMs - restSeconds.coerceAtLeast(1) * 1_000L, restEndAtMs); restRing.visibility = View.VISIBLE
+        } else restRing.visibility = View.GONE
+        val presentation = if (active) "active" else if (complete) "complete" else "home"
+        if (lastPresentation != presentation) {
+            lastPresentation = presentation
+            pages.scrollTo(0, 0)
         }
+    }
+
+    private var lastPresentation = ""
+    private fun draftKey() = "$sessionId:$setId:$attemptId"
+    private fun displayedCount(): Int? = getSharedPreferences("manual-count-drafts", MODE_PRIVATE).getString(draftKey(), null)?.toIntOrNull()
+        ?: if (manualRequired && manualStatus.isBlank()) null else reps
+
+    private fun finishCurrentSet() {
+        if (paused || resting || setId.isBlank() || attemptId.isBlank() || manualStatus in setOf("PENDING", "STALE", "NO_SESSION", "REJECTED")) return
+        if (manualStatus == "CONFLICT" || displayedCount() == null) { showManualCount(); return }
+        val count = requireNotNull(displayedCount())
+        val existing = manualOutbox.latest(sessionId, setId, attemptId)
+        val command = ManualSetCommand(java.util.UUID.randomUUID().toString(), sessionId, exerciseId, setIndex, setId, attemptId,
+            count, existing?.ack?.currentRevision ?: 0L, if (existing?.ack != null) ManualSetOperation.EDIT else ManualSetOperation.COMPLETE)
+        startService(Intent(this, WearWorkoutService::class.java).putExtra(WearWorkoutService.EXTRA_COMMAND, "MANUAL_SUBMIT")
+            .putExtra("payload", WireCodec.encode(command.toEnvelope(android.os.SystemClock.elapsedRealtime(), System.currentTimeMillis()))))
+        manualStatus = "PENDING"; updateUi()
+    }
+
+    private fun openFinishedWorkout() {
+        if (running || resting || paused || sessionId.isNotBlank() || phoneResultPending) return
+        val completed = homeStore.completion() ?: return
+        val generation = ++resultGeneration
+        phoneResultPending = true; phoneResultStatus = "폰으로 요청하는 중"; updateUi()
+        fun finish(success: Boolean) {
+            if (isDestroyed || generation != resultGeneration) return
+            resultGeneration += 1; phoneResultPending = false
+            phoneResultStatus = if (success) "폰에서 확인해 주세요" else "연결을 확인하고\n다시 눌러 주세요"
+            updateUi()
+        }
+        handler.postDelayed({ finish(false) }, 15_000)
+        runCatching { resultOpener(WatchPhoneResult.intent(completed.sessionId), ::finish) }.onFailure { finish(false) }
     }
 
     private fun recordShadowFrameCommit() {
         if (!running || shadowCommandId.isBlank() || shadowEventIndex < 0 || shadowEmissionNs < 0 ||
-            !shadowText.isAttachedToWindow || !shadowText.isHardwareAccelerated || !window.decorView.hasWindowFocus()) return
+            !shadowText.isAttachedToWindow || !shadowText.isHardwareAccelerated || !window.decorView.hasWindowFocus() ||
+            !shadowText.getGlobalVisibleRect(android.graphics.Rect())) return
         val identity = "$sessionId|$setId|$attemptId|$shadowCommandId|$shadowEventIndex|$shadowEmissionNs"
         if (frameCommitPending == identity) return
         frameCommitPending = identity
@@ -509,7 +468,8 @@ class MainActivity : Activity() {
             val submittedAt = android.os.SystemClock.elapsedRealtimeNanos()
             runOnUiThread {
                 if (isFinishing || isDestroyed || sessionId != session || setId != set || attemptId != attempt ||
-                    shadowCommandId != command || shadowEventIndex != index || shadowEmissionNs != emission) return@runOnUiThread
+                    shadowCommandId != command || shadowEventIndex != index || shadowEmissionNs != emission ||
+                    !shadowText.getGlobalVisibleRect(android.graphics.Rect())) return@runOnUiThread
                 startService(Intent(this, WearWorkoutService::class.java)
                     .putExtra(WearWorkoutService.EXTRA_COMMAND, "PATTERN_FRAME_COMMIT")
                     .putExtra("session", session).putExtra("setId", set).putExtra("attemptId", attempt)
@@ -521,35 +481,14 @@ class MainActivity : Activity() {
     }
 
     private fun requestWorkoutControl() {
-        if (workoutControls.pending().isNotEmpty() || !workoutControls.supportsControls()) return
-        fun submit(request: dev.kyungmin.kcoach.core.WatchWorkoutControl) {
-            startService(Intent(this, WearWorkoutService::class.java)
-                .putExtra(WearWorkoutService.EXTRA_COMMAND, "WORKOUT_CONTROL_SUBMIT").putExtra("payload", request.encode()))
-        }
-        if (resting && !paused && setId.isNotBlank() && attemptId.isNotBlank()) {
-            submit(dev.kyungmin.kcoach.core.WatchWorkoutControl(java.util.UUID.randomUUID().toString(),
-                dev.kyungmin.kcoach.core.WatchWorkoutAction.NEXT_SET, sessionId, setId, attemptId))
-            return
-        }
-        if (running || paused || resting) return
-        val offer = workoutControls.offer() ?: return
-        fun start(side: String? = null, placement: String? = null) = submit(dev.kyungmin.kcoach.core.WatchWorkoutControl(
-            java.util.UUID.randomUUID().toString(), dev.kyungmin.kcoach.core.WatchWorkoutAction.START_PREPARED,
-            offer.sessionId, offer.setId, offer.attemptId, offer.planHash, side, placement))
-        AlertDialog.Builder(this).setTitle(offer.routineName)
-            .setMessage("${offer.exerciseName}부터 시작해요. 실제 운동 시간은 폰이 시작 요청을 확인한 뒤 기록돼요.")
-            .setPositiveButton("보정 없이 시작") { _, _ -> start() }
-            .setNeutralButton("착용 확인 후 시작") { _, _ ->
-                AlertDialog.Builder(this).setTitle("워치 착용 손").setItems(arrayOf("왼손", "오른손")) { _, index ->
-                    val side = if (index == 0) "LEFT" else "RIGHT"
-                    AlertDialog.Builder(this).setTitle("워치 화면 방향").setItems(arrayOf("손등 쪽", "손바닥 쪽")) { _, direction ->
-                        start(side, if (direction == 0) "OUTSIDE" else "INSIDE")
-                    }.setNegativeButton("취소", null).show()
-                }.setNegativeButton("취소", null).show()
-            }.setNegativeButton("취소", null).show()
+        if (!resting || paused || workoutControls.pending().isNotEmpty() || !workoutControls.supportsControls() || setId.isBlank() || attemptId.isBlank()) return
+        val request = dev.kyungmin.kcoach.core.WatchWorkoutControl(java.util.UUID.randomUUID().toString(),
+            dev.kyungmin.kcoach.core.WatchWorkoutAction.NEXT_SET, sessionId, setId, attemptId)
+        startService(Intent(this, WearWorkoutService::class.java).putExtra(WearWorkoutService.EXTRA_COMMAND, "WORKOUT_CONTROL_SUBMIT")
+            .putExtra("payload", request.encode()))
     }
 
-    private fun showManualCount() {
+    private fun showManualCount(editOnly: Boolean = false) {
         if (manualStatus == "PENDING" || setId.isBlank() || attemptId.isBlank()) return
         val session = sessionId
         val exercise = exerciseId
@@ -559,10 +498,20 @@ class MainActivity : Activity() {
         val existing = manualOutbox.latest(session, set, attempt)
         val revision = existing?.ack?.currentRevision ?: 0L
         fun submit(count: Int) {
+            if (sessionId != session || setId != set || attemptId != attempt || resting || paused) {
+                Toast.makeText(this, "세트가 바뀌었어요. 현재 세트를 확인해 주세요", Toast.LENGTH_LONG).show()
+                return
+            }
+            if (editOnly) {
+                getSharedPreferences("manual-count-drafts", MODE_PRIVATE).edit().putString("$session:$set:$attempt", count.toString()).apply()
+                updateUi()
+                return
+            }
             val command = ManualSetCommand(java.util.UUID.randomUUID().toString(), session, exercise, index, set, attempt,
                 count, revision, if (existing?.ack != null) ManualSetOperation.EDIT else ManualSetOperation.COMPLETE)
             startService(Intent(this, WearWorkoutService::class.java).putExtra(WearWorkoutService.EXTRA_COMMAND, "MANUAL_SUBMIT")
                 .putExtra("payload", WireCodec.encode(command.toEnvelope(android.os.SystemClock.elapsedRealtime(), System.currentTimeMillis()))))
+            manualStatus = "PENDING"; updateUi()
         }
         fun editor() {
             val draftPrefs = getSharedPreferences("manual-count-drafts", MODE_PRIVATE)
@@ -570,13 +519,9 @@ class MainActivity : Activity() {
             val input = EditText(this).apply {
                 inputType = InputType.TYPE_CLASS_NUMBER
                 filters = arrayOf(InputFilter.LengthFilter(4))
-                hint = "실제 횟수"
-                setText(draftPrefs.getString(key, null) ?: existing?.command?.performedReps?.toString().orEmpty())
-                addTextChangedListener(object : TextWatcher {
-                    override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
-                    override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { draftPrefs.edit().putString(key, s.toString()).commit() }
-                    override fun afterTextChanged(s: Editable?) = Unit
-                })
+                hint = "횟수"
+                setText(draftPrefs.getString(key, null) ?: existing?.command?.performedReps?.toString() ?: if (!manualRequired) reps.toString() else "")
+
             }
             val controls = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; addView(input) }
             controls.addView(LinearLayout(this).apply {
@@ -589,7 +534,7 @@ class MainActivity : Activity() {
                 }
             })
             val dialog = AlertDialog.Builder(this).setTitle("${index + 1}세트 · 목표 ${targetReps}회")
-                .setView(controls).setNegativeButton("취소", null).setPositiveButton("저장 · 완료", null).create()
+                .setView(controls).setNegativeButton("취소", null).setPositiveButton(if (editOnly) "적용" else "기록", null).create()
             dialog.setOnShowListener {
                 dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                     val count = input.text.toString().toIntOrNull()?.takeIf { it in 0..9_999 }
@@ -600,7 +545,7 @@ class MainActivity : Activity() {
             }
             dialog.show()
         }
-        if (existing?.ack?.status == ManualSetStatus.CONFLICT) {
+        if (!editOnly && existing?.ack?.status == ManualSetStatus.CONFLICT) {
             val phoneCount = existing.ack.currentReps
             AlertDialog.Builder(this).setTitle("어떤 횟수를 기록할까요?")
                 .setItems(arrayOf("폰 ${phoneCount ?: "—"}회 유지", "워치 ${existing.command.performedReps}회 적용", "직접 수정")) { _, which ->
@@ -673,7 +618,7 @@ class MainActivity : Activity() {
     private fun rounded(color: Int, radiusDp: Int, strokeColor: Int? = null, strokeDp: Int = 0) =
         GradientDrawable().apply {
             setColor(color)
-            cornerRadius = radiusDp.toFloat()
+            cornerRadius = radiusDp * resources.displayMetrics.density
             if (strokeColor != null) setStroke(strokeDp, strokeColor)
         }
 }

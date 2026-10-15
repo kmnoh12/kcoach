@@ -51,6 +51,11 @@ class WearCommandService : WearableListenerService() {
 
     private fun handlePayload(path: String, payload: String) {
         val receivedNs = android.os.SystemClock.elapsedRealtimeNanos()
+        if (path == WatchHomeStore.PATH_OVERVIEW) {
+            if (WatchHomeStore(this).receiveOverview(payload))
+                sendBroadcast(Intent(WatchHomeStore.ACTION_OVERVIEW).setPackage(packageName))
+            return
+        }
         if (path == WearSync.PATH_WORKOUT_OFFER) {
             runCatching { check(WatchWorkoutOutbox(this).receiveOffer(payload)) }.onSuccess {
                 sendBroadcast(Intent(WearWorkoutService.ACTION_WORKOUT_CONTROL).setPackage(packageName))

@@ -29,24 +29,15 @@ class WatchWorkoutUiTest {
             if (intent.getStringExtra("command") == "WORKOUT_CONTROL_SUBMIT") return intent
         }
     }
-    @Test fun visiblePreparedRoutineStartsOnlyAfterTheUsersExplicitConfirmation() {
+    @Test fun preparedRoutineNeverAddsACompetingWatchStartButton() {
         val app = RuntimeEnvironment.getApplication()
         val offer = WatchWorkoutOffer("session", "수동 루틴", "레그 프레스", "set", "attempt", "a".repeat(64), Long.MAX_VALUE)
         WatchWorkoutOutbox(app).receiveOffer(offer.encode())
         val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
-        val activity = controller.get()
-        val button = texts(activity.window.decorView).single { it.text.contains("워치에서 루틴 시작") }
-        assertEquals(View.VISIBLE, button.visibility)
+        assertFalse(texts(controller.get().window.decorView).any { it.text.contains("워치에서 루틴 시작") || it.text == "운동 시작" })
         assertTrue(WatchWorkoutOutbox(app).pending().isEmpty())
-        button.performClick()
-        val dialog = ShadowAlertDialog.getLatestAlertDialog()
-        dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
-        shadowOf(Looper.getMainLooper()).idle()
-        val command = WatchWorkoutControl.decode(dispatched().getStringExtra("payload")!!)
-        assertEquals(WatchWorkoutAction.START_PREPARED, command.action)
-        assertEquals(offer.planHash, command.planHash)
-        assertNull(command.side)
-        assertNull(command.placement)
+        assertTrue(texts(controller.get().window.decorView).any { it.text == "이번 주 운동" })
+        assertFalse(texts(controller.get().window.decorView).any { it.text.contains("스마트폰 연결 대기") })
         controller.pause().stop().destroy()
     }
     @Test fun nextButtonCarriesTheDisplayedNextSetIdentityAndDoesNotInventACompletionCount() {

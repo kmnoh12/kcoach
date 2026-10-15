@@ -1,0 +1,13 @@
+{
+  "main": "7aacd78",
+  "kind": "native-design-preview",
+  "test": "WatchLifecycleSnapshotTest.renderD2WaitingAndWorkoutComplete",
+  "result": "passed",
+  "production_changed": false,
+  "animation": "static frame only; dot cycle specified, not implemented",
+  "supersedes": "watch-side routine/start button proposal",
+  "size_px": [
+    432,
+    432
+  ]
+}

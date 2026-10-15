@@ -52,5 +52,6 @@ dependencies {
     implementation("androidx.core:core-ktx:1.16.0")
     implementation("androidx.health:health-services-client:1.1.0-rc02")
     implementation("androidx.wear:wear-ongoing:1.0.0")
+    implementation("androidx.wear:wear-remote-interactions:1.1.0")
     implementation("com.google.android.gms:play-services-wearable:20.0.1")
 }
