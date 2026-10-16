@@ -70,6 +70,9 @@ class WorkoutTempoServiceTest {
         val service = controller.get()
         try {
             service.onStartCommand(start(), 0, 1)
+            // Learned counting can begin after the separate wrist-preparation gate too.
+            WearWorkoutService::class.java.getDeclaredMethod("beginMeasurementCounting")
+                .apply { isAccessible = true }.invoke(service)
             cycle(service)
             assertEquals("", state(service).getStringExtra("tempoHint"))
             cycle(service)
@@ -79,6 +82,9 @@ class WorkoutTempoServiceTest {
             assertFalse(state(service).getBooleanExtra("tempoEnabled", true))
             cycle(service)
             assertEquals("이번 세트 템포 알림 꺼짐", state(service).getStringExtra("tempoHint"))
+            assertEquals(3, state(service).getIntExtra("reps", -1))
+            shadowOf(android.os.Looper.getMainLooper()).idleFor(Duration.ofSeconds(13))
+            assertFalse(state(service).getBooleanExtra("running", true))
             assertEquals(3, state(service).getIntExtra("reps", -1))
         } finally { controller.destroy() }
     }
