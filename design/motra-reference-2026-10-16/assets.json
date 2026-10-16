@@ -1,0 +1,75 @@
+{
+  "collected": "2026-10-16",
+  "assets": [
+    {
+      "role": "phone",
+      "index": 1,
+      "file": "assets/phone-1.webp",
+      "url": "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource221/v4/28/72/e6/2872e615-1b9a-0a33-9b06-5cd8fd0d3689/1.jpg/460x996bb.webp",
+      "sha256": "238656b21d4aca7970d158150e79933a663a69ec0ff1a297b635faaf551422dc"
+    },
+    {
+      "role": "phone",
+      "index": 2,
+      "file": "assets/phone-2.webp",
+      "url": "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource211/v4/52/b1/93/52b1935d-6804-6a7f-4239-e9ebf5151de6/2.jpg/460x996bb.webp",
+      "sha256": "67835aad83a4512779195b0e5fd1a8366a10957b0460464a4aa2dca48aded186"
+    },
+    {
+      "role": "phone",
+      "index": 3,
+      "file": "assets/phone-3.webp",
+      "url": "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource221/v4/55/f7/f1/55f7f12f-524a-d2fb-2f32-c8e4d61be586/3.jpg/460x996bb.webp",
+      "sha256": "70081468c989fb1df88b4f857c49f308a11bfece7e1ebf3e3e5098320a5349f2"
+    },
+    {
+      "role": "phone",
+      "index": 4,
+      "file": "assets/phone-4.webp",
+      "url": "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource221/v4/28/fb/bd/28fbbd21-e038-7038-b686-852d9a5eaa14/4.jpg/460x996bb.webp",
+      "sha256": "a3b768cc1669b7c43b8b90c02515dfea2ff888d087a36ea957895463cc719c06"
+    },
+    {
+      "role": "phone",
+      "index": 5,
+      "file": "assets/phone-5.webp",
+      "url": "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource211/v4/b4/c0/3d/b4c03d4b-a117-e6a5-6829-dbb6764df874/5.jpg/460x996bb.webp",
+      "sha256": "bbc2451cb5977cfd539bf14bc948f3cff4fa6d66f931d7d5b58a90b4e1682777"
+    },
+    {
+      "role": "phone",
+      "index": 6,
+      "file": "assets/phone-6.webp",
+      "url": "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource211/v4/f7/dd/fe/f7ddfed0-ea5d-9cbb-2c3d-b2bdf7f3286f/6.jpg/460x996bb.webp",
+      "sha256": "3bbd221d4c3aca3f1379db4a096fc45aa8e73f2e55180d09f4e577ecc80c189f"
+    },
+    {
+      "role": "watch",
+      "index": 1,
+      "file": "assets/watch-1.webp",
+      "url": "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource221/v4/48/8b/31/488b31c4-c5c1-9363-d85e-6279d36560dd/1.jpg/314x392bb.webp",
+      "sha256": "7f97bfdcfc7f3f3578f413c4cd82c479c5b9b06f0266469c370c689cf4547724"
+    },
+    {
+      "role": "watch",
+      "index": 2,
+      "file": "assets/watch-2.webp",
+      "url": "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource221/v4/c2/fd/de/c2fddeb7-ca7a-8099-5d56-f8c44bebb6f3/2.jpg/314x392bb.webp",
+      "sha256": "b762068103bdee74a13a6341f5d1e160f5702fda8721948b451a37c27b36c193"
+    },
+    {
+      "role": "watch",
+      "index": 3,
+      "file": "assets/watch-3.webp",
+      "url": "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource221/v4/5c/81/12/5c81128d-dce3-9a63-9a5d-5ade0cea41fe/3.jpg/314x392bb.webp",
+      "sha256": "199e4ef17db94bcfda8ff86387c876fbfd3265d9c6ed8f71334863d7ae620d9f"
+    },
+    {
+      "role": "watch",
+      "index": 4,
+      "file": "assets/watch-4.webp",
+      "url": "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource221/v4/4d/13/d4/4d13d469-ea53-8db0-3119-7f9ab042dd37/4.jpg/314x392bb.webp",
+      "sha256": "46ad89984743fabf6467cd8eea57116095044532e65047a47c728e7e1238cb5d"
+    }
+  ]
+}
