@@ -1,30 +1,48 @@
 package dev.kyungmin.kcoach.core
 
-data class LoggedSet(val weightKg: Double?, val reps: Int)
+data class LoggedSet(
+    val weightKg: Double?, val reps: Int,
+    val targetReps: Int? = null, val isWarmup: Boolean = false,
+    val completed: Boolean = true, val repsEntered: Boolean = true,
+    val positionKey: String = "", val upperReps: Int? = null,
+    val bodyWeightKg: Double? = null, val load: ProgressionLoad = ProgressionLoad.EXTERNAL,
+    val progressionEligible: Boolean = true,
+)
 
 /** What was actually done for one exercise in one session. */
-data class ExerciseLog(val exerciseId: String, val epochDay: Long, val sets: List<LoggedSet>, val sessionId: String? = null, val startedAtMs: Long = 0) {
-    val volumeKg: Double get() = sets.sumOf { (it.weightKg ?: 0.0) * it.reps }
-    val totalReps: Int get() = sets.sumOf { it.reps }
-    val topWeightKg: Double? get() = sets.filter { it.reps > 0 }.mapNotNull { it.weightKg }.maxOrNull()
+data class ExerciseLog(val exerciseId: String, val epochDay: Long, val sets: List<LoggedSet>, val sessionId: String? = null, val startedAtMs: Long = 0, val routineId: String? = null, val exerciseIndex: Int = -1, val equipment: String = "") {
+    val volumeKg: Double get() = sets.filter { it.completed && it.repsEntered }.sumOf { (it.weightKg ?: 0.0) * it.reps }
+    val totalReps: Int get() = sets.filter { it.completed && it.repsEntered }.sumOf { it.reps }
+    val topWeightKg: Double? get() = sets.filter { it.completed && it.repsEntered && it.reps > 0 }.mapNotNull { it.weightKg }.maxOrNull()
 }
 
 /** One line per log: `exerciseId<TAB>epochDay<TAB>weight:reps,weight:reps` (weight `-` = bodyweight). */
 object ExerciseHistoryCodec {
     fun encode(logs: List<ExerciseLog>): String = logs.joinToString("\n") { log ->
-        val sets = log.sets.joinToString(",") { "${it.weightKg?.toString() ?: "-"}:${it.reps}" }
-        "${log.exerciseId}\t${log.epochDay}\t$sets" + (log.sessionId?.let { "\t$it\t${log.startedAtMs}" } ?: "")
+        val sets = log.sets.joinToString(",") {
+            "${it.weightKg?.toString() ?: "-"}:${it.reps}:${it.targetReps ?: "-"}:${it.isWarmup}:${it.completed}:${it.repsEntered}:${escape(it.positionKey)}:${it.upperReps ?: "-"}:${it.bodyWeightKg ?: "-"}:${it.load.name}:${it.progressionEligible}"
+        }
+        "${log.exerciseId}\t${log.epochDay}\t$sets\t${log.sessionId.orEmpty()}\t${log.startedAtMs}\t${escape(log.routineId.orEmpty())}\t${log.exerciseIndex}\t${escape(log.equipment)}"
     }
 
-    fun decode(text: String): List<ExerciseLog> = text.lineSequence().mapNotNull { line ->
+    private fun escape(value: String) = java.net.URLEncoder.encode(value, "UTF-8")
+    private fun unescape(value: String) = java.net.URLDecoder.decode(value, "UTF-8")
+
+    fun decode(text: String): List<ExerciseLog> = text.lineSequence().mapNotNull { line -> runCatching {
         val parts = line.split('\t')
-        if (parts.size !in 3..5) return@mapNotNull null
+        if (parts.size !in 3..8) return@mapNotNull null
         val day = parts[1].toLongOrNull() ?: return@mapNotNull null
         val sets = parts[2].split(',').mapNotNull { cell ->
-            val (w, r) = cell.split(':').takeIf { it.size == 2 } ?: return@mapNotNull null
-            LoggedSet(w.toDoubleOrNull(), r.toIntOrNull() ?: return@mapNotNull null)
+            val c = cell.split(':')
+            if (c.size < 2) return@mapNotNull null
+            LoggedSet(c[0].toDoubleOrNull(), c[1].toIntOrNull() ?: return@mapNotNull null,
+                c.getOrNull(2)?.toIntOrNull(), c.getOrNull(3)?.toBoolean() ?: false,
+                c.getOrNull(4)?.toBoolean() ?: true, c.getOrNull(5)?.toBoolean() ?: true,
+                c.getOrNull(6)?.let(::unescape).orEmpty(), c.getOrNull(7)?.toIntOrNull(), c.getOrNull(8)?.toDoubleOrNull(), c.getOrNull(9)?.let { ProgressionLoad.valueOf(it) } ?: ProgressionLoad.EXTERNAL, c.getOrNull(10)?.toBoolean() ?: true)
         }
-        if (sets.isEmpty()) null else ExerciseLog(parts[0], day, sets, parts.getOrNull(3)?.takeIf { it.isNotBlank() }, parts.getOrNull(4)?.toLongOrNull() ?: 0)
+        if (sets.isEmpty()) null else ExerciseLog(parts[0], day, sets, parts.getOrNull(3)?.takeIf { it.isNotBlank() }, parts.getOrNull(4)?.toLongOrNull() ?: 0,
+            parts.getOrNull(5)?.let(::unescape)?.takeIf { it.isNotEmpty() }, parts.getOrNull(6)?.toIntOrNull() ?: -1, parts.getOrNull(7)?.let(::unescape).orEmpty())
+    }.getOrNull()
     }.toList()
 }
 
@@ -44,13 +62,15 @@ class ExerciseHistory(logs: List<ExerciseLog> = emptyList()) {
     /** The single heaviest set ever logged, with the day it happened. */
     fun heaviestSet(exerciseId: String): Pair<Long, LoggedSet>? =
         byExercise[exerciseId].orEmpty()
-            .flatMap { log -> log.sets.filter { it.weightKg != null && it.reps > 0 }.map { log.epochDay to it } }
+            .flatMap { log -> log.sets.filter { it.completed && it.repsEntered && it.weightKg != null && it.reps > 0 }.map { log.epochDay to it } }
             .maxByOrNull { it.second.weightKg!! }
 
     /** New logs replace only their own session; legacy logs retain day-based replacement. */
     fun with(log: ExerciseLog): ExerciseHistory {
-        val kept = byExercise[log.exerciseId].orEmpty().filter { if (log.sessionId != null) it.sessionId != log.sessionId else it.sessionId != null || it.epochDay != log.epochDay }
-        val updated = (listOf(log) + kept).sortedWith(compareByDescending<ExerciseLog> { it.epochDay }.thenByDescending { it.startedAtMs }).take(MAX_PER_EXERCISE)
+        val kept = byExercise[log.exerciseId].orEmpty().filter { if (log.sessionId != null) (it.sessionId != log.sessionId || it.exerciseIndex != log.exerciseIndex) else it.sessionId != null || it.epochDay != log.epochDay }
+        val updated = (listOf(log) + kept)
+            .groupBy { Triple(it.routineId, it.exerciseIndex, it.equipment) }
+            .values.flatMap { rows -> rows.sortedWith(compareByDescending<ExerciseLog> { it.epochDay }.thenByDescending { it.startedAtMs }).take(MAX_PER_EXERCISE) }
         return ExerciseHistory(byExercise.filterKeys { it != log.exerciseId }.values.flatten() + updated)
     }
 

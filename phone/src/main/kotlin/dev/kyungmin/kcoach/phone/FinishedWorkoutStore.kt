@@ -99,12 +99,22 @@ internal class FinishedWorkoutStore(private val context: Context) {
     fun recordHits(sessionId: String): List<Pair<String, RecordHit>> = synchronized(lock) {
         val record = prefs.getString("session:$sessionId", null)?.let(::JSONObject) ?: return@synchronized emptyList()
         val snapshot = WorkoutSnapshotCodec.decode(record.getString("snapshot"))
-        val history = ExerciseHistoryStore(context).load()
-        snapshot.plannedSets.filter { it.completed }.groupBy { it.exerciseId }.flatMap { (id, sets) ->
-            val measured = sets.mapNotNull { set -> set.performedReps?.let { LoggedSet(set.weightKg, it) } }
-            val log = ExerciseLog(id, record.getLong("epochDay"), measured, sessionId, snapshot.startedAtMs)
-            PersonalRecords.detect(history, log).map { sets.first().exerciseName.ifBlank { id } to it }
+        val history = historyForRecords()
+        ProgressionPlanStore(context).logs(snapshot, record.getLong("epochDay")).flatMap { log ->
+            val name = snapshot.plannedSets.first { it.exerciseIndex == log.exerciseIndex }.exerciseName.ifBlank { log.exerciseId }
+            PersonalRecords.detect(history, log).map { name to it }
         }
+    }
+
+    /** Complete owned evidence for PR comparisons; independent of the bounded progression cache. */
+    fun historyForRecords(): ExerciseHistory = synchronized(lock) {
+        // Finished evidence is unbounded; the fast history cache keeps a bounded comparison window.
+        val legacy = ExerciseHistoryStore(context).load().all
+        val full = readEvidence(null).flatMap { evidence ->
+            val day = Instant.ofEpochMilli(evidence.snapshot.startedAtMs).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay()
+            ProgressionPlanStore(context).logs(evidence.snapshot, day)
+        }
+        ExerciseHistory(legacy + full)
     }
 
     fun usePounds(sessionId: String): Boolean = synchronized(lock) {
@@ -121,9 +131,9 @@ internal class FinishedWorkoutStore(private val context: Context) {
         val snapshot = WorkoutSnapshotCodec.decode(record.getString("snapshot"))
         val done = snapshot.plannedSets.filter { it.completed }
         val day = record.getLong("epochDay")
-        done.groupBy { it.exerciseId }.forEach { (exerciseId, sets) ->
-            val measured = sets.mapNotNull { set -> set.performedReps?.let { LoggedSet(set.weightKg, it) } }
-            if (measured.isNotEmpty()) ExerciseHistoryStore(context).add(ExerciseLog(exerciseId, day, measured, snapshot.sessionId, snapshot.startedAtMs))
+        val analyses = SetAnalysisStore(context).readForSession(snapshot.sessionId, allowLegacyScan = false, savedSnapshot = snapshot).rows
+        ProgressionPlanStore(context).logs(snapshot, day, analyses).forEach { log ->
+            ExerciseHistoryStore(context).add(log)
         }
         WorkoutLogStore(context).add(WorkoutLog(day, record.getString("title"), record.getInt("minutes"), done.size,
             done.sumOf { (it.weightKg ?: 0.0) * (it.performedReps ?: 0) }.toInt(), snapshot.sessionId))
