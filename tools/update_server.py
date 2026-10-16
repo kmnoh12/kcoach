@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Serve signed KCoach debug APKs and manifests on the local network."""
+"""Serve signed 워치짐 debug APKs and manifests on the local network."""
 from __future__ import annotations
 
 import argparse
@@ -120,11 +120,11 @@ class Handler(BaseHTTPRequestHandler):
         watch_code, watch_name = version("watch")
         body = f"""<!doctype html>
 <html lang="ko"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>KCoach 업데이트</title>
+<title>워치짐 업데이트</title>
 <style>body{{font-family:-apple-system,sans-serif;max-width:560px;margin:40px auto;padding:20px;background:#0a0c0c;color:#f5f6f6}}
 a{{display:block;margin:16px 0;padding:18px;border-radius:14px;background:#ffb100;color:#111;text-decoration:none;font-weight:700}}
 small{{color:#929696}}</style>
-<h1>KCoach 업데이트 서버</h1>
+<h1>워치짐 업데이트 서버</h1>
 <p>서버 정상 작동 중 · {socket.gethostname()}</p>
 <a href="/artifacts/phone-debug.apk">폰 {phone_name} 직접 다운로드 (code {phone_code})</a>
 <a href="/artifacts/wear-debug.apk">워치 {watch_name} 직접 다운로드 (code {watch_code})</a>
@@ -185,7 +185,7 @@ def main():
         ipv6_server = IPv6ThreadingHTTPServer(("::", args.port), Handler)
         threading.Thread(target=ipv6_server.serve_forever, daemon=True).start()
     listeners = f"{args.host}:{args.port}" + (f" and [::]:{args.port}" if ipv6_server else "")
-    print(f"KCoach update server listening on {listeners}", flush=True)
+    print(f"워치짐 update server listening on {listeners}", flush=True)
     try:
         server.serve_forever()
     finally:

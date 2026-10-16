@@ -14,7 +14,7 @@ $ADB -s 'adb-<device>._adb-tls-connect._tcp' shell dumpsys package dev.kyungmin.
   | grep -E 'versionCode=|versionName=|lastUpdateTime'
 ```
 
-`adb install -r` preserves app data and is appropriate for the baseline test when the existing package uses a compatible signing key. A device can be correctly installed even when `am start` leaves the launcher/SystemUI focused; verify the package and ask the user to launch KCoach from the watch if needed before judging the screen.
+`adb install -r` preserves app data and is appropriate for the baseline test when the existing package uses a compatible signing key. A device can be correctly installed even when `am start` leaves the launcher/SystemUI focused; verify the package and ask the user to launch 워치짐 from the watch if needed before judging the screen.
 
 ## Artifact identity
 
@@ -48,7 +48,7 @@ Requirements:
 - A physical watch cannot use `10.0.2.2`; use the Mac's LAN IP/hostname.
 - The server must listen on a reachable interface, normally `0.0.0.0:8765`.
 - Verify both URLs with `curl` and verify the downloaded APK SHA-256 before saying it was uploaded.
-- The UI first downloads/checks, then changes to an install action. The first sideload can open Android's unknown-app-source setting; return to KCoach and resume installation.
+- The UI first downloads/checks, then changes to an install action. The first sideload can open Android's unknown-app-source setting; return to 워치짐 and resume installation.
 
 ### Cleartext HTTP bootstrap
 

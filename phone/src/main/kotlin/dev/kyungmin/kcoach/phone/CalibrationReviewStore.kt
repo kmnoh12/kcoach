@@ -65,6 +65,7 @@ class CalibrationReviewStore(private val context: Context) {
         simultaneousArmsReviewed: Boolean = false, nonRepIntervals: List<NonRepInterval>? = null,
         confirmationSource: String = SOURCE_USER_REVIEWED): Result<CalibrationReview> = synchronized(lock) {
         runCatching {
+            require(confirmationSource == SOURCE_USER_REVIEWED || confirmationSource == SOURCE_VIDEO_WINDOWS)
             val capture = captures.load(id).getOrThrow()
             require(capture.status == CalibrationCaptureStatus.REVIEW_PENDING && capture.videoComplete)
             val video = ReferenceVideoEvidence.inspect(captures.videoFile(id)).getOrThrow()
@@ -119,9 +120,11 @@ class CalibrationReviewStore(private val context: Context) {
                     records.last().timestampNs >= sensorCycle.endNs && records.zipWithNext().none { (a, b) ->
                         b.timestampNs > sensorCycle.startNs && a.timestampNs < sensorCycle.endNs && b.timestampNs - a.timestampNs > 60_000_000L
                     } && originalClocksGood
+                val boundariesReviewed = confirmationSource == SOURCE_USER_REVIEWED
                 RepReference(id, capture.setId, capture.attemptId, sensorCycle ?: cycle, ReferenceSource.REVIEWED_VIDEO,
-                    mapping?.uncertaintyNs?.plus(1_000_000L), alignmentReviewed && mapping != null && cameraGood,
+                    mapping?.uncertaintyNs?.plus(1_000_000L), boundariesReviewed && alignmentReviewed && mapping != null && cameraGood,
                     covered, reviewAt, when { !cameraGood -> "camera_quality"; sensorCycle == null -> "alignment_missing";
+                        !boundariesReviewed -> VIDEO_BOUNDARIES_NOT_REVIEWED;
                         !alignmentReviewed -> "alignment_not_reviewed"; !covered -> "sensor_gap";
                         cycle.pauses.isNotEmpty() -> "paused_template_not_supported"; else -> null }, current.revision + 1)
             }
@@ -139,7 +142,7 @@ class CalibrationReviewStore(private val context: Context) {
         }
     }
 
-    /** Who produced the saved boundaries: the user marking them, or video windows backed by the user's confirmed total. */
+    /** Who produced the saved boundaries. A confirmed total does not confirm individual video boundaries. */
     fun confirmationSource(id: String): String = synchronized(lock) {
         runCatching {
             val current = load(id).getOrThrow()
@@ -149,9 +152,9 @@ class CalibrationReviewStore(private val context: Context) {
     }
 
     /**
-     * Turns the video's own repetition windows into reviewed labels when they add up to the user's confirmed total
-     * (after dropping windows the user rejected). Needs a clock alignment that passes automatically; the existing
-     * camera, sensor and alignment gates in [saveCycles] still decide what is eligible for learning.
+     * Saves the video's repetition windows as unreviewed candidates when they match the confirmed total
+     * (after dropping rejected windows). Clock, camera and sensor checks still apply, but these candidates
+     * cannot become learning labels until the user reviews their boundaries through [saveCycles].
      * Boundaries the user marked by hand are never replaced. Returns null when nothing was promoted.
      */
     fun promoteVideoProposals(id: String, rejected: Set<RepSpan>, proposals: List<RepCycle>? = null): Result<CalibrationReview?> = synchronized(lock) {
@@ -212,20 +215,22 @@ class CalibrationReviewStore(private val context: Context) {
             SetCountReference(capture.setId, capture.attemptId, it.getInt("reps"), it.getLong("reviewedAtMs"))
         }
         val revision = json.getLong("revision")
+        // Older versions treated a matching total as boundary review. Keep the candidates, but revoke that assumption.
+        val boundariesReviewed = json.optString("confirmationSource", SOURCE_USER_REVIEWED) == SOURCE_USER_REVIEWED
         val refs = json.getJSONArray("references")
         return CalibrationReview(capture.id, revision, count, (0 until refs.length()).map { index ->
             val ref = refs.getJSONObject(index)
             RepReference(capture.id, capture.setId, capture.attemptId, decodeCycles(JSONArray().put(ref.getJSONObject("cycle"))).single(),
                 ReferenceSource.REVIEWED_VIDEO, if (ref.isNull("uncertaintyNs")) null else ref.getLong("uncertaintyNs"),
-                ref.getBoolean("alignmentVerified"), ref.getBoolean("sensorCovered"), ref.getLong("reviewedAtMs"),
-                if (ref.isNull("exclusion")) null else ref.getString("exclusion"), revision)
-        }, if (json.isNull("cameraObservedMetrics") || !json.has("cameraObservedMetrics")) null else decodeMetrics(json.getJSONObject("cameraObservedMetrics")),
+                boundariesReviewed && ref.getBoolean("alignmentVerified"), ref.getBoolean("sensorCovered"), ref.getLong("reviewedAtMs"),
+                if (!boundariesReviewed) VIDEO_BOUNDARIES_NOT_REVIEWED else if (ref.isNull("exclusion")) null else ref.getString("exclusion"), revision)
+        }, if (!boundariesReviewed || json.isNull("cameraObservedMetrics") || !json.has("cameraObservedMetrics")) null else decodeMetrics(json.getJSONObject("cameraObservedMetrics")),
             (json.optJSONArray("nonRepIntervals") ?: JSONArray()).let { rows ->
                 require(rows.length() <= 1_000)
                 List(rows.length()) { index -> rows.getJSONObject(index).let {
                     NonRepInterval(it.getLong("startNs"), it.getLong("endNs"), NonRepReason.valueOf(it.getString("reason")))
                 } }
-            }, if (json.isNull("cameraSquatMetrics") || !json.has("cameraSquatMetrics")) null else decodeSquatMetrics(json.getJSONObject("cameraSquatMetrics")))
+            }, if (!boundariesReviewed || json.isNull("cameraSquatMetrics") || !json.has("cameraSquatMetrics")) null else decodeSquatMetrics(json.getJSONObject("cameraSquatMetrics")))
     }
 
     private fun encodeSquatMetrics(metrics: CameraSquatMetrics) = JSONObject().put("schemaVersion", 1)
@@ -294,5 +299,6 @@ class CalibrationReviewStore(private val context: Context) {
         private val lock = Any()
         const val SOURCE_USER_REVIEWED = "USER_REVIEWED_VIDEO"
         const val SOURCE_VIDEO_WINDOWS = "VIDEO_WINDOWS_MATCHING_CONFIRMED_COUNT"
+        const val VIDEO_BOUNDARIES_NOT_REVIEWED = "video_boundaries_not_reviewed"
     }
 }

@@ -202,7 +202,7 @@ private fun ClipDetail(
     Text(clip.graphTitle, color = KColors.Soft, fontSize = 13.sp)
     SignalGraph(clip, playbackMs)
     Text(if (clip.intervals.isEmpty()) "자동으로 표시한 반복 구간이 없어요. 영상을 보고 횟수를 확인해 주세요."
-        else "민트 구간은 영상에서 찾은 반복 후보예요.${if (clip.mismatches.isEmpty()) "" else " 붉은 구간은 워치와 어긋난 곳이에요."}", color = KColors.Muted, fontSize = 12.sp)
+        else "민트 구간은 영상에서 찾은 반복 후보예요.${if (clip.mismatches.isEmpty()) "" else " 붉은 구간은 센서 피크 재분석과 어긋난 곳이에요."}", color = KColors.Muted, fontSize = 12.sp)
     Text("10회 했나요?", color = KColors.White, fontSize = 22.sp)
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         val chosen = clip.confirmedCount
@@ -219,28 +219,29 @@ private fun ClipDetail(
         ResultAction("횟수 저장", enabled = !busy && number.toIntOrNull() != null) { number.toIntOrNull()?.let(answer) }
     }
     if (clip.message.isNotBlank()) Text(clip.message, color = KColors.Soft, fontSize = 14.sp)
-    val mismatch = clip.confirmedCount != null && (clip.confirmedCount != 10 ||
+    val mismatch = clip.mismatches.isNotEmpty() || clip.trailingSuspect || clip.confirmedCount != null && (clip.confirmedCount != 10 ||
         clip.watchCount != null && clip.watchCount != clip.confirmedCount)
     if (mismatch) MismatchSection(clip, busy, answerMismatch)
-    if (mismatch) ResultAction("반복 구간 직접 표시", enabled = !busy, action = research)
+    ResultAction("반복 구간 직접 표시", enabled = !busy, action = research)
     if (busy) Text("저장 중…", color = KColors.Muted)
 }
 
 @Composable
 private fun MismatchSection(clip: CapturePlaybackUi, busy: Boolean, answer: (Int, Int, Boolean, Boolean) -> Unit) {
-    Text("워치와 영상이 어긋난 구간", color = KColors.White, fontSize = 18.sp)
-    if (clip.trailingSuspect) Text("워치가 센 마지막 1회는 다른 반복보다 느리고 약해서, 시계를 본 동작일 수 있어요. 실제로 한 반복이 아니라면 횟수를 다시 확인해 주세요.",
+    Text("영상과 센서 재분석 비교", color = KColors.White, fontSize = 18.sp)
+    Text("구간은 원본 센서의 별도 피크 재분석 결과예요. 위의 워치 실시간 총횟수와 다른 분석이에요.", color = KColors.Muted, fontSize = 13.sp)
+    if (clip.trailingSuspect) Text("폰 횟수 재분석에서 마지막 후보가 다른 반복보다 느리고 약하게 나왔어요. 시계를 본 동작인지 영상으로 확인해 주세요. 이 알림은 구간 비교와 별도 분석이에요.",
         color = KColors.Accent, fontSize = 13.sp)
     when {
-        !clip.watchSpansKnown -> Text("워치 기록의 시간을 영상에 맞추지 못해 구간을 비교할 수 없어요.", color = KColors.Muted, fontSize = 13.sp)
-        clip.mismatches.isEmpty() -> Text("영상과 워치가 반복 구간을 서로 다르게 찾은 곳이 없어요.", color = KColors.Muted, fontSize = 13.sp)
+        !clip.watchSpansKnown -> Text("센서 재분석 구간을 영상 시간에 맞출 수 없어 비교 결과는 미확인이에요.", color = KColors.Muted, fontSize = 13.sp)
+        clip.mismatches.isEmpty() -> Text("영상 후보와 센서 피크 재분석이 서로 다르게 찾은 구간이 없어요. 실제 반복의 정답을 뜻하지는 않아요.", color = KColors.Muted, fontSize = 13.sp)
         else -> {
             Text("답은 이 기기에만 저장하고, 반복 라벨로는 쓰지 않아요.", color = KColors.Muted, fontSize = 12.sp)
             clip.mismatches.forEach { row ->
                 Column(Modifier.fillMaxWidth().clip(KShape.Control).background(KColors.Surface).padding(12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     val range = "%.1f~%.1f초".format(row.startMs / 1000.0, row.endMs / 1000.0)
-                    Text("$range · ${if (row.videoOnly) "영상에서만 찾은 구간" else "워치에서만 찾은 구간"}", color = KColors.White, fontSize = 15.sp)
+                    Text("$range · ${if (row.videoOnly) "영상에서만 찾은 구간" else "센서 피크 재분석에서만 찾은 구간"}", color = KColors.White, fontSize = 15.sp)
                     Text("이 구간에서 실제로 1회 했나요?", color = KColors.Soft, fontSize = 13.sp)
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         ResultAction("맞아요", Modifier.weight(1f), !busy, selected = row.answer == true) { answer(row.startMs, row.endMs, row.videoOnly, true) }

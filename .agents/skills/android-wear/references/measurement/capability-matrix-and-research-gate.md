@@ -1,6 +1,6 @@
 # Capability Matrix and Research Gate
 
-Use this reference before changing KCoach exercise recognition code.
+Use this reference before changing 워치짐 exercise recognition code.
 
 ## 1. No-code gate
 
@@ -50,7 +50,7 @@ Treat end gestures (for example, standing with arms down after pull-ups) as a mu
 - Reddit and English/Chinese practitioner communities: practical failure modes, wear placement, grip/machine variation, battery and sampling issues.
 - Official Android/Wear/Watch documentation: sensor and lifecycle constraints.
 
-Record canonical URL, source type, exercise/protocol, sensor placement, algorithm, labels, result metric, and limitation. Never transfer a community claim or a paper's benchmark directly into KCoach accuracy.
+Record canonical URL, source type, exercise/protocol, sensor placement, algorithm, labels, result metric, and limitation. Never transfer a community claim or a paper's benchmark directly into 워치짐 accuracy.
 
 ## 6. Capability-card minimum fields
 

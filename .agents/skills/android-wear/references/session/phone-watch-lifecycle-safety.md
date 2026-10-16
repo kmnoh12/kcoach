@@ -10,7 +10,7 @@ A one-time `HELLO`/node connection is not proof of liveness. A watch-side `paire
 
 - Phone sends a dedicated heartbeat every ~3 seconds while the phone workout/session owner is alive.
 - Watch records `lastPhoneHeartbeatAtMs` and runs a watchdog every few seconds.
-- If no heartbeat arrives for a bounded timeout (12 seconds in the KCoach implementation), reset the watch to disconnected/idle.
+- If no heartbeat arrives for a bounded timeout (12 seconds in the 워치짐 implementation), reset the watch to disconnected/idle.
 - Heartbeats must not launch or foreground the watch activity on every tick. Route them through an internal broadcast or an existing service/activity state owner.
 - Use explicit lifecycle commands: `START`, `SET`, `REST`, `PAUSE`, `RESUME`, `STOP`/`END`, and `COMPLETE`.
 

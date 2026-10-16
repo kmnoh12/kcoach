@@ -1,4 +1,4 @@
-# KCoach Personalized Calibration & Measurement Protocol
+# 워치짐 Personalized Calibration & Measurement Protocol
 
 - 상태: `DRAFT / DESIGN-GATE INPUT`
 - 대상: Wear OS Watch8, 손목 accelerometer + gyroscope

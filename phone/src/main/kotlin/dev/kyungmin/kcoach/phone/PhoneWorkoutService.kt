@@ -131,7 +131,7 @@ class PhoneWorkoutService : Service() {
         manager.createNotificationChannel(
             NotificationChannel(
                 CHANNEL_ID,
-                "KCoach 운동 세션",
+                "워치짐 운동 세션",
                 NotificationManager.IMPORTANCE_LOW,
             ),
         )
@@ -139,7 +139,7 @@ class PhoneWorkoutService : Service() {
 
     private fun buildNotification(): Notification = NotificationCompat.Builder(this, CHANNEL_ID)
         .setSmallIcon(android.R.drawable.ic_media_play)
-        .setContentTitle("KCoach")
+        .setContentTitle("워치짐")
         .setContentText("워치 연결 상태를 유지하는 중")
         .setOngoing(true)
         .setCategory(NotificationCompat.CATEGORY_SERVICE)

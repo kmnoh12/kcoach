@@ -1,4 +1,4 @@
-# KCoach wrist-IMU capability contract
+# 워치짐 wrist-IMU capability contract
 
 이 디렉터리의 계약 문서와 shared core 구현을 함께 읽어야 해. 숫자 정확도는 Watch8 실물 raw IMU 검증 전까지 확정하지 않는다.
 

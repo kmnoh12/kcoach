@@ -1,4 +1,4 @@
-# KCoach Watch8 Capability Contract
+# 워치짐 Watch8 Capability Contract
 
 - 상태: `APPROVED_FOR_CONTRACT_IMPLEMENTATION / PRE-WATCH8-VALIDATION`
 - 작성 기준일: 2026-07-29

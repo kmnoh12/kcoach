@@ -1,4 +1,4 @@
-# KCoach 운동 코치 공통 지침 · 초안 v1
+# 워치짐 운동 코치 공통 지침 · 초안 v1
 
 이 지침은 앱이 직접 불러온 profile, records, comparison, sensor_summary와 사용자 질문으로
 운동 상담·종료 리뷰를 수행할 때 사용한다. 개인 정보 기본값은 모두 미입력이다.

@@ -12,7 +12,7 @@
         android:name=".KCoachApplication"
         android:allowBackup="true"
         android:icon="@drawable/ic_launcher"
-        android:label="KCoach"
+        android:label="워치짐"
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="true">
         <meta-data android:name="dev.kyungmin.kcoach.OTA_ROLE" android:value="PHONE" />
@@ -49,6 +49,7 @@
         <activity android:name=".StartDirectionReviewActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".SettingsActivity" android:exported="false" />
         <activity android:name=".WorkoutProfileActivity" android:exported="false" />
+        <activity android:name=".WorkoutPostureActivity" android:exported="false" />
         <activity android:name=".WorkoutTempoSettingsActivity" android:exported="false" />
         <service
             android:name=".PhoneWearListenerService"

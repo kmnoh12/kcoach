@@ -1,11 +1,11 @@
 ---
 name: android-wear
-description: KCoach phone↔Galaxy Watch work. Use for rep counting or exercise-observability decisions, phone↔Wear session protocol and service ownership, raw-capture transport, emulator or physical-watch testing, LAN OTA delivery, and workout-screen UI or stutter bugs.
+description: 워치짐 phone↔Galaxy Watch work. Use for rep counting or exercise-observability decisions, phone↔Wear session protocol and service ownership, raw-capture transport, emulator or physical-watch testing, LAN OTA delivery, and workout-screen UI or stutter bugs.
 ---
 
-# KCoach phone ↔ Wear
+# 워치짐 phone ↔ Wear
 
-KCoach is a phone app plus a Wear OS app (`phone/`, `wear/`, shared `core/`) acting as one workout session. The target watch is a Galaxy Watch8.
+워치짐 is a phone app plus a Wear OS app (`phone/`, `wear/`, shared `core/`) acting as one workout session. The target watch is a Galaxy Watch8.
 
 ## Evidence ladder
 
@@ -25,7 +25,7 @@ Emulator runs reach rung 5–7 as **emulator-only** evidence; they never move ru
 
 ## Measurement honesty
 
-A wrist watch sees wrist acceleration, rotation, orientation, and heart rate. Rep count, wrist-motion metrics, and form are three separate outputs; KCoach ships only the first two.
+A wrist watch sees wrist acceleration, rotation, orientation, and heart rate. Rep count, wrist-motion metrics, and form are three separate outputs; 워치짐 ships only the first two.
 
 - **Capability key** = exercise variant + protocol + watch side + wear/grip condition + calibration state, never the exercise name alone.
 - **Tier**: A wrist-direct auto · B auto-count, limited metrics · C personalized/proxy beta · D manual required. **Validation status** is separate: unvalidated · replay · emulator-only · Watch8 signal · Watch8 accuracy. Tiers move only on real-watch labeled data.
@@ -62,13 +62,16 @@ References: `references/session/`.
 
 ## Testing
 
+- **Fast verification rule (MANDATORY)**: while editing or before a commit, run only a single test tied to the changed class (`--tests '*TargetTest'`) or `:phone:compileDebugKotlin` / `:wear:compileDebugKotlin`.
+- **No full-suite / UI / Lint runs unless asked**: until the user explicitly asks, do not run full-module tests (`:phone:testDebugUnitTest`, `:wear:testDebugUnitTest`, `:core:test`), Robolectric screen tests (`:phone:testDebugCompose`), Lint (`:phone:lint`, `:wear:lint`), `-Pkotlin.incremental=false`, or `--max-workers=1`.
+- When writing a handoff doc (`docs/HANDOFF_*.md`), do not tell the next agent to rerun the full test/lint gate.
+
 Drive tests through ADB (`uiautomator dump`, `dumpsys window`, `dumpsys activity`, logcat), capturing phase and values after each transition.
 
 - **Emulator lane**: a host TCP relay at `10.0.2.2:<port>` (both APKs need `INTERNET`; not an `adb forward`). Fake reps/HR live behind an emulator check. A generic Wear emulator lacks a real Data Layer, so Asset delivery there uses a labeled emulator capture lane.
 - **End-to-end path**: phone start → watch `WORKING` → reps advance → `SET_COMPLETE` → phone and watch `RESTING` with the same deadline → rest ends → next set or completion. REST sync is its own gate.
 - **Wear Activity** applies commands in both `onCreate` and `onNewIntent`, with a single visible instance.
 - **Physical watch**: find it with `adb devices -l` / `adb mdns services`; compare installed version and hash. During `WORKING`/`RESTING`/`PAUSED` the Activity keeps the screen on while the service keeps ownership. A calibration button proves nothing until the callback runs a real capture-and-persist flow.
-- When a task resumes after a pause, re-verify build, install, relay, and runtime against the current tree before trusting earlier claims.
 
 References: `references/testing/`.
 

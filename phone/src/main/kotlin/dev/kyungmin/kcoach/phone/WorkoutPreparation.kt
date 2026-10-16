@@ -20,6 +20,10 @@ internal object WorkoutPreparation {
             WorkoutPreparationQuestion(id, title, description, expected)
         }
 
+    /** Every exercise that has a start-posture choice, for the settings screen. */
+    fun allQuestions(): List<WorkoutPreparationQuestion> =
+        questions(listOf("external_rotation", "crossover_reverse_fly", "dumbbell_lateral_raise"))
+
     fun selection(defaults: WorkoutWearingSelection?, exerciseIds: List<String>,
         answers: Map<String, String>): WorkoutWearingSelection? {
         val variants = questions(exerciseIds).associate { question ->

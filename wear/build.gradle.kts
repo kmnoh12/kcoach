@@ -34,12 +34,12 @@ android {
         applicationId = "dev.kyungmin.kcoach"
         minSdk = 30
         targetSdk = 35
-        versionCode = 36
-        versionName = "0.2.0"
+        versionCode = 37
+        versionName = "0.2.1"
         buildConfigField(
             "String",
             "UPDATE_MANIFEST_URL",
-            "\"https://github.com/kmnoh12/kcoach/releases/latest/download/update-watch.json\"",
+            "\"https://github.com/kmnoh12/watchgym/releases/latest/download/update-watch.json\"",
         )
     }
 }

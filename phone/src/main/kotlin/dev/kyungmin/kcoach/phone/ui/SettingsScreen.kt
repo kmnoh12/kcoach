@@ -23,7 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-class SettingsActions(val back: () -> Unit, val profile: () -> Unit = {}, val tempo: () -> Unit = {})
+class SettingsActions(val back: () -> Unit, val profile: () -> Unit = {}, val tempo: () -> Unit = {}, val posture: () -> Unit = {})
 
 @Composable
 fun SettingsScreen(actions: SettingsActions) {
@@ -39,6 +39,11 @@ fun SettingsScreen(actions: SettingsActions) {
                 Text("내 운동 프로필 · 워치 착용", color = KColors.White)
             }
             Text("신체 정보와 평소 착용 상태를 폰에 저장해요. 로그인 없이 설정할 수 있어요.", color = KColors.Muted, fontSize = 13.sp)
+            Spacer(Modifier.height(16.dp))
+            OutlinedButton(onClick = actions.posture, modifier = Modifier.fillMaxWidth().height(50.dp), shape = KShape.Control) {
+                Text("운동별 자세", color = KColors.White)
+            }
+            Text("운동마다 평소 하는 그립이나 시작 자세를 지정해요.", color = KColors.Muted, fontSize = 13.sp)
             Spacer(Modifier.height(16.dp))
             OutlinedButton(onClick = actions.tempo, modifier = Modifier.fillMaxWidth().height(50.dp), shape = KShape.Control) {
                 Text("운동별 템포 알림", color = KColors.White)

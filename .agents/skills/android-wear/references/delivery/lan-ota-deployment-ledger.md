@@ -41,7 +41,7 @@ Inspect the process command and its `KCOACH_UPDATE_ROOT`/script path. If it serv
 
 ## 4. Publish and verify
 
-The KCoach update server exposes:
+The 워치짐 update server exposes:
 
 ```text
 /update.json
@@ -79,7 +79,7 @@ installed: target package reports the new versionCode/versionName
 
 `adb devices` being empty does not invalidate the LAN server gate, but it prevents agent-verified installation. In that case the user must trigger the in-app updater:
 
-- Phone: KCoach → Menu → Update check → Download complete · Install
-- Wear: KCoach → Update check → Update install
+- Phone: 워치짐 → Menu → Update check → Download complete · Install
+- Wear: 워치짐 → Update check → Update install
 
-The first installation may require allowing KCoach as an unknown app source. Do not say "installed" from build, server, manifest, or download evidence alone.
+The first installation may require allowing 워치짐 as an unknown app source. Do not say "installed" from build, server, manifest, or download evidence alone.

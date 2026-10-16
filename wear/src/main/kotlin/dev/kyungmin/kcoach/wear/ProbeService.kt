@@ -207,7 +207,7 @@ class ProbeService : Service(), SensorEventListener {
 
     private fun startInForeground() {
         val manager = getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(NotificationChannel(CHANNEL_ID, "KCoach 실측", NotificationManager.IMPORTANCE_LOW))
+        manager.createNotificationChannel(NotificationChannel(CHANNEL_ID, "워치짐 실측", NotificationManager.IMPORTANCE_LOW))
         val openProbe = PendingIntent.getActivity(
             this,
             0,
@@ -216,7 +216,7 @@ class ProbeService : Service(), SensorEventListener {
         )
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_menu_compass)
-            .setContentTitle("KCoach 실측")
+            .setContentTitle("워치짐 실측")
             .setContentText("센서를 폰으로 보내는 중")
             .setOngoing(true)
             .setCategory(NotificationCompat.CATEGORY_WORKOUT)
@@ -226,7 +226,7 @@ class ProbeService : Service(), SensorEventListener {
         OngoingActivity.Builder(applicationContext, NOTIFICATION_ID, builder)
             .setStaticIcon(android.R.drawable.ic_menu_compass)
             .setTouchIntent(openProbe)
-            .setStatus(Status.Builder().addTemplate("KCoach 실측 중").build())
+            .setStatus(Status.Builder().addTemplate("워치짐 실측 중").build())
             .build()
             .apply(applicationContext)
         val notification: Notification = builder.build()

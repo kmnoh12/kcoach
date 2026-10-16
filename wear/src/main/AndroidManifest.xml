@@ -17,7 +17,7 @@
         android:name=".KCoachApplication"
         android:allowBackup="true"
         android:icon="@drawable/ic_launcher"
-        android:label="KCoach"
+        android:label="워치짐"
         android:usesCleartextTraffic="true"
         android:theme="@style/AppTheme">
         <meta-data android:name="dev.kyungmin.kcoach.OTA_ROLE" android:value="WATCH" />

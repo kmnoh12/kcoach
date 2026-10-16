@@ -206,6 +206,7 @@ class MainActivity : ComponentActivity() {
     private val green = Color.rgb(45, 212, 191)
 
     private val routines = WorkoutData.defaultRoutines()
+    private val routineLibraryStore by lazy { RoutineLibraryStore(this) }
     private val freeExercises = mutableListOf<RoutineExercise>()
     private val handler = Handler(Looper.getMainLooper())
 
@@ -459,13 +460,12 @@ class MainActivity : ComponentActivity() {
     private var activeWorkout: ActiveWorkout? = null
     private var previewWorkout: ActiveWorkout? = null
     private var lastWorkoutResult: WorkoutResultUi? = null
-    private var recordMonth: YearMonth = YearMonth.of(2026, 7)
+    private var recordMonth: YearMonth = YearMonth.now()
     private var ticker: Runnable? = null
     private var watchUiReady = false
     private var defaultWorkoutWearing by mutableStateOf<WorkoutWearingSelection?>(null)
     private var workoutWearingReadFailed by mutableStateOf(false)
     private var preparationConnection by mutableStateOf("워치 연결 확인 중")
-    private var preparationAnswers by mutableStateOf<Map<String, String>>(emptyMap())
     private var pendingWatchStartPayload: String? = null
     private var calibrationSessionId: String? = null
     private var activeCalibrationExerciseId: String? = null
@@ -484,6 +484,7 @@ class MainActivity : ComponentActivity() {
         window.navigationBarColor = bg
         otaCoordinator = dev.kyungmin.kcoach.updates.OtaCoordinator.get(this)
         sessionStore = SessionStore(this)
+        restoreRoutineLibrary()
         lastWorkoutResult = restoreLastWorkoutResult()
         activeWorkout = restoreActiveWorkout()
         root = FrameLayout(this).apply { setBackgroundColor(bg) }
@@ -580,7 +581,6 @@ class MainActivity : ComponentActivity() {
         val defaults = WorkoutWearingStore(this).defaultSelection()
         val answers = WorkoutWearingStore(this).preparationAnswers()
         defaultWorkoutWearing = defaults.getOrNull()
-        preparationAnswers = answers.getOrDefault(emptyMap())
         workoutWearingReadFailed = defaults.isFailure || answers.isFailure
         lastWorkoutResult?.let { result ->
             hydrateResultAnalyses(result)
@@ -673,6 +673,8 @@ class MainActivity : ComponentActivity() {
             val detail = current?.let { "${it.exercise.name} · ${it.sets.completedWorkSetCount()}/${it.sets.workSetCount()}세트" }.orEmpty()
             RunningUi(workout.routine.name, detail, workout.paused) { workoutElapsedSeconds(workout) }
         }
+        val today = LocalDate.now()
+        routines.forEach { it.lastPerformed = it.lastPerformedLabel(today) }
         val rows = routines.map { RoutineRowUi2(it, TrainingLoad.daysAgo(it.lastPerformed)) }
         val homeUi = HomeUi(
             week = weekStrip(LocalDate.now()),
@@ -736,6 +738,7 @@ class MainActivity : ComponentActivity() {
             move = { from, to -> moveRoutineExercise(routine, from, to, active, announce = false) },
             moveFinished = {
                 active?.takeIf { it.routine === routine }?.let(::persistActiveWorkout)
+                if (routines.any { it === routine }) saveRoutineLibrary()
                 Toast.makeText(this, "순서를 바꿨어요", Toast.LENGTH_SHORT).show()
             },
             primary = { if (active != null) showMyMountainDecision() else startWorkout(routine) },
@@ -746,6 +749,7 @@ class MainActivity : ComponentActivity() {
                             exercise = it,
                             sets = mutableListOf(PlannedSet(null, 10)),
                         )
+                        if (routines.any { saved -> saved === routine }) saveRoutineLibrary()
                     },
                     onReturn = { showRoutine(routine) },
                 )
@@ -1246,7 +1250,6 @@ class MainActivity : ComponentActivity() {
                 report(UpdateUi(state.message, state.readyToInstall, state.busy))
             },
             install = { otaCoordinator.installBoth(this) },
-            openCalibration = ::showCalibration,
             openSettings = { startActivity(Intent(this, SettingsActivity::class.java)) },
             observeUpdate = { report -> otaCoordinator.observe { state -> report(UpdateUi(state.message, state.readyToInstall, state.busy)) } },
         )
@@ -1262,14 +1265,8 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun RoutinePreparation(routine: WorkoutRoutine) {
         WorkoutPreparationPanel(
-            exerciseIds = routine.exercises.map { it.exercise.id }, wearing = defaultWorkoutWearing,
+            wearing = defaultWorkoutWearing,
             connection = preparationConnection, wearingReadFailed = workoutWearingReadFailed,
-            answers = preparationAnswers,
-            onAnswer = { id, answer ->
-                WorkoutWearingStore(this).savePreparationAnswer(id, answer)
-                    .onSuccess { preparationAnswers = it }
-                    .onFailure { Toast.makeText(this, "준비 설정을 저장하지 못했어요. 기존 선택을 유지해요.", Toast.LENGTH_LONG).show() }
-            },
             openProfile = { startActivity(Intent(this, WorkoutProfileActivity::class.java)) },
         )
     }
@@ -1373,7 +1370,7 @@ class MainActivity : ComponentActivity() {
             )
             bumpWorkoutUi()
         } else {
-            activeWorkout?.let(::persistActiveWorkout)
+            persistActiveWorkout(workout)
             bumpWorkoutUi()
         }
     }
@@ -1456,6 +1453,7 @@ class MainActivity : ComponentActivity() {
 
     /** Only workout edits and position changes save state and update the watch. */
     private fun saveWorkoutChanges(workout: ActiveWorkout, forceRebuild: Boolean = false): Boolean {
+        if (routines.any { it === workout.routine } && !saveRoutineLibrary()) return false
         if (activeWorkout === workout) {
             if (!persistActiveWorkout(workout)) return false
             if (workout.exerciseIndex >= workout.routine.exercises.size) {
@@ -1556,6 +1554,14 @@ class MainActivity : ComponentActivity() {
     private fun recordWorkoutLog(workout: ActiveWorkout) {
         FinishedWorkoutStore(this).finish(workoutSnapshot(workout), workout.routine.name,
             (workoutElapsedSeconds(workout) / 60L).toInt(), workout.usePounds)
+        val index = routines.indexOfFirst { it.id == workout.routine.id }
+        if (index >= 0) {
+            val performedDay = java.time.Instant.ofEpochMilli(workout.startedAtMs)
+                .atZone(java.time.ZoneId.systemDefault()).toLocalDate().toEpochDay()
+            val updated = routines[index].copy(lastPerformedEpochDay = performedDay)
+            val candidate = routines.toMutableList().apply { set(index, updated) }
+            if (saveRoutineLibrary(candidate)) routines[index] = updated
+        }
         WatchOverviewPublisher.publish(this)
         historyCache = null
     }
@@ -1816,7 +1822,7 @@ class MainActivity : ComponentActivity() {
         override fun onApplySuggestion(exerciseIndex: Int) {
             val routineExercise = exercise(exerciseIndex) ?: return
             applySuggestion(routineExercise)
-            activeWorkout?.let(::persistActiveWorkout)
+            workout()?.let(::persistActiveWorkout)
             bumpWorkoutUi()
         }
 
@@ -1824,7 +1830,7 @@ class MainActivity : ComponentActivity() {
             val routineExercise = exercise(exerciseIndex) ?: return
             val source = routineExercise.sets.lastOrNull() ?: PlannedSet(null, 10)
             routineExercise.sets += PlannedSet(source.weightKg, source.targetReps, gripType = source.gripType, restSeconds = source.restSeconds)
-            activeWorkout?.let(::persistActiveWorkout)
+            workout()?.let(::persistActiveWorkout)
             bumpWorkoutUi()
         }
 
@@ -1868,7 +1874,7 @@ class MainActivity : ComponentActivity() {
                     listOf(30, 45, 60, 90, 120, 150, 180).map { "${it}초" to "" },
             ) { value ->
                 set.restSeconds = value.removeSuffix("초").toIntOrNull()
-                activeWorkout?.let(::persistActiveWorkout)
+                workout()?.let(::persistActiveWorkout)
                 bumpWorkoutUi()
             }
         }
@@ -2052,14 +2058,8 @@ class MainActivity : ComponentActivity() {
 
     private fun requestSetCompletion(workout: ActiveWorkout, exercise: RoutineExercise, setIndex: Int, set: PlannedSet) {
         val revision = sessionStore.manualSetRevision(workout.sessionId, set.setId, set.attemptId).getOrNull() ?: return
-        val identity = set.setId to set.attemptId
-        showSheet { dismiss ->
-            dev.kyungmin.kcoach.phone.ui.ManualCountSheet("${setIndex + 1}세트 완료", listOf(set.targetReps), listOf(setIndex + 1)) { counts ->
-                dismiss()
-                if (activeWorkout !== workout || set.setId != identity.first || set.attemptId != identity.second) return@ManualCountSheet
-                completeWorkoutSet(workout, exercise, setIndex, set, counts.single(), revision)
-            }
-        }
+        // A check tap just completes the set at its target; the actual count is edited in the set row afterwards.
+        completeWorkoutSet(workout, exercise, setIndex, set, set.targetReps, revision)
     }
 
     private fun requestAllSetsCompletion(workout: ActiveWorkout, exercise: RoutineExercise) {
@@ -2590,6 +2590,7 @@ class MainActivity : ComponentActivity() {
                         if (removedCurrent) it.setIndex = 0
                     }
                 }
+                if (routines.any { it === routine }) saveRoutineLibrary()
                 Toast.makeText(this, "운동을 삭제했어요", Toast.LENGTH_SHORT).show()
                 onReturn()
             }
@@ -2609,6 +2610,7 @@ class MainActivity : ComponentActivity() {
         showPopup { dismiss ->
             PickDialog("운동 대체\n${current.name}", labels, dismiss) { which ->
                 routine.exercises[index] = routine.exercises[index].copy(exercise = alternatives[which])
+                if (routines.any { it === routine }) saveRoutineLibrary()
                 Toast.makeText(this, "${alternatives[which].name}(으)로 바꿨어요", Toast.LENGTH_SHORT).show()
                 onReturn()
             }
@@ -2618,7 +2620,7 @@ class MainActivity : ComponentActivity() {
     private fun showAddSheet() {
         showSheet { dismiss ->
             SheetOptions(
-                "추가",
+                "새 루틴",
                 listOf(
                     SheetItem(KIcon.Plus, "나만의 루틴 추가") { dismiss(); showNewRoutineDialog() },
                     SheetItem(KIcon.Reload, "기록에서 불러오기") { dismiss(); showRecords() },
@@ -2627,6 +2629,34 @@ class MainActivity : ComponentActivity() {
             )
         }
     }
+
+    private fun customExercises() = WorkoutData.catalog.filter { it.id !in WorkoutData.builtInExerciseIds }
+
+    private fun restoreRoutineLibrary() {
+        routineLibraryStore.load().onSuccess { saved ->
+            if (saved != null) {
+                routines.clear()
+                routines.addAll(saved.routines)
+                WorkoutData.catalog.removeAll { it.id !in WorkoutData.builtInExerciseIds }
+                WorkoutData.catalog.addAll(saved.customExercises)
+                // Keep inline definitions usable too, without inventing a new ID.
+                saved.routines.flatMap { it.exercises }.forEach { item ->
+                    if (WorkoutData.catalog.none { it.id == item.exercise.id }) WorkoutData.catalog += item.exercise
+                }
+            }
+        }.onFailure {
+            Log.e(EVENT_TAG, "routine library load failed; file retained", it)
+            Toast.makeText(this, "루틴을 불러오지 못했어요. 기존 저장 파일을 유지하고 덮어쓰지 않아요.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun saveRoutineLibrary(
+        plans: List<WorkoutRoutine> = routines,
+        customExercises: List<ExerciseDefinition> = customExercises(),
+    ): Boolean = routineLibraryStore.save(RoutineLibrary(plans, customExercises)).onFailure {
+        Log.e(EVENT_TAG, "routine library save failed; previous file retained", it)
+        Toast.makeText(this, "루틴·운동을 저장하지 못했어요. 이전 저장 데이터는 유지돼요.", Toast.LENGTH_LONG).show()
+    }.isSuccess
 
     private fun showNewRoutineDialog() {
         showPopup { dismiss ->
@@ -2638,6 +2668,7 @@ class MainActivity : ComponentActivity() {
                     lastPerformed = "기록 없음",
                     exercises = mutableListOf(),
                 )
+                if (!saveRoutineLibrary(routines + routine)) return@InputDialog
                 routines += routine
                 selectedRoutine = routine
                 showRoutine(routine)
@@ -2656,6 +2687,7 @@ class MainActivity : ComponentActivity() {
                         bodyCategory = "전체",
                         equipment = "커스텀",
                     )
+                    if (!saveRoutineLibrary(customExercises = customExercises() + custom)) return@InputDialog
                     WorkoutData.catalog += custom
                     onSelect(custom)
                     onReturn()
@@ -2673,7 +2705,10 @@ class MainActivity : ComponentActivity() {
                     SheetItem(KIcon.Plus, "운동 추가", featured = true) {
                         dismiss()
                         openLibrary(
-                            onSelect = { routine.exercises += RoutineExercise(it, mutableListOf(PlannedSet(null, 10))) },
+                            onSelect = {
+                                routine.exercises += RoutineExercise(it, mutableListOf(PlannedSet(null, 10)))
+                                if (routines.any { saved -> saved === routine }) saveRoutineLibrary()
+                            },
                             onReturn = { showRoutine(routine) },
                         )
                     },
@@ -2938,6 +2973,9 @@ class MainActivity : ComponentActivity() {
     )
 
     private fun persistActiveWorkout(workout: ActiveWorkout): Boolean {
+        if (previewWorkout === workout && activeWorkout !== workout) {
+            return if (routines.any { it === workout.routine }) saveRoutineLibrary() else true
+        }
         val previous = SessionStore(this).loadActive().getOrNull()?.takeIf { it.sessionId == workout.sessionId }
         val oldLayout = previous?.plannedSets?.map { Triple(it.setId.ifBlank { SetIdentity.migratedId(workout.sessionId, it.exerciseIndex, it.setIndex) }, it.exerciseId, it.exerciseIndex to it.setIndex) }
         val newLayout = workout.routine.exercises.flatMapIndexed { ei, item -> item.sets.mapIndexed { si, set -> Triple(set.setId, item.exercise.id, ei to si) } }

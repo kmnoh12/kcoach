@@ -1,10 +1,14 @@
 # 카메라 보정 후속 수정 인계 — 2026-10-16
 
+> 최신 실행 규칙 (2026-10-16): 이 문서는 당시 구현·검사 이력이다. 아래 구버전·미커밋·미검사 표시는 현재 작업 지시나 재검사 요청이 아니다. 최신 상태와 남은 작업은 [골 없는 새 채팅 인계](HANDOFF_NEXT_CHAT_NO_GOAL.md)를 따른다. GPT 제거는 폰 0.2.3으로 배포됐다.
+>
+> 검증은 변경에 맞는 단일 테스트 클래스 또는 단일 모듈 컴파일만 한다. 사용자 요청 없이 전체 테스트·전체 빌드·lint·UI/스크린샷·clean 빌드·`--max-workers=1`을 실행하지 않는다. 재개·압축·최종 단계라는 이유로 이전 검사를 반복하지 않는다. 배포·설치·실기 검사는 해당 작업을 요청받은 범위에서만 한다.
+
 사용자가 한도가 다 되어 여기서 중지하고 다른 에이전트에 인계하라고 요청했다. 이 파일 작성 후 추가 구현·검사는 중지했다.
 
 ## 시작하는 사람에게
 
-프로젝트 `/Users/kmnoh/Documents/Default Project/K코치`, main, HEAD `ea7bcfc`.
+프로젝트 `/Users/kmnoh/Documents/Default Project/워치짐`, main, HEAD `ea7bcfc`.
 이 세션 변경은 **전부 미커밋**이다. `git diff`와 untracked 소스·테스트를 함께 읽어라. 버리거나 덮어쓰지 말 것.
 기존 미푸시 커밋 c940fc2 / 9b67dfb / ea7bcfc도 그대로다. push/공개/설치/버전 변경은 하지 않았다.
 폰 버전은 여전히 0.2.1 / code 40. 최신 수정 전체의 lint·OTA·최종 전체 검사는 아직 하지 않았다.
@@ -20,7 +24,7 @@
 3. 프레임 성능은 실측부터. fd.sync / 메타 재읽기 / Kotlin YUV 변환이 의심되지만 단계별 수치 없이 최적화하지 않기. frameIndex 연속·camera timestamp 단조 증가·분석 프레임만 인코딩·videoFrameWritten·종료/실패 저장 보장 유지.
 4. WorkoutTempoSettingsActivity 먼저 Compose 디자인 시스템으로 옮김. 나머지 구식 화면은 연구 모드로 둘지 결정.
 5. visibility 0.65, 외회전 각도 75~105°, 가장자리 범위 등 기존 인식 기준은 실측 없이 낮추거나 통합하지 않기. 스쿼트 반대쪽 관절, 완전 측면 외회전, 두 졸라맨 실기 화면은 별도 확인.
-6. AppNotIdleException으로 전체 폰 화면 검사가 실패하는 원인 수정.
+6. 당시 AppNotIdleException 이슈 기록. 현재는 화면 검사 재개나 추가 원인 조사를 지시하지 않는다.
 
 한국어는 docs/DESIGN.md의 해요체·명사형 및 core KoreanToneTest 준수. 에뮬레이터는 삭제됨. 실기기 또는 Robolectric/Roborazzi만 사용.
 
@@ -117,8 +121,8 @@ phone/build.gradle.kts 변경:
 - 따라서 기존 tools/release.sh의 testDebugUnitTest 전체 실행에도 화면 테스트가 실제 포함됨. 우회 제외 아님.
 - 새 task에 Android test classpath/system properties/JVM args/빌드 의존성 복사.
 - Roborazzi record/compare/verify project property도 직접 전달(처음에는 누락되어 이미지가 안 나왔고 수정함).
-- 직접 화면 테스트 대상 실행은 이제 :phone:testDebugCompose --tests ... 사용.
-- 기본 testDebugUnitTest에 --tests 데이터 테스트를 줘도 Compose task는 의존성으로 전체 실행됨. 이 부작용/검사 시간 개선 여부는 검토 가능.
+- 당시 화면 대상은 :phone:testDebugCompose로 실행했다. 현재 사용자 요청 없는 화면 검사는 금지한다.
+- 기본 testDebugUnitTest는 --tests를 줘도 testDebugCompose 의존성이 전체 화면 검사를 실행할 수 있다. 단일 데이터 테스트 실행 시 -x :phone:testDebugCompose로 제외한다. 이 기록을 이유로 화면 검사를 재현하지 않는다.
 
 ## 실제 검사 결과와 한계
 
@@ -138,26 +142,26 @@ phone/build.gradle.kts 변경:
 9. ADB devices -l: 연결 기기 없음. 설치/실기 확인/정확도 검증/새 자동 종료 성공 검증 없음.
 10. 인계 전 git diff --check는 통과했으나 마지막 코드를 커밋하지 않았다.
 
-## 다음 진행 순서
+## 다음 진행 원칙
 
-1. 미커밋 diff와 untracked 파일을 읽고 종료/저장/라벨 불변조건을 검토. 특히 motionDocument 경계 직후 샘플, 결과 화면 lifecycle/비디오 반복/저장 실패 경로, 새 Gradle 분리를 확인.
-2. 위 미검사 항목 포함 core·phone·wear·updates 검사, lint·OTA. 프로세스 분리의 전체 통과는 다시 확인할 것.
-3. 원래 릴리스 제외 안내는 docs/FIRST_PASS_RELEASE_020.md. 이번 새 전체 게이트가 끝까지 통과하면 ‘여전히 22개 화면 제외’라고 기계적으로 적지 말고 실제 결과를 기록.
-4. 버전은 아직 0.2.1/code40. 다음 공개 버전 선택·상향, 커밋·공개 노트 작성, 공개 전 사용자 확인 필요. tools/release.sh는 커밋된 소스를 요구하며 실행하면 push/공개까지 함. 승인 전 전체 스크립트 실행 금지, Gradle 검사/빌드만 별도로 실행.
-5. 워치 종료 검토는 MainActivity.finishCurrentSet이 MANUAL_SUBMIT이고 paired camera STOP 연동은 별도임까지 읽음. ‘워치에서 양쪽 촬영을 정상 종료할 수 있다’는 결론은 아직 못 냄. 이어서 handler/phone path를 대조해 결과 보고.
-6. 실기: 마지막 3초 정지 자동 종료·횟수 확인 화면의 영상 자동 재생·새 performance.json 확인. 외회전 완전 측면/45도 비교·스쿼트 측면·졸라맨 2종은 아직 필요. 기존 기준값 유지.
+1. 새 작업은 [최신 인계](HANDOFF_NEXT_CHAT_NO_GOAL.md)의 남은 범위에서 시작한다. 이 문서의 옛 미커밋·버전·보류 항목을 그대로 재실행하지 않는다.
+2. 변경한 클래스의 단일 대상 테스트 또는 단일 모듈 컴파일 중 가장 좁은 검사 하나를 선택한다. 이전 검사 결과를 재개했다는 이유로 반복하지 않는다.
+3. 전체 테스트·전체 빌드·lint·화면/PNG·설치·실기는 사용자가 해당 범위를 요청할 때만 진행한다. 마지막 단계에도 자동으로 전체 게이트를 추가하지 않는다.
+4. 같은 오류가 3회 반복되거나 약 15분 동안 진전이 없으면 중지하고 상태를 보고한다. 테스트 범위를 넓히지 않는다.
+5. 긴 출력은 파일로 보내고 실패한 줄만 읽는다. 인계에는 실제 실행 결과와 미확인 범위만 적는다.
 
-## 환경 명령
+## 환경 명령 — 필요한 것 하나만 선택
 
 ```sh
 T="$HOME/Documents/Default Project/안드로이드-에뮬레이터"
 export JAVA_HOME="$T/jdk17/Contents/Home"
 export ANDROID_SDK_ROOT="$T/android-sdk"
-"$T/gradle-8.11.1/bin/gradle" --offline :core:test :updates:testDebugUnitTest :phone:testDebugUnitTest :wear:testDebugUnitTest :phone:lint :wear:lint :phone:assembleOta :wear:assembleOta
-# 화면 대상/PNG만 확인할 때:
-"$T/gradle-8.11.1/bin/gradle" --offline :phone:testDebugCompose --tests '*CalibrationResultScreenTest' --tests '*WorkoutTempoScreenTest' -Proborazzi.test.record=true
-# 외부 자료 재생(표준 JVM 테스트에 env가 전달되는지 결과 system-out 확인):
-KCOACH_CAMERA_FIELD_DIR="$PWD/work/camera-field-5f3dd894" "$T/gradle-8.11.1/bin/gradle" --offline :phone:testDebugUnitTest --tests '*CameraEndFieldReplayTest'
+# 폰 변경 컴파일을 선택한 경우에만:
+"$T/gradle-8.11.1/bin/gradle" --offline :phone:compileDebugKotlin > /tmp/kcoach-phone-compile.log 2>&1
+# 워치 변경 컴파일을 선택한 경우에만 (위 명령과 묶어서 실행하지 않음):
+"$T/gradle-8.11.1/bin/gradle" --offline :wear:compileDebugKotlin > /tmp/kcoach-watch-compile.log 2>&1
+# 단일 테스트를 선택한다면 실제 변경 클래스 하나만 지정하고 화면 task 의존성을 제외:
+# gradle :phone:testDebugUnitTest --tests '*ChangedClassTest' -x :phone:testDebugCompose > /tmp/kcoach-target-test.log 2>&1
 ```
 
 ## 후속 작업 결과

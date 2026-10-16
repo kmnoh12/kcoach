@@ -1,4 +1,4 @@
-# KCoach Watch8 measurement audit
+# 워치짐 Watch8 measurement audit
 
 Use this reference when a user reports unstable real-device counting or asks whether calibration/form/trajectory metrics are real.
 

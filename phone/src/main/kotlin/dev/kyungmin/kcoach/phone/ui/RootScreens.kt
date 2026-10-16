@@ -13,6 +13,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -40,6 +41,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -237,7 +239,7 @@ fun HomeScreen(ui: HomeUi, running: RunningUi?, actions: HomeActions) {
                 Text("최근", color = KColors.Muted, fontSize = 13.sp)
                 KIcon(KIcon.Down, KColors.Muted, size = 14.dp)
             }
-            Box(Modifier.fillMaxWidth().height(0.5.dp).background(KColors.Hairline))
+            Box(Modifier.fillMaxWidth().height(1.5.dp).background(ROUTINE_DIVIDER))
             ui.rows.forEach { row ->
                 RoutineRow(row, onClick = { actions.openRoutine(row.routine) }, onMenu = { actions.routineMenu(row.routine) })
             }
@@ -251,9 +253,14 @@ fun HomeScreen(ui: HomeUi, running: RunningUi?, actions: HomeActions) {
         ) { current ->
             if (current == null) {
                 Row(Modifier.padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 12.dp)) {
-                    ActionButton("자유운동", KColors.Accent, KColors.OnAccent, outlined = false, modifier = Modifier.weight(1f), onClick = actions.freeWorkout)
+                    // Each button is 10% smaller but keeps the centre of its original 52dp-high slot.
+                    Box(Modifier.weight(1f).height(52.dp), contentAlignment = Alignment.Center) {
+                        ActionButton("자유운동", KColors.Accent, KColors.OnAccent, outlined = false, modifier = Modifier.fillMaxWidth(0.9f).height(47.dp), onClick = actions.freeWorkout)
+                    }
                     Spacer(Modifier.width(8.dp))
-                    ActionButton("추가", Color.Transparent, KColors.White, outlined = true, modifier = Modifier.weight(1f), onClick = actions.add)
+                    Box(Modifier.weight(1f).height(52.dp), contentAlignment = Alignment.Center) {
+                        ActionButton("새 루틴", Color(0xFFCFF1E8), KColors.OnAccent, outlined = false, modifier = Modifier.fillMaxWidth(0.9f).height(47.dp), onClick = actions.add, icon = KIcon.Plus)
+                    }
                 }
             } else {
                 RunningBar(current, actions)
@@ -261,6 +268,9 @@ fun HomeScreen(ui: HomeUi, running: RunningUi?, actions: HomeActions) {
         }
     }
 }
+
+/** Brighter than KColors.Hairline so the routine list rows read as separate rows on the near-black home. */
+private val ROUTINE_DIVIDER = Color(0xFF2E3533)
 
 @Composable
 private fun WeekStrip(week: List<WeekDayUi>) {
@@ -350,22 +360,38 @@ private fun RoutineRow(row: RoutineRowUi2, onClick: () -> Unit, onMenu: () -> Un
                 KIcon(KIcon.DotsVertical, KColors.Faint, size = 20.dp)
             }
         }
-        Box(Modifier.fillMaxWidth().height(0.5.dp).background(KColors.Hairline))
+        Box(Modifier.fillMaxWidth().height(1.5.dp).background(ROUTINE_DIVIDER))
     }
 }
 
 @Composable
-private fun ActionButton(text: String, background: Color, content: Color, outlined: Boolean, modifier: Modifier, onClick: () -> Unit) {
+private fun ActionButton(text: String, background: Color, content: Color, outlined: Boolean, modifier: Modifier, onClick: () -> Unit, icon: KIcon? = null) {
+    // The scale sits outside clip/background so the fill, border and label shrink together as one piece.
+    val source = remember { MutableInteractionSource() }
+    val pressed by source.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        if (pressed) 0.92f else 1f,
+        spring(dampingRatio = 0.45f, stiffness = 600f),
+        label = "actionPress",
+    )
     Box(
         modifier
             .height(52.dp)
+            .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(KShape.Control)
             .background(background)
             .then(if (outlined) Modifier.border(0.5.dp, Color(0xFF3A4240), KShape.Control) else Modifier)
-            .pressable(onClick),
+            .clickable(interactionSource = source, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text, color = content, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+        // The thin plus reads lighter than the label, so an icon+label pair is nudged slightly left to look centred.
+        Row(Modifier.then(if (icon != null) Modifier.offset(x = (-1).dp) else Modifier), verticalAlignment = Alignment.CenterVertically) {
+            icon?.let {
+                KIcon(it, content, size = 20.dp)
+                Spacer(Modifier.width(6.dp))
+            }
+            Text(text, color = content, fontSize = 17.sp, fontWeight = FontWeight.Medium)
+        }
     }
 }
 

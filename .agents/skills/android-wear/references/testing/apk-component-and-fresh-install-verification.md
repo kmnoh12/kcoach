@@ -1,6 +1,6 @@
 # APK component and fresh-install verification
 
-Use this after the final source patch and after any rebuild. It captures a reusable Android/Wear verification pattern from a KCoach phone↔Wear emulator run.
+Use this after the final source patch and after any rebuild. It captures a reusable Android/Wear verification pattern from a 워치짐 phone↔Wear emulator run.
 
 ## 1. Discover artifact metadata before launching
 

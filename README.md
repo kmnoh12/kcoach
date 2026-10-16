@@ -1,6 +1,6 @@
 <div align="center">
 
-# KCoach
+# 워치짐
 
 **Galaxy Watch8 + Android personal hypertrophy coach.**
 

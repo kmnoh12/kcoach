@@ -65,7 +65,7 @@ Use this reference when researching or designing smartwatch exercise repetition 
   - https://github.com/hissain/sensor-data-collector/blob/main/wear/src/main/java/com/hissain/android/demo/sensordatacollector/wear/service/WearableListenerService.kt
 - Uses a foreground service, local CSV storage, command messages, and Data Layer sync. The inspected sensor path is heart-rate-focused, not complete accelerometer/gyro capture; sync sends a whole CSV string via `PutDataMapRequest` without a visible checksum/ACK protocol.
 - Transfer: separate command listener and sensor service; persist locally before sync.
-- Replace for KCoach: manifest + Asset/binary capture lane, checksum, sample-count/timestamp validation, ACK, retry, and deduplication.
+- Replace for 워치짐: manifest + Asset/binary capture lane, checksum, sample-count/timestamp validation, ACK, retry, and deduplication.
 - License: Apache 2.0.
 
 ### Official Android Health Services Exercise Sample
@@ -104,7 +104,7 @@ Reddit pages and JSON/RSS endpoints were blocked by anti-bot responses during th
 - SmartRep review: https://github.com/espruino/BangleApps/pull/3927
   - Maintainer review found packaging/metadata/logic-loading problems despite claimed real-hardware testing; PR was later closed. Deployment verification must prove the algorithm is present and invoked in the artifact.
 
-## KCoach transfer rules
+## 워치짐 transfer rules
 
 1. Watch-side live counting: exercise-specific state machine first; use hysteresis, phase ordering, minimum/maximum period, minimum phase duration, refractory period, and inactivity timeout.
 2. Phone-side final analysis: validate monotonic timestamps, effective rate, gaps, sample count, checksum, then re-sample/filter and reanalyze.

@@ -1,6 +1,6 @@
 # Wearable exercise capability research evidence bank
 
-This is a compact evidence ledger for future smartwatch exercise sensing research. It records source-reported facts separately from KCoach inference.
+This is a compact evidence ledger for future smartwatch exercise sensing research. It records source-reported facts separately from 워치짐 inference.
 
 ## Academic and public-data sources
 
@@ -10,32 +10,32 @@ This is a compact evidence ledger for future smartwatch exercise sensing researc
 - Dataset/code: https://github.com/microsoft/Exercise-Recognition-from-Wearable-Sensors
 - Direct README/data documentation states: accelerometer and gyroscope recordings from 200+ participants; single-activity and multi-activity files; 50 Hz examples; multi-activity contains exercise/non-exercise traces and exercise start/end plus repetition-count metadata.
 - Additional protocol detail from the paper-side research: the wrist watch was kept in a fixed orientation and tightened to limit rotation; a vibration cue at repetition start was paced per participant and exercise to approximate natural cadence; a null/non-exercise class covered sitting, standing, walking, and equipment transitions. The study used constrained labeling/temporal cues, so its accuracy is not universal-form evidence.
-- KCoach inference: recognition, repetition counting, and set segmentation are separate evaluation problems; retain all three labels when collecting Watch8 data.
+- 워치짐 inference: recognition, repetition counting, and set segmentation are separate evaluation problems; retain all three labels when collecting Watch8 data.
 
 ### WeakCounterF
 
 - Nishino, Maekawa, Hara, “Few-Shot and Weakly Supervised Repetition Counting With Body-Worn Accelerometers,” Frontiers in Computer Science 2022. DOI: https://doi.org/10.3389/fcomp.2022.925108
 - Reported setup: ASUS ZenWatch on the right wrist, 100 Hz 3-axis acceleration, 9 subjects, push-ups/squats/sit-ups. Target-user calibration used only weak count labels for a few segments; the proposed few-shot method improved reported MAE over a non-personalized baseline. Reported average MAE was about 1.02 reps/set for the proposed method and 1.09 for one-shot in the tested offline protocol.
 - Explicit limitation: experiments were offline; real-time validation was future work.
-- KCoach inference: a 5–10 repetition personal calibration can be a candidate for cadence/template adaptation, but not a license to claim anatomical form or hidden joint landmarks.
+- 워치짐 inference: a 5–10 repetition personal calibration can be a candidate for cadence/template adaptation, but not a license to claim anatomical form or hidden joint landmarks.
 
 ### Complex exercise counting
 
 - “Recognition and Repetition Counting for Complex Physical Exercises with Deep Learning,” Sensors 2019. DOI: https://doi.org/10.3390/s19030714
 - Extracted paper experiment: 54 participants; smartwatch + additional sensor setup; constrained and unconstrained exercise conditions; the paper reports roughly 91% of sets within ±1 rep in its constrained study and emphasizes harder transitions/fast repetitions in less constrained conditions.
-- KCoach inference: a good reported set-level count result does not transfer automatically to Watch8, a different sensor placement, or all exercises; keep participant/session and protocol splits.
+- 워치짐 inference: a good reported set-level count result does not transfer automatically to Watch8, a different sensor placement, or all exercises; keep participant/session and protocol splits.
 
 ### Local muscular endurance / upper-vs-lower body
 
 - Prabhu et al., “Recognition and Repetition Counting for Local Muscular Endurance Exercises in Exercise-Based Rehabilitation,” Sensors 2020. DOI: https://doi.org/10.3390/s20174791
 - Reported setup: 76 participants, wrist-worn Shimmer3, 10 exercises, including upper- and lower-body movements. The paper compares statistical peak/feature methods with neural models and reports that statistical performance is stronger for upper-body than lower-body, while neural models can improve lower-body counting under the study protocol.
-- KCoach inference: lower-body machine exercises should remain manual by default unless a new protocol creates an observable signal and is validated on Watch8.
+- 워치짐 inference: lower-body machine exercises should remain manual by default unless a new protocol creates an observable signal and is validated on Watch8.
 
 ### Few-shot unseen exercises
 
 - Lim and Lee, “Intelligent Repetition Counting for Unseen Exercises: A Few-Shot Learning Approach with Sensor Signals.”
 - Reported setup: 11 participants; one IMU above the ear; 92 Hz accelerometer/gyro/magnetometer; 28 selected exercises from 30 because two lacked clear sensor patterns; 5-repetition registration for new exercise adaptation; reported 86.8% probability of accurately counting 10+ reps in a set across the selected exercise set.
-- KCoach inference: the method supports the concept of personal registration, but the sensor position is head/ear rather than wrist and cannot be used as Watch8 accuracy evidence. Exercise-specific window/hyperparameter sensitivity remains relevant.
+- 워치짐 inference: the method supports the concept of personal registration, but the sensor position is head/ear rather than wrist and cannot be used as Watch8 accuracy evidence. Exercise-specific window/hyperparameter sensitivity remains relevant.
 
 ### Wearable IMU paper patterns
 
@@ -56,13 +56,13 @@ Verified code patterns:
 
 - FitCoach-style path: acceleration magnitude → gravity estimate (low-pass) → linear-acceleration magnitude → low-pass → short-time energy → adaptive peak/prominence + minimum distance → valley boundaries.
 - Džaja/Shimmer-style path: vector magnitude → 0.25–1.2 Hz band-pass → dominant repetition frequency via FFT → period-aware low-pass/extrema selection, with half-period double-count protection.
-- KCoach inference: transfer the signal-processing patterns only after measuring Watch8 effective rate, latency, and exercise-specific period; do not copy offline `filtfilt` or fixed thresholds into live watch logic.
+- 워치짐 inference: transfer the signal-processing patterns only after measuring Watch8 effective rate, latency, and exercise-specific period; do not copy offline `filtfilt` or fixed thresholds into live watch logic.
 
 ### `Yasmine56/crossfit-imu-motion-analysis`
 
 https://github.com/Yasmine56/crossfit-imu-motion-analysis
 
-Verified code pattern: acceleration norm → rolling average/downsample → PELT change-point segmentation. KCoach inference: active/rest segmentation is a separate layer from repetition count and may be useful for set boundaries, but the repository itself is not Watch8 validation.
+Verified code pattern: acceleration norm → rolling average/downsample → PELT change-point segmentation. 워치짐 inference: active/rest segmentation is a separate layer from repetition count and may be useful for set boundaries, but the repository itself is not Watch8 validation.
 
 ## Official platform evidence
 
@@ -72,7 +72,7 @@ Verified code pattern: acceleration norm → rolling average/downsample → PELT
 
 Official docs establish that accelerometer, gyroscope, gravity/linear-acceleration, and rotation-vector streams have different semantics and that devices differ in available sensors, range, resolution, and effective sampling. Health Services provides platform fitness data and exercise lifecycle APIs; it does not establish a universal custom strength-rep/form classifier. Requested sensor delay is not a guarantee of effective sampling; store event timestamps and count gaps.
 
-## Protocol candidates for KCoach
+## Protocol candidates for 워치짐
 
 ### Pull-up
 

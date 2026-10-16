@@ -1,6 +1,6 @@
 # Exercise Observability and Motion-Spec Rules
 
-Use this reference when implementing or reviewing smartwatch-only exercise repetition tracking, especially for KCoach-style personalized workouts.
+Use this reference when implementing or reviewing smartwatch-only exercise repetition tracking, especially for 워치짐-style personalized workouts.
 
 ## Core product distinction
 
@@ -90,7 +90,7 @@ Required: same left wrist, same cable/handle, calibrated baseline
 Validation: real Watch8 capture vs manual/video labels; test vertical-shaking negatives
 
 
-## KCoach 33-exercise motion-family matrix
+## 워치짐 33-exercise motion-family matrix
 
 Use this matrix as an implementation map, not as proof that the current APK already implements or validates every row. The exact catalog is defined in `phone/.../WorkoutData.kt`; do not replace exact IDs with loose `contains("press")`/`contains("fly")` routing when adding detectors.
 

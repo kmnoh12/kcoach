@@ -59,7 +59,7 @@ def client_loop(conn: socket.socket, address: tuple[str, int]) -> None:
 
 def main() -> None:
     with socket.create_server((HOST, PORT), reuse_port=False) as server:
-        print(f"KCoach emulator relay listening on {HOST}:{PORT}", flush=True)
+        print(f"워치짐 emulator relay listening on {HOST}:{PORT}", flush=True)
         while True:
             conn, address = server.accept()
             threading.Thread(target=client_loop, args=(conn, address), daemon=True).start()

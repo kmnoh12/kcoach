@@ -1438,7 +1438,8 @@ class WearWorkoutService : Service(), SensorEventListener {
         if (!running || trackingProfile.mode == TrackingMode.MANUAL_REQUIRED) return
         reps += 1
         checkpoint()
-        vibrateShort()
+        // Exactly the target rep gets the triple pulse; reps past the target go back to the short tick.
+        if (reps == targetReps) vibrateTargetReached() else vibrateShort()
         if (reps >= targetReps && dev.kyungmin.kcoach.core.CapturePurpose.forSession(sessionId).stopAtTarget) completeSet()
     }
 
@@ -1993,7 +1994,20 @@ class WearWorkoutService : Service(), SensorEventListener {
 
     private fun vibrateShort() {
         if (!running) return
-        getSystemService(android.os.Vibrator::class.java)?.vibrate(VibrationEffect.createOneShot(35, VibrationEffect.DEFAULT_AMPLITUDE))
+        val vibrator = getSystemService(android.os.Vibrator::class.java) ?: return
+        // Same 35 ms length. A fixed mid-high strength (below the target pulse's 255) where the motor supports it.
+        val amplitude = if (vibrator.hasAmplitudeControl()) REP_TICK_AMPLITUDE else VibrationEffect.DEFAULT_AMPLITUDE
+        vibrator.vibrate(VibrationEffect.createOneShot(35, amplitude))
+    }
+
+    private fun vibrateTargetReached() {
+        if (!running) return
+        val vibrator = getSystemService(android.os.Vibrator::class.java) ?: return
+        val timings = longArrayOf(0L, 70L, 60L, 70L, 60L, 110L)
+        vibrator.vibrate(
+            if (vibrator.hasAmplitudeControl()) VibrationEffect.createWaveform(timings, intArrayOf(0, 255, 0, 255, 0, 255), -1)
+            else VibrationEffect.createWaveform(timings, -1),
+        )
     }
 
     private fun vibrateReady() {
@@ -2011,13 +2025,13 @@ class WearWorkoutService : Service(), SensorEventListener {
 
     private fun createNotificationChannel() {
         getSystemService(NotificationManager::class.java).createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, "KCoach 워치 운동", NotificationManager.IMPORTANCE_LOW),
+            NotificationChannel(CHANNEL_ID, "워치짐 워치 운동", NotificationManager.IMPORTANCE_LOW),
         )
     }
 
     private fun buildNotification(): Notification = NotificationCompat.Builder(this, CHANNEL_ID)
         .setSmallIcon(android.R.drawable.ic_media_play)
-        .setContentTitle("KCoach")
+        .setContentTitle("워치짐")
         .setContentText("워치 센서 세션을 유지하는 중")
         .setOngoing(true)
         .setCategory(NotificationCompat.CATEGORY_SERVICE)
@@ -2036,6 +2050,7 @@ class WearWorkoutService : Service(), SensorEventListener {
         const val EXTRA_COMMAND = "command"
         private const val CHANNEL_ID = "kcoach_wear_workout"
         private const val NOTIFICATION_ID = 4102
+        private const val REP_TICK_AMPLITUDE = 180
         private const val PHONE_HEARTBEAT_TIMEOUT_MS = 12_000L
         private const val PHONE_WATCHDOG_INTERVAL_MS = 3_000L
         private const val CAPTURE_PREFS = "capture-outbox"

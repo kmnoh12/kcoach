@@ -24,27 +24,27 @@ import org.robolectric.annotation.GraphicsMode
 class WorkoutPreparationUiTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun routineQuestionsAreExplicitOptionalAndSeparateFromTheProfile() {
-        var answers by mutableStateOf<Map<String, String>>(emptyMap())
+    @Test fun startPanelShowsWearingAndNoPostureQuestions() {
         var opened = false
         compose.setContent {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                WorkoutPreparationPanel(listOf("external_rotation", "dumbbell_lateral_raise"),
-                    WorkoutWearingSelection("RIGHT", "INSIDE"), "워치 연결됨", false, answers,
-                    { id, value -> answers = answers + (id to value) }, { opened = true })
+                WorkoutPreparationPanel(WorkoutWearingSelection("RIGHT", "INSIDE"), "워치 연결됨", false) { opened = true }
             }
         }
         compose.onNodeWithText("오른손 · 손바닥 쪽").assertExists()
-        compose.onNodeWithTag("preparation:external_rotation:PALM_UP_HORIZONTAL").assertIsNotSelected()
-        compose.onNodeWithTag("preparation:external_rotation:UNKNOWN").assertIsNotSelected()
-        compose.onNodeWithTag("preparation:external_rotation:OTHER").performScrollTo().performClick().assertIsSelected()
-        assertEquals("OTHER", answers["external_rotation"])
-        compose.onNodeWithTag("preparation:external_rotation:UNKNOWN").performClick().assertIsSelected()
-        assertEquals("UNKNOWN", answers["external_rotation"])
-        compose.onNodeWithText("본체 위쪽이 향하는 곳").assertDoesNotExist()
-        compose.onNodeWithText("착용 손").assertDoesNotExist()
+        compose.onNodeWithText("이 방식").assertDoesNotExist()
         compose.onNodeWithText("프로필·착용 설정").performScrollTo().performClick()
         assertTrue(opened)
+    }
+
+    @Test fun postureSettingsDefaultToUnknownAndSaveChoices() {
+        var answers by mutableStateOf<Map<String, String>>(emptyMap())
+        compose.setContent {
+            WorkoutPostureScreen(answers, {}) { id, value -> answers = answers + (id to value) }
+        }
+        compose.onNodeWithTag("posture:external_rotation:UNKNOWN").assertIsSelected()
+        compose.onNodeWithTag("posture:external_rotation:OTHER").performScrollTo().performClick().assertIsSelected()
+        assertEquals("OTHER", answers["external_rotation"])
     }
 
     @Test fun preparationLivesInTheRoutineAndStartNeedsNoSecondSheetOrAnswer() {
@@ -53,8 +53,7 @@ class WorkoutPreparationUiTest {
             RoutineDetailScreen("등 루틴", emptyList(), "시작", KIcon.Play, false,
                 RoutineDetailActions({}, {}, {}, {}, { _, _ -> }, {}, { started = true }, {}),
                 preparationContent = {
-                    WorkoutPreparationPanel(listOf("lat_pull_down", "barbell_row"), null,
-                        "워치 연결 안 됨", false, emptyMap(), { _, _ -> fail("No deferred question") }, {})
+                    WorkoutPreparationPanel(null, "워치 연결 안 됨", false) {}
                 })
         }
         compose.onNodeWithText("운동 준비").assertExists()
@@ -65,7 +64,7 @@ class WorkoutPreparationUiTest {
         compose.onNodeWithText("이 착용 상태로 시작").assertDoesNotExist()
     }
 
-    @Test fun aLongShoulderPreparationKeepsStartVisibleAndTheLastQuestionReachable() {
+    @Test fun aShoulderPreparationKeepsStartVisible() {
         val routine = WorkoutData.defaultRoutines().first { it.exercises.any { row -> row.exercise.id == "external_rotation" } }
         compose.setContent {
             val context = LocalContext.current
@@ -74,14 +73,10 @@ class WorkoutPreparationUiTest {
             }, "시작", KIcon.Play, false,
                 RoutineDetailActions({}, {}, {}, {}, { _, _ -> }, {}, {}, {}),
                 preparationContent = {
-                    WorkoutPreparationPanel(routine.exercises.map { it.exercise.id }, WorkoutWearingSelection("LEFT", "OUTSIDE"),
-                        "워치 연결됨", false, emptyMap(), { _, _ -> }, {})
+                    WorkoutPreparationPanel(WorkoutWearingSelection("LEFT", "OUTSIDE"), "워치 연결됨", false) {}
                 })
         }
         compose.onNodeWithText("시작").assertIsDisplayed()
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/routine-preparation-shoulder.png")
-        compose.onNodeWithTag("preparation:dumbbell_lateral_raise:UNKNOWN").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("시작").assertIsDisplayed()
-        compose.onRoot().captureRoboImage("build/outputs/roborazzi/routine-preparation-shoulder-scroll.png")
     }
 }

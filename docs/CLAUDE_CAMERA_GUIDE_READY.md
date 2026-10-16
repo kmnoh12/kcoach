@@ -63,6 +63,6 @@ push와 배포는 하지 않았다. 배포는 사용자 지시에 따라 코덱�
    [CAMERA_GUIDE_REDESIGN_PLAN.md](CAMERA_GUIDE_REDESIGN_PLAN.md)에 있다. 같은 세션을 앱과 CLI에서 동시에 열지 않는다.
 2. `claude -p`는 승인 버튼을 누를 수 없다. `--permission-mode acceptEdits` 등 권한 옵션을 지정해 부른다.
    Gradle은 항상 `--no-daemon`으로 실행하게 지시한다. `gradle --stop`은 같은 버전을 쓰는 다른 에이전트 데몬까지 끈다.
-3. 클로드 작업은 별도 worktree에서 한다. 기존 브랜치 `claude/camera-guide`(폴더 `K코치-camera-guide`)는
+3. 클로드 작업은 별도 worktree에서 한다. 기존 브랜치 `claude/camera-guide`(폴더 `워치짐-camera-guide`)는
    main `376f0b8`까지 반영돼 있으므로 이어 써도 되고 새 브랜치를 지정해도 된다.
    카메라 1~4단계의 폰 전체 테스트·lint·OTA·실기기 확인은 통합 때 필요하다.

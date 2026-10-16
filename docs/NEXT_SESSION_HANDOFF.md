@@ -1,4 +1,4 @@
-# KCoach 다음 세션 인수인계 (2026-10-14, 폰 0.7.4 / 워치 0.2.5 검증용 업데이트)
+# 워치짐 다음 세션 인수인계 (2026-10-14, 폰 0.7.4 / 워치 0.2.5 검증용 업데이트)
 
 ## 최신 공개 — 폰·워치 0.2.0, 2026-10-15 18:49 KST
 
@@ -314,7 +314,7 @@ stash ID는 `reviews/2026-10-14-camera-initialization-hotfix.json`의 aiUiStash�
 
 ## 위치와 도구
 
-- 프로젝트: `~/Documents/Default Project/K코치` (GitHub 공개 레포 `kmnoh12/kcoach`)
+- 프로젝트: `~/Documents/Default Project/워치짐` (GitHub 공개 레포 `kmnoh12/kcoach`)
 - 빌드 도구: `~/Documents/Default Project/안드로이드-에뮬레이터` (jdk17, gradle-8.11.1, android-sdk, AVD `KCoachPhone`·`Wear_Round`)
 - 배포: 버전 올리고 커밋 → `tools/release.sh "변경 내용"` → GitHub Releases. 폰·워치 앱이 앱 안에서 인터넷으로 업데이트한다. ADB 불필요.
 - 서명: 이 Mac의 `~/.android/debug.keystore` (잃으면 앱 재설치 필요, 백업 미완)
@@ -387,7 +387,7 @@ stash ID는 `reviews/2026-10-14-camera-initialization-hotfix.json`의 aiUiStash�
 
 37. (배포 확인, 2026-10-13) `tools/release.sh`로 `p0.7.3-w0.2.3`를 최신 정식 릴리스로 공개했다. 배포 코드 커밋은 `d6d739d`이며 기존 로컬 커밋과 이번 안정성/정리 변경을 push했다. core 검사와 두 OTA 축소 빌드 통과. 폰 33/0.7.3, 워치 31/0.2.3 및 기존 배포 APK와 동일한 서명을 확인했다. 앱이 사용하는 GitHub `releases/latest/download/update-phone.json`/`update-watch.json`이 새 버전을 반환하고, 각각의 공개 APK를 다운로드하여 manifest/로컬 배포 파일과 SHA-256 일치를 확인했다. 폰·워치 모두 앱의 업데이트 확인에서 새 버전을 받을 수 있다. 실제 설치 완료/화면 꺼짐/연결/배터리 확인은 별도이며 이번 배포에서 수행하지 않았다. 배포 산출물과 상세 검증 기록은 `build/release/p0.7.3-w0.2.3/`에 있다.
 
-38. (워치 버튼 정리, 2026-10-13, 배포 완료) 이 Mac의 Claude K코치 대화(2026-10-12 13:00 KST)에서 사용자가 폰의 실측 시작에 맞춰 워치도 자동으로 실측 화면으로 넘어가야 한다고 요청한 원문을 확인했다. 그 요청에 대한 폰 자동 시작/중지 코드는 이미 0.7.3/0.2.3에 포함됐으나 워치 MainActivity의 수동 `실측 모드` 진입 버튼은 남아 있었다. 이어서 처리하라는 사용자 요청에 따라 그 버튼만 제거했다. 폰 제어로 열리는 ProbeActivity/ProbeService와 기존 기록은 유지했다. 폰 0.7.3(code 33)은 변경하지 않고 워치만 0.2.4(code 32)로 올렸다. core 118/wear 39 = 157건과 워치 OTA 축소 빌드 통과, APK 버전/기존 워치와 동일한 서명/버튼 문구 부재를 확인했다. 실제 Watch8 설치와 화면 전환은 미확인이다.
+38. (워치 버튼 정리, 2026-10-13, 배포 완료) 이 Mac의 Claude 워치짐 대화(2026-10-12 13:00 KST)에서 사용자가 폰의 실측 시작에 맞춰 워치도 자동으로 실측 화면으로 넘어가야 한다고 요청한 원문을 확인했다. 그 요청에 대한 폰 자동 시작/중지 코드는 이미 0.7.3/0.2.3에 포함됐으나 워치 MainActivity의 수동 `실측 모드` 진입 버튼은 남아 있었다. 이어서 처리하라는 사용자 요청에 따라 그 버튼만 제거했다. 폰 제어로 열리는 ProbeActivity/ProbeService와 기존 기록은 유지했다. 폰 0.7.3(code 33)은 변경하지 않고 워치만 0.2.4(code 32)로 올렸다. core 118/wear 39 = 157건과 워치 OTA 축소 빌드 통과, APK 버전/기존 워치와 동일한 서명/버튼 문구 부재를 확인했다. 실제 Watch8 설치와 화면 전환은 미확인이다.
 
 39. (배포 확인, 2026-10-13) 변경 커밋 `e9e1ab2`를 push하고 `tools/release.sh`로 `p0.7.3-w0.2.4`를 최신 릴리스로 공개했다. 워치만 업데이트하면 된다. 앱이 읽는 최신 워치 manifest와 공개 APK의 32/0.2.4, 기존 서명, SHA-256, 제거한 버튼 문구 부재를 확인했다. 배포 스크립트가 폰 APK의 Git 커밋 메타데이터를 다시 만들어 바이트가 달라졌으므로 폰 APK와 manifest는 기존 0.7.3 원본으로 교체했다. 현재 GitHub asset API에서 폰 APK/manifest를 다시 내려받아 이전 배포 파일과 해시 및 서명 일치를 확인했다. 교체 직후 브라우저 다운로드 캐시에 이전 폰 메타데이터가 남아 있어 폰 검증에는 현재 asset API를 사용했다(버전은 33/0.7.3으로 동일). 검증 기록은 `build/release/p0.7.3-w0.2.4/verification.json`. 실제 폰/워치 설치 및 Watch8 화면 전환은 미확인이다.
 

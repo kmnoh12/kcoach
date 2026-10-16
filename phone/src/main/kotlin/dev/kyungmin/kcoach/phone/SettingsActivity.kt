@@ -12,6 +12,7 @@ class SettingsActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val actions = SettingsActions(back = ::finish,
             tempo = { startActivity(Intent(this, WorkoutTempoSettingsActivity::class.java)) },
+            posture = { startActivity(Intent(this, WorkoutPostureActivity::class.java)) },
             profile = { startActivity(Intent(this, WorkoutProfileActivity::class.java)) })
         setContent { SettingsScreen(actions) }
     }

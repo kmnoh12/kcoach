@@ -1,4 +1,4 @@
-# Staged KCoach Session Delivery Reference
+# Staged 워치짐 Session Delivery Reference
 
 ## Phase ledger template
 

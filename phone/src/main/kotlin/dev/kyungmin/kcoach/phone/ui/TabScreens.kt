@@ -8,6 +8,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -285,7 +286,6 @@ class UpdateUi(val message: String, val readyToInstall: Boolean, val busy: Boole
 class MenuActions(
     val checkUpdate: ((UpdateUi) -> Unit) -> Unit,
     val install: () -> String?,
-    val openCalibration: () -> Unit,
     val openSettings: () -> Unit = {},
     val observeUpdate: (((UpdateUi) -> Unit) -> (() -> Unit))? = null,
 )
@@ -298,13 +298,14 @@ fun MenuScreen(version: String, actions: MenuActions, wearing: dev.kyungmin.kcoa
         onDispose { unsubscribe?.invoke() }
     }
     TabPage("메뉴", "", KIcon.Settings, actions.openSettings) {
+        Spacer(Modifier.height(20.dp))
+        MenuTipBox()
         Spacer(Modifier.height(28.dp))
-        SectionCard("기기", listOf("워치 연결" to "운동 화면에서 확인",
+        SectionCard("기기", listOf(
             "확인한 착용 손" to when (wearing?.side) { "LEFT" -> "왼손"; "RIGHT" -> "오른손"; else -> "미확인" },
-            "확인한 화면 방향" to when (wearing?.placement) { "OUTSIDE" -> "손등 쪽"; "INSIDE" -> "손바닥 쪽"; else -> "미확인" },
-            "센서 기록" to "운동·보정 중"))
+            "확인한 화면 방향" to when (wearing?.placement) { "OUTSIDE" -> "손등 쪽"; "INSIDE" -> "손바닥 쪽"; else -> "미확인" }))
         Spacer(Modifier.height(28.dp))
-        SectionCard("앱", listOf("현재 버전" to version, "데이터 저장" to "이 기기에만"))
+        SectionCard("앱", listOf("현재 버전" to version))
         Spacer(Modifier.height(24.dp))
         Text(state.message, color = KColors.Muted, fontSize = 14.sp)
         Spacer(Modifier.height(10.dp))
@@ -318,10 +319,6 @@ fun MenuScreen(version: String, actions: MenuActions, wearing: dev.kyungmin.kcoa
                     state = result
                 }
             }
-        }
-        Spacer(Modifier.height(10.dp))
-        MenuButton("측정·보정", filled = false, onClick = actions.openCalibration)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
         }
     }
 }
@@ -338,5 +335,31 @@ private fun MenuButton(text: String, filled: Boolean = true, onClick: () -> Unit
         contentAlignment = Alignment.Center,
     ) {
         Text(text, color = if (filled) KColors.OnAccent else KColors.White, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+private val MENU_TIPS = listOf(
+    "설정 > 운동별 자세에서 평소 하는 그립이나 자세를 지정하면\n횟수 인식이 더 정확해져요.",
+    "워치를 손목에 단단히 고정하면\n센서가 움직임을 더 정확하게 읽어요.",
+    "설정 > 운동별 템포 알림에서\n운동마다 원하는 속도를 정할 수 있어요.",
+    "운동 전 측정·보정을 해 두면\n내 동작에 맞춰 횟수를 세어줘요.",
+    "기록은 로그인 없이 이 폰에만 저장돼요.\n센서 기록은 운동과 보정 중에만 켜져요.",
+)
+
+@Composable
+private fun MenuTipBox() {
+    var index by remember { mutableStateOf(0) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(5_000)
+            index = (index + 1) % MENU_TIPS.size
+        }
+    }
+    Box(
+        Modifier.fillMaxWidth().heightIn(min = 72.dp).clip(KShape.Control)
+            .border(0.5.dp, Color(0xFF3A4240), KShape.Control).padding(horizontal = 16.dp, vertical = 14.dp),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Text(MENU_TIPS[index], color = KColors.Soft, fontSize = 14.sp, maxLines = 2)
     }
 }

@@ -54,17 +54,47 @@ class CalibrationReviewPromotionTest {
         return (0 until count).map { RepCycle(times[it * 4], times[it * 4 + 2], times[it * 4 + 4], MusclePhase.CONCENTRIC) }
     }
 
-    @Test fun videoWindowsMatchingTheConfirmedTotalBecomeLearningLabelsMarkedAsNotUserDrawn() {
+    @Test fun matchingTotalsKeepVideoCandidatesWithoutApprovingLearningLabels() {
         val id = clip(true).id; val store = CalibrationReviewStore(app)
         val counted = store.saveCount(id, 3, 0).getOrThrow()
         val promoted = store.promoteVideoProposals(id, emptySet(), cycles(id, 3)).getOrThrow()!!
         assertEquals(counted.revision + 1, promoted.revision)
         assertEquals(3, promoted.references.size)
-        assertTrue(promoted.references.all { it.eligibleForLearning })
+        assertTrue(promoted.references.none { it.eligibleForLearning })
+        assertTrue(promoted.references.all { it.exclusionReason == CalibrationReviewStore.VIDEO_BOUNDARIES_NOT_REVIEWED })
+        assertNull(promoted.cameraMetrics)
+        assertNull(promoted.squatMetrics)
+        assertTrue(store.load(id).getOrThrow().references.none { it.eligibleForLearning })
         assertEquals(CalibrationReviewStore.SOURCE_VIDEO_WINDOWS, store.confirmationSource(id))
         // Running it again with the same inputs does not pile up revisions.
         assertNull(store.promoteVideoProposals(id, emptySet(), cycles(id, 3)).getOrThrow())
         assertEquals(promoted.revision, store.load(id).getOrThrow().revision)
+    }
+
+    @Test fun manuallyReviewedBoundariesCanReplaceAutomaticCandidates() {
+        val id = clip(true).id; val store = CalibrationReviewStore(app)
+        store.saveCount(id, 3, 0).getOrThrow()
+        val candidates = store.promoteVideoProposals(id, emptySet(), cycles(id, 3)).getOrThrow()!!
+        val reviewed = store.saveCycles(id, cycles(id, 3), true, candidates.revision).getOrThrow()
+        assertTrue(reviewed.references.all { it.eligibleForLearning })
+        assertTrue(store.load(id).getOrThrow().references.all { it.eligibleForLearning })
+        assertEquals(CalibrationReviewStore.SOURCE_USER_REVIEWED, store.confirmationSource(id))
+    }
+
+    @Test fun legacyAutomaticLabelsLoseLearningEligibilityOnLoad() {
+        val id = clip(true).id; val store = CalibrationReviewStore(app)
+        store.saveCount(id, 3, 0).getOrThrow()
+        val saved = store.promoteVideoProposals(id, emptySet(), cycles(id, 3)).getOrThrow()!!
+        val file = java.io.File(app.filesDir, "calibration-captures/$id/review-${saved.revision}.json")
+        val json = org.json.JSONObject(file.readText())
+        val references = json.getJSONArray("references")
+        repeat(references.length()) { index ->
+            references.getJSONObject(index).put("alignmentVerified", true).put("exclusion", org.json.JSONObject.NULL)
+        }
+        file.writeText(json.toString())
+        assertTrue(store.load(id).getOrThrow().references.all {
+            !it.eligibleForLearning && it.exclusionReason == CalibrationReviewStore.VIDEO_BOUNDARIES_NOT_REVIEWED
+        })
     }
 
     @Test fun aTotalThatDoesNotMatchLeavesTheReviewUntouched() {

@@ -55,6 +55,7 @@ class MainActivity : Activity() {
     private var running = false
     private var resting = false
     private var paused = false
+    private var screenDimmed = false
     private var sessionId = ""
     private var exerciseId = ""
     private var setId = ""
@@ -319,10 +320,19 @@ class MainActivity : Activity() {
         // The open app must remain visible while waiting for the phone too.
         // This window flag only keeps the display awake while this activity is foregrounded.
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // Dim only while a set is actively being measured; rest, pause and idle use the normal brightness.
+        val dim = running && !resting && !paused
+        if (dim != screenDimmed) {
+            screenDimmed = dim
+            window.attributes = window.attributes.also {
+                it.screenBrightness = if (dim) WORKING_BRIGHTNESS else WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+            }
+        }
     }
 
     private fun updateUi() {
         if (!::face.isInitialized) return
+        updateScreenPolicy()
         face.clock.text = java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
         val active = running || resting || paused || sessionId.isNotBlank() && setId.isNotBlank()
         val complete = !active && homeStore.showsCompletion()
@@ -630,3 +640,5 @@ class MainActivity : Activity() {
             if (strokeColor != null) setStroke(strokeDp, strokeColor)
         }
 }
+
+private const val WORKING_BRIGHTNESS = 0.1f

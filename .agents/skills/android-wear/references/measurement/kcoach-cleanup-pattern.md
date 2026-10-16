@@ -1,4 +1,4 @@
-# KCoach wearable-measurement cleanup pattern
+# 워치짐 wearable-measurement cleanup pattern
 
 Use this reference when simplifying a watch-only exercise app without deleting the measurements that are actually observable.
 
@@ -54,7 +54,7 @@ Exercise rows may retain threshold differences, but similar rows should resolve 
 
 Delete emulator-only fake repetition tickers and fake heart-rate/sample generators from production runtime. Keep emulator transport/lifecycle plumbing only when it does not fabricate a result. A passing emulator session with `sensorEvents=0` and nonzero reps is synthetic evidence, not sensor validation.
 
-For the KCoach service pattern, audit the whole emitter path rather than deleting a shared rep function by name:
+For the 워치짐 service pattern, audit the whole emitter path rather than deleting a shared rep function by name:
 
 - `WearWorkoutService.startFakeRepTicker()` is the synthetic emitter; remove its callers from session start/resume and calibration/measurement preparation paths.
 - Remove synthetic HR initialization and rest-time decay separately; they are easy to miss after the rep ticker is gone.

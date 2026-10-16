@@ -1,4 +1,4 @@
-# Interrupted KCoach handoff and Android 14 verification gates
+# Interrupted 워치짐 handoff and Android 14 verification gates
 
 Use this reference when a desktop/cron Hermes session reset before the phone↔Wear task was declared complete.
 

@@ -55,6 +55,6 @@ A camera-based research system (“Pūioio”) used pose estimation, thresholdin
 
 - https://arxiv.org/abs/2308.02420
 
-## KCoach implications
+## 워치짐 implications
 
 For Watch8-only delivery, gate automatic counting by exercise observability. Use `watchRepProvisional`, `watchRepConfirmed`, confidence, exercise ID, set/session ID, sensor placement, and model version. Keep form/ROM assessment source explicit (`watch`, `camera`, `multi_sensor`, `manual`, `none`). Emulator/fake telemetry can verify transport and state-machine transitions but cannot validate physical observability or form quality.

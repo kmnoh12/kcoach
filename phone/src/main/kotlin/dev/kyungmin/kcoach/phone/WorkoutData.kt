@@ -76,8 +76,9 @@ data class WorkoutRoutine(
     val id: String,
     val name: String,
     val muscles: String,
-    val lastPerformed: String,
+    var lastPerformed: String,
     val exercises: MutableList<RoutineExercise>,
+    val lastPerformedEpochDay: Long? = null,
 )
 
 data class WorkoutRecord(
@@ -175,6 +176,8 @@ object WorkoutData {
         exercise("hip_abduction", "힙 어브덕션", "하체", "하체", "머신"),
     )
 
+    val builtInExerciseIds: Set<String> = catalog.map { it.id }.toSet()
+
     private fun ex(id: String) = checkNotNull(catalog.find { it.id == id })
 
     private fun sets(vararg values: Pair<Double?, Int>) =
@@ -185,7 +188,7 @@ object WorkoutData {
             id = "shoulders",
             name = "어깨전문",
             muscles = "어깨, 등",
-            lastPerformed = "28일 전",
+            lastPerformed = "기록 없음",
             exercises = mutableListOf(
                 RoutineExercise(ex("external_rotation"), sets(5.0 to 25, 5.0 to 25), 45),
                 RoutineExercise(ex("crossover_reverse_fly"), sets(10.0 to 20), 60),
@@ -200,7 +203,7 @@ object WorkoutData {
             id = "back_biceps",
             name = "등·이두",
             muscles = "등, 이두",
-            lastPerformed = "32일 전",
+            lastPerformed = "기록 없음",
             exercises = mutableListOf(
                 RoutineExercise(ex("pull_up"), sets(null to 10, null to 8), 120),
                 RoutineExercise(ex("assisted_pull_up"), sets(50.0 to 10, 30.0 to 10), 90),
@@ -215,7 +218,7 @@ object WorkoutData {
             id = "chest_triceps",
             name = "가슴·삼두",
             muscles = "가슴, 삼두",
-            lastPerformed = "5일 전",
+            lastPerformed = "기록 없음",
             exercises = mutableListOf(
                 RoutineExercise(ex("dumbbell_pullover"), sets(15.0 to 10, 15.0 to 10), 60),
                 RoutineExercise(ex("flat_bench"), sets(20.0 to 15, 60.0 to 12, 60.0 to 12, 60.0 to 12, 60.0 to 12), 150),
@@ -229,7 +232,7 @@ object WorkoutData {
             id = "arms_legs",
             name = "팔·하체",
             muscles = "이두, 삼두, 하체",
-            lastPerformed = "22일 전",
+            lastPerformed = "기록 없음",
             exercises = mutableListOf(
                 RoutineExercise(ex("pull_up"), sets(null to 10, null to 8, null to 8), 120),
                 RoutineExercise(ex("ez_biceps_curl"), sets(20.0 to 12, 25.0 to 10, 30.0 to 7, 20.0 to 12), 75),
@@ -243,4 +246,14 @@ object WorkoutData {
             ),
         ),
     )
+}
+
+/** Recompute relative dates when rendering instead of persisting a stale relative label. */
+internal fun WorkoutRoutine.lastPerformedLabel(today: java.time.LocalDate): String {
+    val days = lastPerformedEpochDay?.let { today.toEpochDay() - it }
+    return when {
+        days == null -> "기록 없음"
+        days <= 0 -> "오늘"
+        else -> "${days}일 전"
+    }
 }

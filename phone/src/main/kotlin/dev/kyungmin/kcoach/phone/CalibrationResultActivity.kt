@@ -90,11 +90,11 @@ class CalibrationResultActivity : ComponentActivity() {
                 val counted = review.countReference?.reps
                 val message = when {
                     counted == null -> "영상을 보고 실제로 한 횟수를 알려 주세요."
-                    watch == null -> "${counted}회로 저장했어요. 워치 기록을 받는 중이에요."
-                    watch != counted -> "${counted}회로 저장했어요. 워치는 ${watch}회로 세서 서로 달라요. 아래에서 어긋난 구간을 확인해 주세요."
-                    else -> "${counted}회로 저장했어요. 워치도 ${watch}회로 세서 일치해요."
-                } + if (review.references.any { it.eligibleForLearning } && reviews.confirmationSource(id) == CalibrationReviewStore.SOURCE_VIDEO_WINDOWS)
-                    " 영상에서 찾은 반복 ${review.references.count { it.eligibleForLearning }}개를 보정 자료로 저장했어요." else ""
+                    watch == null -> "${counted}회로 저장했어요. 워치 실시간 집계는 아직 받지 못했어요."
+                    watch != counted -> "${counted}회로 저장했어요. 워치 실시간 집계는 ${watch}회로 서로 달라요."
+                    else -> "${counted}회로 저장했어요. 워치 실시간 집계도 ${watch}회예요. 총횟수 일치가 각 반복 구간의 일치를 뜻하지는 않아요."
+                } + if (review.references.isNotEmpty() && reviews.confirmationSource(id) == CalibrationReviewStore.SOURCE_VIDEO_WINDOWS)
+                    " 자동 영상 후보는 반복 경계 검토 전까지 학습에 쓰지 않아요." else ""
                 review.revision to CapturePlaybackUi(id, capture.exerciseName,
                     captures.videoFile(id).takeIf { capture.videoComplete && it.isFile }?.absolutePath,
                     end, heights, intervals, review.countReference?.reps, watch, message,
@@ -128,7 +128,7 @@ class CalibrationResultActivity : ComponentActivity() {
         }.getOrNull()
     }
 
-    /** Worker thread. Labels only appear when the video windows add up to the user's confirmed total. */
+    /** Worker thread. A matching total retains candidates, without approving their boundaries for learning. */
     private fun promote(id: String) {
         val rejected = answers.load(id).filter { it.candidate.side == MismatchSide.VIDEO_ONLY && !it.realRep }
             .map { it.candidate.span }.toSet()

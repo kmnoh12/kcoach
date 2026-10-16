@@ -1,60 +1,32 @@
-# Resume a paused phone↔Wear runtime verification
+# Resume only the requested phone↔Wear work
 
-Use this recipe when a phone/Wear task resumes after a context handoff, compaction, or several idle days. Historical summaries are useful for locating the last claimed gate, but they are not current evidence.
+A handoff, context compaction, or idle period is not a request to repeat verification. Follow the current user scope and AGENTS.md over older checklists. Do not create or resume a broad goal from this recipe.
 
-## 1. Reconstruct, then invalidate stale claims
+## Resume from recorded progress
 
-- Search the prior session for the last verified gate and the first explicitly pending gate.
-- Treat every old build, install, device, relay, and runtime claim as historical until rechecked against the live tree and live targets.
-- Do not restart from a vague product goal; resume at the smallest unverified gate.
+- Read the last result and the specific pending task. Keep earlier successful checks as recorded evidence; do not rerun them solely because the session resumed.
+- Distinguish historical build/device claims from current runtime observations without automatically rebuilding, reinstalling, or invalidating completed work.
+- Inspect only the source/configuration needed for the requested change. Preserve other agents' dirty changes.
 
-## 2. Re-discover the current build path
+## Choose one narrow check
 
-- Inspect the current source tree and module configuration before editing.
-- If the normal `java`, `gradle`, or wrapper command is missing, search the project workspace for its local tooling/cache before declaring the build blocked. Use explicit `JAVA_HOME`/Android SDK paths for the run; do not turn a transient command-path problem into a product conclusion.
-- Run the current-tree shared tests first, then both phone/Wear `assembleDebug` and `lintDebug`. Record task-level output, not only an exit code.
+- Use one test class/file tied to the change, or a single-module compile. Do not run both by habit.
+- Phone data tests can inherit the full Compose task through Gradle dependencies. Exclude `:phone:testDebugCompose` when running a narrow data test.
+- Do not run full-module tests, full builds, lint, UI/screenshot suites, clean builds, forced nonincremental builds, or `--max-workers=1` unless the user requests that scope. Completion or release preparation is not an automatic exception.
+- Redirect long output to a log file and inspect failing lines only.
+- If local Java/Gradle is not on PATH, use the project's known tool paths; do not broaden verification to diagnose a command-path issue.
+- If the same error repeats three times or there is no progress for about 15 minutes, stop and report the error and attempted fix. Do not expand the test scope.
 
-## 3. Rebuild and prove artifact identity
+## Artifact and runtime work are conditional
 
-- Locate the newly assembled phone and Wear APKs.
-- Read version code/name and calculate SHA-256 for each artifact.
-- Install the exact fresh APK on the intended phone and Wear targets.
-- Verify with `adb devices -l`, package path, installed version code/name, and a pulled installed `base.apk` hash. An old installed app or a successful launch is not artifact evidence.
+- Build an APK only for an authorized delivery/install task. Reuse valid recorded build results where applicable; do not rebuild both modules for a one-module change.
+- For an authorized release, verify the requested artifact's version, signature and published hash. This does not require a full test/lint gate.
+- Install, pull installed APKs, reconnect relays, force-stop apps, clear logs, inspect screens, or exercise recovery only when the user requested that device/runtime work. A code handoff alone authorizes none of these actions.
+- If runtime verification is requested, choose the smallest scenario addressing that issue. Do not automatically append a full session, recovery matrix or physical Watch8 gate.
+- Honor explicit exclusions such as no phone screen checks, no omission audit and no device resets. Do not ask for downloads or resets merely to repeat earlier evidence.
 
-## 4. Re-establish the emulator lane explicitly
+## Report the evidence actually obtained
 
-- Keep a host relay separate from `adb forward`; check the relay listener with `lsof` and confirm both app services/processes are connected before diagnosing UI or transport behavior.
-- Clear target logcat, force-stop both apps, and launch them fresh.
-- Check `dumpsys activity`/focused activity, process IDs, UI hierarchy, screenshot, and logcat together. If the UI dump and screenshot disagree, refresh the dump and use the screenshot plus focused activity and event logs to establish what is actually visible; do not infer an app crash from a stale hierarchy.
+Keep source, target test/compile, artifact, installed runtime, capture integrity and physical sensor accuracy as separate claims. Emulator data is not physical Watch8 evidence. State unverified scope without turning it into an instruction to execute every remaining gate.
 
-## 5. Exercise a minimal end-to-end scenario
-
-Use a deterministic short routine and collect the event chain, not just the final screen:
-
-```text
-session start
-→ phone↔Wear connected/live state
-→ capture asset received
-→ capture validated
-→ analysis/result persisted
-→ idempotent ACK sent
-→ SET_COMPLETE_RECEIVED
-→ SET_STATE_MUTATED
-→ REST_COMMAND_SENT
-→ active UI updated
-```
-
-A relay connection proves wire reachability only. The capture is green only when manifest/bytes/KCS/hash validation, persistence, analysis, and ACK evidence are present.
-
-## 6. Test recovery, not just first launch
-
-- Force-stop and relaunch the phone during an active or rest state.
-- Confirm the same workout/session, set progress, completion state, and pairing status return on screen.
-- Read the app's durable active-session snapshot/preferences where available, and check for `FATAL EXCEPTION`/`AndroidRuntime` markers after relaunch.
-- Keep set completion separate from full session shutdown; verify that post-set rest survives, while STOP/END/COMPLETE later tears down sensors, notification, watchdog, and service.
-
-## 7. Handoff to the physical gate honestly
-
-- Label emulator/relay captures as `emulator transport/lifecycle only`; a synthetic `Watch8 connected` label, fake heart rate, or generated repetitions is not physical Watch evidence and does not establish recognition accuracy.
-- Only after the emulator gates are green ask the user for the real Watch8 action: connect the physical target through the agreed delivery/debug path and perform one protocol-defined set. Do not ask for APK re-downloads or data resets when the next gate is device evidence.
-- Keep `source`, `build`, `artifact`, `installed`, `runtime`, `capture`, `recovery`, and `physical sensor` claims separate in the final report.
+Handoffs record completed work and the next requested action. Never direct the next agent to rerun the full gate or all previous checks.

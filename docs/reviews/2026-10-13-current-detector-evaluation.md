@@ -37,7 +37,7 @@ KCOACH_MMFIT_DIR="$PWD/work/datasets/mmfit-probe" gradle :core:test --tests '*Cu
 
 ## 고정한 기준으로 얻은 결과
 
-# Current KCoach detector replay — MM-Fit left wrist
+# Current 워치짐 detector replay — MM-Fit left wrist
 
 616 labelled sets, 21 sessions. Frozen app profiles; no tuning in this evaluation.
 Watch lane: current detector at source gyro times. Phone lane: current PhoneRepAnalyzer, latest-accel/gyro pairing, 50Hz capture admission using a rounded-millisecond clock proxy; original timestamps and gaps retained, no interpolation.
@@ -83,7 +83,7 @@ MAE = mean absolute repetition-count error. Selected-only accuracy must always b
 
 ### 현재 재생 결과 (초기 v3 표를 대체)
 
-# Current KCoach detector replay — MM-Fit left wrist
+# Current 워치짐 detector replay — MM-Fit left wrist
 
 616 labelled sets, 21 sessions. Frozen app profiles; no tuning in this evaluation.
 Watch lane: current detector at source gyro times. Phone lane: current PhoneRepAnalyzer on the SAME samples the watch counts; original timestamps and gaps retained, no callback-time throttling or interpolation. Sensor request remains 50Hz; source MM-Fit data is 100Hz.

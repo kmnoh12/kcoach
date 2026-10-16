@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Convert MM-Fit left-wrist smartwatch data into KCoach probe CSVs.
+"""Convert MM-Fit left-wrist smartwatch data into 워치짐 probe CSVs.
 
 Input:  <mm-fit>/wNN/wNN_sw_l_{acc,gyr}.npy and wNN_labels.csv
 Output: <out>/wNN.csv         sensor,t_ns,x,y,z (0 = accel, 1 = gyro)

@@ -64,6 +64,6 @@ At minimum, add tests for:
 
 Synthetic replay proves detector implementation, not Watch8 accuracy. Keep non-manual profiles in a caution/beta validation state until labeled Watch8 raw IMU is compared with manual or video ground truth. Do not promote A/B/C based only on a green Gradle build, emulator fake telemetry, or a connected ADB device.
 
-## Current KCoach application pattern
+## Current 워치짐 application pattern
 
 The catalog currently uses 33 exact profiles: 28 wrist-IMU caution/beta profiles and 5 lower-body manual profiles. The observable metrics are wrist proxies (`rep_count`, `rep_duration`, relative wrist motion range, trajectory/tempo consistency, and signal quality). Whole-body form, joint ROM, scapular alignment, strictness, chin-over-bar, and actual load travel stay unsupported until another sensor or labeled validation protocol exists.

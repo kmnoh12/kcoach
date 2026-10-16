@@ -15,9 +15,9 @@ internal object OtaNotifications {
     private const val INSTALL = 7302
     private fun builder(context: Context): Notification.Builder {
         context.getSystemService(NotificationManager::class.java).createNotificationChannel(
-            NotificationChannel(CHANNEL, "KCoach 업데이트", NotificationManager.IMPORTANCE_DEFAULT))
+            NotificationChannel(CHANNEL, "워치짐 업데이트", NotificationManager.IMPORTANCE_DEFAULT))
         return Notification.Builder(context, CHANNEL).setSmallIcon(android.R.drawable.stat_sys_download)
-            .setContentTitle("KCoach 업데이트")
+            .setContentTitle("워치짐 업데이트")
     }
     fun foreground(context: Context) = ForegroundInfo(PROGRESS,
         builder(context).setContentText("업데이트 다운로드 진행 중").setOngoing(true).build(), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
