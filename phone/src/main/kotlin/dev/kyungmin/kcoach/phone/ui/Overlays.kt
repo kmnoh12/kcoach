@@ -457,6 +457,34 @@ fun ConfirmDialog(
     }
 }
 
+/** Ending a running workout: the choice between keeping what was finished and dropping it is the point. */
+@Composable
+fun StopWorkoutDialog(
+    title: String,
+    message: String,
+    dismiss: () -> Unit,
+    onSave: () -> Unit,
+    onDiscard: () -> Unit,
+) {
+    Text(title, color = KColors.White, fontSize = 20.sp, fontWeight = FontWeight.Medium)
+    Spacer(Modifier.height(12.dp))
+    Text(message, color = KColors.Muted, fontSize = 15.sp)
+    Spacer(Modifier.height(20.dp))
+    Box(
+        Modifier.fillMaxWidth().heightIn(min = 50.dp).clip(KShape.Control).background(KColors.Accent)
+            .pressable { dismiss(); onSave() },
+        contentAlignment = Alignment.Center,
+    ) { Text("저장하고 종료", color = KColors.OnAccent, fontSize = 16.sp, fontWeight = FontWeight.Medium) }
+    Spacer(Modifier.height(10.dp))
+    Box(
+        Modifier.fillMaxWidth().heightIn(min = 50.dp).clip(KShape.Control).border(0.5.dp, Color(0xFF3A4240), KShape.Control)
+            .pressable { dismiss(); onDiscard() },
+        contentAlignment = Alignment.Center,
+    ) { Text("저장 안 하고 종료", color = KColors.Red, fontSize = 16.sp, fontWeight = FontWeight.Medium) }
+    Spacer(Modifier.height(4.dp))
+    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { TextAction("계속 운동", KColors.Muted, dismiss) }
+}
+
 @Composable
 fun InputDialog(title: String, hint: String, dismiss: () -> Unit, onSubmit: (String) -> Unit) {
     var text by remember { mutableStateOf("") }
