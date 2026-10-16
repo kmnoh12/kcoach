@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import dev.kyungmin.kcoach.phone.ui.BigChoiceSheet
 import dev.kyungmin.kcoach.phone.ui.ChoiceSheet
 import dev.kyungmin.kcoach.phone.ui.ConfirmDialog
+import dev.kyungmin.kcoach.phone.ui.StopWorkoutDialog
 import dev.kyungmin.kcoach.phone.ui.InputDialog
 import dev.kyungmin.kcoach.phone.ui.ExerciseInfoScreen
 import dev.kyungmin.kcoach.phone.ui.ExerciseInfoUi
@@ -2727,23 +2728,33 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun confirmStopWorkout() {
+        val workout = activeWorkout
+        val completed = workout?.routine?.exercises?.sumOf { it.sets.completedWorkSetCount() } ?: 0
         showPopup { dismiss ->
-            ConfirmDialog("운동을 종료할까요?", "지금까지의 기록은 저장되지 않아요.", "계속 운동", "종료", dismiss) {
-                val stoppedWorkout = activeWorkout
-                if (stoppedWorkout != null) {
-                    if (!persistActiveWorkout(stoppedWorkout)) return@ConfirmDialog
-                    if (WorkoutTermination(this).stop().onFailure {
-                            Log.e(EVENT_TAG, "workout stop failed; journal retained", it)
-                        }.isFailure) return@ConfirmDialog
-                    PhoneWorkoutService.retryPending(this)
-                }
-                activeWorkout = null
-                activeRestStartAtMs = 0L
-                activeRestEndAtMs = 0L
-                pausedRestRemainingMs = 0L
-                showHome()
+            if (completed == 0) {
+                ConfirmDialog("운동을 종료할까요?", "완료한 세트가 없어서 저장할 기록이 없어요.", "계속 운동", "종료", dismiss) { endWorkout(save = false) }
+            } else {
+                StopWorkoutDialog("운동을 종료할까요?", "완료한 ${completed}세트를 기록으로 저장할 수 있어요.", dismiss,
+                    onSave = { endWorkout(save = true) }, onDiscard = { endWorkout(save = false) })
             }
         }
+    }
+
+    /** Ends the running workout from inside the app; [save] keeps the finished sets, otherwise everything is dropped. */
+    private fun endWorkout(save: Boolean) {
+        val stoppedWorkout = activeWorkout
+        if (stoppedWorkout != null) {
+            if (save && !persistActiveWorkout(stoppedWorkout)) return
+            if (WorkoutTermination(this).stop(saveCompleted = save).onFailure {
+                    Log.e(EVENT_TAG, "workout stop failed; journal retained", it)
+                }.isFailure) return
+            PhoneWorkoutService.retryPending(this)
+        }
+        activeWorkout = null
+        activeRestStartAtMs = 0L
+        activeRestEndAtMs = 0L
+        pausedRestRemainingMs = 0L
+        showHome()
     }
 
     private fun showScaffold(body: View, actions: View?, selected: RootTab) {
