@@ -513,9 +513,23 @@ class MainActivity : ComponentActivity() {
             ?.let { loadFinishedWorkoutResult(it) ?: lastWorkoutResult?.takeIf { saved -> saved.sessionId == it } }
         if (restoredResult != null) showWorkoutResult(restoredResult)
         val resultShown = requestedResultShown || restoredResult != null
+        selectedCalibrationExerciseId = savedInstanceState?.getString(STATE_CALIBRATION_EXERCISE)
+            ?: selectedCalibrationExerciseId
+        val restoredTab = savedInstanceState?.getString(STATE_ROOT_TAB)
+            ?.let { saved -> RootTab.values().firstOrNull { it.name == saved } }
+        if (!resultShown && restoredTab != null) {
+            when (restoredTab) {
+                RootTab.HOME -> showHome()
+                RootTab.RECORDS -> showRecords()
+                RootTab.STATS -> showStats()
+                RootTab.CALIBRATION -> showCalibration()
+                RootTab.MENU -> showMenu()
+            }
+        }
+        val screenRestored = resultShown || restoredTab != null
         activeWorkout?.let { workout ->
             lastCompletedLiveKey = workout.lastCompletedSetKey
-            if (!resultShown) {
+            if (!screenRestored) {
                 if (workout.exerciseIndex >= workout.routine.exercises.size) showMyMountainDecision()
                 else showActiveWorkout(forceRebuild = true)
             }
@@ -523,7 +537,7 @@ class MainActivity : ComponentActivity() {
                 WearSync.PATH_COMMAND,
                 WearSync.command("QUERY", workout.sessionId, "", workout.setIndex, 0),
             )
-        } ?: run { if (!resultShown) showHome() }
+        } ?: run { if (!screenRestored) showHome() }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -533,6 +547,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putStringArrayList(STATE_HANDLED_RESULT_REQUESTS, ArrayList(handledResultRequests))
+        if (currentScreen == Screen.ROOT) outState.putString(STATE_ROOT_TAB, currentTab.name)
+        outState.putString(STATE_CALIBRATION_EXERCISE, selectedCalibrationExerciseId)
         if (currentScreen == Screen.ROOT && currentTab == RootTab.RECORDS) {
             visibleWorkoutResultSessionId?.let { outState.putString(STATE_VISIBLE_RESULT, it) }
         }
@@ -3045,6 +3061,8 @@ class MainActivity : ComponentActivity() {
     companion object {
         private const val EVENT_TAG = "KCoachEvent"
         private const val STATE_VISIBLE_RESULT = "visibleFinishedWorkoutResult"
+        private const val STATE_ROOT_TAB = "visibleRootTab"
+        private const val STATE_CALIBRATION_EXERCISE = "selectedCalibrationExercise"
         private const val STATE_HANDLED_RESULT_REQUESTS = "handledWorkoutResultRequests"
         private const val WATCH_PANEL_CONNECTION = "watch-panel-connection"
         private const val WATCH_PANEL_TELEMETRY = "watch-panel-telemetry"
