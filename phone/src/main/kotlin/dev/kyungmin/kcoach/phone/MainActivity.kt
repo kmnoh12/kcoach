@@ -456,6 +456,10 @@ class MainActivity : ComponentActivity() {
     private lateinit var sessionStore: SessionStore
     private var currentTab = RootTab.HOME
     private var currentScreen = Screen.ROOT
+        set(value) {
+            field = value
+            LocalExitDiagnostics.state(value.name, activeWorkout?.phase?.name ?: "IDLE")
+        }
     private var selectedRoutine: WorkoutRoutine? = null
     private var activeWorkout: ActiveWorkout? = null
     private var previewWorkout: ActiveWorkout? = null
@@ -2726,8 +2730,10 @@ class MainActivity : ComponentActivity() {
                 val stoppedWorkout = activeWorkout
                 if (stoppedWorkout != null) {
                     if (!persistActiveWorkout(stoppedWorkout)) return@ConfirmDialog
-                    sendWear(WearSync.PATH_COMMAND, WearSync.command("STOP", stoppedWorkout.sessionId, "", 0, 0))
-                    if (!sessionStore.clearActive(stoppedWorkout.sessionId)) return@ConfirmDialog
+                    if (WorkoutTermination(this).stop().onFailure {
+                            Log.e(EVENT_TAG, "workout stop failed; journal retained", it)
+                        }.isFailure) return@ConfirmDialog
+                    PhoneWorkoutService.retryPending(this)
                 }
                 activeWorkout = null
                 activeRestStartAtMs = 0L
@@ -3013,6 +3019,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun restoreActiveWorkout(): ActiveWorkout? {
+        if (WorkoutTermination(this).pending()) return null
         val snapshot = sessionStore.loadActive().getOrElse { error ->
             Log.e(EVENT_TAG, "active snapshot load failed", error)
             return null

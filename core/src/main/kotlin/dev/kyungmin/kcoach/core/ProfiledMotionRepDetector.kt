@@ -92,6 +92,13 @@ class ProfiledMotionRepDetector(
     private var lastCommittedEndNs = Long.MIN_VALUE
     private var refractoryUntilNs = 0L
 
+    // Pose counting previously allowed long top holds without a maximum duration.
+    // Bound set-end grace at 12s, preserving slow returns; this policy still needs Watch8 validation.
+    val maximumCycleNs: Long get() = if (poseCounter != null) 12_000_000_000L else profile.maximumRepMs * 1_000_000L
+
+    val candidateStartNs: Long? get() = poseCounter?.candidateStartNs ?: pendingStartNs.takeIf { it > 0L }
+        ?: lobeStartNs.takeIf { it > 0L && lobeDisplacement >= profile.minimumLobeDisplacement }
+
     fun add(sample: SensorSample): ProfiledMotionRepEvent? {
         poseCounter?.let { return it.add(sample) }
         if (sample.sensorAccuracy == 0) { resetAll(); lastTimestampNs = 0L; return null }

@@ -1,0 +1,93 @@
+package dev.kyungmin.kcoach.phone
+
+import android.app.Activity
+import android.app.ActivityManager
+import android.app.Application
+import android.os.Build
+import android.os.Bundle
+import android.util.AtomicFile
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
+
+/** Private, bounded, excluded from backup; no throwable messages, intent extras or workout facts. */
+internal object LocalExitDiagnostics {
+    @Volatile private var screen = "UNKNOWN"
+    @Volatile private var phase = "UNKNOWN"
+    private var directory: File? = null
+
+    fun install(app: Application) {
+        directory = File(app.noBackupFilesDir, "exit-diagnostics").apply { mkdirs() }
+        val priorState = runCatching { File(directory, "last-state.json").readText() }.getOrNull()
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+            try { recordException(error) } finally { previous?.uncaughtException(thread, error) }
+        }
+        app.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
+            override fun onActivityResumed(activity: Activity) { screen = activity.javaClass.simpleName }
+            override fun onActivityPaused(activity: Activity) = Unit
+            override fun onActivityCreated(activity: Activity, state: Bundle?) = Unit
+            override fun onActivityStarted(activity: Activity) = Unit
+            override fun onActivityStopped(activity: Activity) = Unit
+            override fun onActivitySaveInstanceState(activity: Activity, state: Bundle) = Unit
+            override fun onActivityDestroyed(activity: Activity) = Unit
+        })
+        Thread({
+            runCatching {
+                if (Build.VERSION.SDK_INT >= 30) {
+                    val exits = app.getSystemService(ActivityManager::class.java)
+                        .getHistoricalProcessExitReasons(app.packageName, 0, 8)
+                    val rows = JSONArray()
+                    exits.forEach { exit -> rows.put(JSONObject().put("atMs", exit.timestamp)
+                        .put("reason", exit.reason).put("status", exit.status).put("importance", exit.importance)
+                        .put("pssKb", exit.pss).put("rssKb", exit.rss)) }
+                    write("system-exits.json", JSONObject().put("exits", rows).put("priorState", priorState?.let(::JSONObject)))
+                }
+            }
+        }, "local-exit-history").start()
+    }
+
+    fun workoutPhase(workoutPhase: String) {
+        if (phase == workoutPhase) return
+        phase = workoutPhase
+        runCatching { write("last-state.json", stateJson()) }
+    }
+
+    fun state(screenName: String, workoutPhase: String) {
+        screen = screenName; phase = workoutPhase
+        runCatching { write("last-state.json", stateJson()) }
+    }
+
+    internal fun recordException(error: Throwable) {
+        runCatching {
+            val causes = JSONArray()
+            var cause: Throwable? = error
+            repeat(6) {
+                val current = cause ?: return@repeat
+                // StackTraceElement contains code locations, without the exception's possibly private message.
+                causes.put(JSONObject().put("type", current.javaClass.name)
+                    .put("frames", JSONArray(current.stackTrace.take(48).map { it.toString() })))
+                cause = current.cause?.takeUnless { it === current }
+            }
+            write("last-exception.json", stateJson().put("causes", causes))
+        }
+    }
+
+    /** Local UI integration point. Does not upload, delete, or alter the reports. Call off the main thread. */
+    @Synchronized fun readReports(): Result<Map<String, String>> = runCatching {
+        val dir = directory ?: return@runCatching emptyMap()
+        listOf("last-exception.json", "last-state.json", "system-exits.json").mapNotNull { name ->
+            val file = File(dir, name)
+            if (file.exists()) name to AtomicFile(file).readFully().toString(Charsets.UTF_8) else null
+        }.toMap()
+    }
+
+    private fun stateJson() = JSONObject().put("atMs", System.currentTimeMillis()).put("screen", screen).put("phase", phase)
+    @Synchronized private fun write(name: String, value: JSONObject) {
+        val dir = directory ?: return
+        val file = AtomicFile(File(dir, name))
+        val stream = file.startWrite()
+        try { stream.write(value.toString().toByteArray()); file.finishWrite(stream) }
+        catch (error: Throwable) { file.failWrite(stream); throw error }
+    }
+}

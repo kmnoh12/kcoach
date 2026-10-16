@@ -96,6 +96,9 @@ class ForearmRotationRepDetector(
         preferredAxis?.let { setAxisBasis(it) }
     }
 
+    val candidateStartNs: Long? get() = firstLobeStartNs.takeIf { it > 0L }
+        ?: lobeStartNs.takeIf { it > 0L && lobeAngle >= minimumLobeAngle }
+
     fun add(sample: SensorSample): ForearmRotationRepEvent? {
         if (sample.sensorAccuracy == 0) {
             resetMotion(releaseAxis = preferredAxis == null); lastTimestampNs = 0L

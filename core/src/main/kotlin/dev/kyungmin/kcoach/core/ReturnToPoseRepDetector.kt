@@ -23,6 +23,8 @@ internal class ReturnToPoseRepDetector(private val minimumRepMs: Long) {
     private var peakTilt = 0.0
     private var peakGyro = 0.0
 
+    val candidateStartNs: Long? get() = startNs.takeIf { it > 0L }
+
     fun reset() {
         baseline = null
         lastTimestampNs = 0L

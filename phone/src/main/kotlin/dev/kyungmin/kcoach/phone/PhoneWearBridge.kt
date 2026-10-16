@@ -86,6 +86,11 @@ class PhoneWearBridge(private val context: Context) {
 
     fun sendRaw(path: String, payload: String) = sendPath(path, payload)
 
+    /** Run after the already-queued STOP drain, rather than dropping it during Service teardown. */
+    fun closeAfterPendingDelivery() {
+        outboundExecutor.execute(::close)
+    }
+
     fun close() {
         synchronized(queueLock) { closed = true; pendingMessages.clear() }
         outboundExecutor.shutdown()

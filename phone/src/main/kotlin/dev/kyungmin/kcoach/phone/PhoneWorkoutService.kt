@@ -28,6 +28,7 @@ class PhoneWorkoutService : Service() {
     private val sessionStore by lazy { SessionStore(this) }
     private val sessionController by lazy { PhoneSessionController(sessionStore, wearBridge::sendRaw) }
     private var idleSinceMs = -1L
+    private var taskRemoved = false
 
     override fun onCreate() {
         super.onCreate()
@@ -57,7 +58,25 @@ class PhoneWorkoutService : Service() {
             else wearBridge.sendRaw(path, payload)
             if (path == WearSync.PATH_COMMAND) startRestTicker()
         }
-        return if (hasActiveRuntime()) START_STICKY else START_NOT_STICKY
+        return if (!taskRemoved && hasActiveRuntime()) START_STICKY else START_NOT_STICKY
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        taskRemoved = true
+        WorkoutTermination(this).stop().onFailure {
+            Log.e("KCoachEvent", "Task removal archive deferred; stop intent retained", it)
+        }
+        CalibrationCaptureStore(this).recoverInterrupted().mapCatching { previous ->
+            if (previous != null) PhoneCommandOutbox(this).enqueue(WearSync.command("STOP", previous.id, "", 0, 0))
+        }.onFailure { Log.w("KCoachEvent", "Removed camera session recovery deferred", it) }
+        // Best effort now; durable outbox survives until reconnect if delivery fails.
+        runCatching { wearBridge.retryPendingCommand() }
+            .onFailure { Log.w("KCoachEvent", "Removed task STOP delivery deferred", it) }
+        heartbeatTicker?.let(handler::removeCallbacks)
+        restTicker?.let(handler::removeCallbacks)
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+        super.onTaskRemoved(rootIntent)
     }
 
     override fun onTimeout(startId: Int, fgsType: Int) {
@@ -71,7 +90,7 @@ class PhoneWorkoutService : Service() {
         heartbeatTicker = null
         restTicker?.let(handler::removeCallbacks)
         restTicker = null
-        wearBridge.close()
+        if (taskRemoved) wearBridge.closeAfterPendingDelivery() else wearBridge.close()
         super.onDestroy()
     }
 
@@ -108,8 +127,10 @@ class PhoneWorkoutService : Service() {
     }
 
     private fun hasActiveRuntime(): Boolean {
+        if (taskRemoved || WorkoutTermination(this).pending()) return false
         if (CalibrationCaptureStore(this).active().getOrElse { return true } != null) return true
         val snapshot = sessionStore.loadActive().getOrElse { return true } ?: return false
+        LocalExitDiagnostics.workoutPhase(snapshot.phase.name)
         return WorkoutSessionReducer.nextPendingSet(snapshot) != null || snapshot.phase == WorkoutPhase.RESTING || snapshot.paused
     }
 

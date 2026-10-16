@@ -89,6 +89,22 @@ class WearWorkoutService : Service(), SensorEventListener {
     private var setId = ""
     private var attemptId = ""
     private val dataCleanupInFlight = java.util.concurrent.atomic.AtomicBoolean(false)
+    private val setEndGate = dev.kyungmin.kcoach.core.SetEndGate()
+    private var learnedRepWaitNs = 3_000_000_000L
+    private val setEndTicker = object : Runnable {
+        override fun run() {
+            if (running && measurementReady && calibrationStage == null &&
+                trackingProfile.mode != TrackingMode.MANUAL_REQUIRED && !paused &&
+                dev.kyungmin.kcoach.core.CapturePurpose.forSession(sessionId) == dev.kyungmin.kcoach.core.CapturePurpose.WORKOUT) {
+                val candidate = forearmRotationDetector?.candidateStartNs ?: profiledMotionDetector?.candidateStartNs
+                if (setEndGate.shouldEnd(android.os.SystemClock.elapsedRealtimeNanos(), candidate,
+                        profiledMotionDetector?.maximumCycleNs ?: (trackingProfile.maximumRepMs * 1_000_000L),
+                        if (activeDetector != null) learnedRepWaitNs else 3_000_000_000L)) completeSet()
+            }
+            if (!serviceDestroyed && (running || paused) && trackingProfile.mode != TrackingMode.MANUAL_REQUIRED)
+                handler.postDelayed(this, if (paused) 1_000L else 100L)
+        }
+    }
     private var targetReps = 10
     private var trackingProfile = ExerciseTrackingProfiles.resolve("", "")
     private var forearmRotationDetector: ForearmRotationRepDetector? = null
@@ -369,6 +385,7 @@ class WearWorkoutService : Service(), SensorEventListener {
 
     override fun onDestroy() {
         serviceDestroyed = true
+        handler.removeCallbacks(setEndTicker)
         checkpoint()
         stopRestTicker()
         phoneWatchdog?.let(handler::removeCallbacks)
@@ -992,6 +1009,9 @@ class WearWorkoutService : Service(), SensorEventListener {
             .getOrThrow() ?: return
         activeDetector = dev.kyungmin.kcoach.core.ReviewedPatternDetector(exerciseId, key, selected.runtime)
         frozenActive = selected
+        // No partial-cycle evidence is available in this detector. Preserve any cycle
+        // accepted by the frozen profile, plus its 100ms search/120ms emission delay.
+        learnedRepWaitNs = maxOf(3_000_000_000L, selected.runtime.maximumDurationNs + 300_000_000L)
         // A complete learned return supplies its own start/turn/end evidence. Do not run the legacy counter in parallel as primary.
         forearmRotationDetector = null; profiledMotionDetector = null
         // Repetition-pattern selection and wrist preparation are independent. Keep the frozen
@@ -1066,6 +1086,10 @@ class WearWorkoutService : Service(), SensorEventListener {
     }
 
     private fun configureTracking(savedSnapshot: String? = null) {
+        setEndGate.reset()
+        learnedRepWaitNs = 3_000_000_000L
+        handler.removeCallbacks(setEndTicker)
+        handler.post(setEndTicker)
         val genericProfile = ExerciseTrackingProfiles.resolve(exerciseId, exerciseName)
         val personalProfile = if (calibrationStage != null || patternSelectionMode == "VERIFIED_PATTERN") null else getSharedPreferences("personal-profiles", MODE_PRIVATE)
             .getString(exerciseId, null)
@@ -1166,6 +1190,7 @@ class WearWorkoutService : Service(), SensorEventListener {
     }
 
     private fun pauseSession() {
+        setEndGate.reset()
         tempoPolicy.pause()
         markPhoneAlive()
         if (!running && !resting) return
@@ -1317,6 +1342,14 @@ class WearWorkoutService : Service(), SensorEventListener {
                         // complete the set. Callback delivery time must not discard a batch.
                         captureSensorSample(sensorSample)
                         val countingSample = if (accelerationFault) sensorSample.copy(sensorAccuracy = 0) else sensorSample
+                        val candidate = forearmRotationDetector?.candidateStartNs ?: profiledMotionDetector?.candidateStartNs
+                        if (calibrationStage == null && dev.kyungmin.kcoach.core.CapturePurpose.forSession(sessionId) == dev.kyungmin.kcoach.core.CapturePurpose.WORKOUT &&
+                            setEndGate.shouldEnd(sensorSample.timestampNs, candidate,
+                                profiledMotionDetector?.maximumCycleNs ?: (trackingProfile.maximumRepMs * 1_000_000L),
+                                if (activeDetector != null) learnedRepWaitNs else 3_000_000_000L)) {
+                            completeSet()
+                            return
+                        }
                         val marker = if (activeDetector != null) observeActive(countingSample)
                             else forearmRotationDetector?.add(countingSample) ?: profiledMotionDetector?.add(countingSample)
                         if (activeDetector == null && patternBinding.isNotBlank() && !disableUseConfirmed &&
@@ -1332,7 +1365,13 @@ class WearWorkoutService : Service(), SensorEventListener {
                             }.onFailure { Log.w(TAG, "Basic detector receipt failed", it) }
                         }
                         if (marker != null) {
-                            recordDetectedRep()
+                            val repEndNs = when (marker) {
+                                is dev.kyungmin.kcoach.core.ReviewedPatternDetection -> marker.cycle.endNs
+                                is dev.kyungmin.kcoach.core.ForearmRotationRepEvent -> marker.endTimestampNs
+                                is dev.kyungmin.kcoach.core.ProfiledMotionRepEvent -> marker.endTimestampNs
+                                else -> sensorSample.timestampNs
+                            }
+                            recordDetectedRepAt(repEndNs)
                             if (activeDetector != null && marker is dev.kyungmin.kcoach.core.ReviewedPatternDetection)
                                 observeTempo(marker, countingSample)
                             if (!running) return
@@ -1381,8 +1420,9 @@ class WearWorkoutService : Service(), SensorEventListener {
 
     private fun completeSet(manual: Boolean = false) {
         if (!running) return
+        handler.removeCallbacks(setEndTicker)
         Log.i(TAG, "completeSet begin manual=$manual session=$sessionId set=$setIndex reps=$reps samples=$captureSampleCount")
-        if (calibrationStage == null && measurementReady) flushForearmRotation()
+        if (manual && calibrationStage == null && measurementReady) flushForearmRotation()
         val rotationDiagnostics = forearmRotationDetector?.diagnostics()
         val wasCalibration = calibrationStage != null || sessionId.startsWith("calibration-")
         running = false
@@ -1423,6 +1463,10 @@ class WearWorkoutService : Service(), SensorEventListener {
     }
 
     private fun beginMeasurementCounting() {
+        setEndGate.reset()
+        // configureActive already chose the frozen profile's wait; preparation must retain it.
+        handler.removeCallbacks(setEndTicker)
+        handler.post(setEndTicker)
         forearmRotationDetector?.beginCounting()
         profiledMotionDetector?.beginCounting()
         measurementReady = true
@@ -1434,8 +1478,11 @@ class WearWorkoutService : Service(), SensorEventListener {
         startPoseGate?.reset()
     }
 
-    private fun recordDetectedRep() {
+    private fun recordDetectedRep() = recordDetectedRepAt(android.os.SystemClock.elapsedRealtimeNanos())
+
+    private fun recordDetectedRepAt(endNs: Long) {
         if (!running || trackingProfile.mode == TrackingMode.MANUAL_REQUIRED) return
+        if (!setEndGate.rep(endNs)) return
         reps += 1
         checkpoint()
         // Exactly the target rep gets the triple pulse; reps past the target go back to the short tick.

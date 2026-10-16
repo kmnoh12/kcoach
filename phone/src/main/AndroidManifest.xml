@@ -69,6 +69,7 @@
         </service>
         <service
             android:name=".PhoneWorkoutService"
+            android:stopWithTask="false"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
     </application>
