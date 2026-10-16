@@ -105,7 +105,7 @@ class CalibrationResultScreenTest {
         compose.setContent { CalibrationResultScreen(clip.copy(confirmedCount = 10, watchCount = 9, mismatches = rowsUi, watchSpansKnown = true),
             emptyList(), false, {}, {}, {}, {}, answerMismatch = { a, b, c, d -> sent.add(listOf(a, b, c, d)) }) }
         compose.onNodeWithText("2.5~4.5초 · 영상에서만 찾은 구간").performScrollTo().assertExists()
-        compose.onNodeWithText("9.0~11.0초 · 워치에서만 찾은 구간").assertExists()
+        compose.onNodeWithText("9.0~11.0초 · 센서 피크 재분석에서만 찾은 구간").assertExists()
         compose.onNodeWithText("답은 이 기기에만 저장하고, 반복 라벨로는 쓰지 않아요.").assertExists()
         compose.onAllNodesWithText("맞아요")[1 + 0].performScrollTo()
         compose.onAllNodesWithText("맞아요").filter(hasClickAction()).let { nodes ->
@@ -117,14 +117,14 @@ class CalibrationResultScreenTest {
     @Test fun unalignedWatchLogSaysTheWindowsCannotBeComparedInsteadOfShowingNone() {
         compose.setContent { CalibrationResultScreen(clip.copy(confirmedCount = 10, watchCount = 9, watchSpansKnown = false),
             emptyList(), false, {}, {}, {}, {}) }
-        compose.onNodeWithText("워치 기록의 시간을 영상에 맞추지 못해 구간을 비교할 수 없어요.").performScrollTo().assertExists()
+        compose.onNodeWithText("센서 재분석 구간을 영상 시간에 맞출 수 없어 비교 결과는 미확인이에요.").performScrollTo().assertExists()
     }
 
     @Test fun aSuspectLastRepShowsANoteWithoutChangingTheCount() {
         var answer = -1
         compose.setContent { CalibrationResultScreen(clip.copy(confirmedCount = 10, watchCount = 11, watchSpansKnown = true, trailingSuspect = true),
             emptyList(), false, {}, { answer = it }, {}, {}) }
-        compose.onNodeWithText("워치가 센 마지막 1회는 다른 반복보다 느리고 약해서, 시계를 본 동작일 수 있어요. 실제로 한 반복이 아니라면 횟수를 다시 확인해 주세요.")
+        compose.onNodeWithText("폰 횟수 재분석에서 마지막 후보가 다른 반복보다 느리고 약하게 나왔어요. 시계를 본 동작인지 영상으로 확인해 주세요. 이 알림은 구간 비교와 별도 분석이에요.")
             .performScrollTo().assertExists()
         assertEquals(-1, answer)
     }
