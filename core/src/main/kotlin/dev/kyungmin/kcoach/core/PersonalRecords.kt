@@ -2,8 +2,8 @@ package dev.kyungmin.kcoach.core
 
 enum class RecordKind { HEAVIEST_WEIGHT, SAME_WEIGHT_REPS, ESTIMATED_ONE_REP_MAX, BEST_VOLUME }
 
-/** One strongest record per exercise/session. Values are reps for SAME_WEIGHT_REPS, kg otherwise. */
-data class RecordHit(val exerciseId: String, val kind: RecordKind, val value: Double, val previous: Double)
+/** One strongest record per exercise/session. Values are reps for SAME_WEIGHT_REPS, kg otherwise; [weightKg] is the load a reps record was set at. */
+data class RecordHit(val exerciseId: String, val kind: RecordKind, val value: Double, val previous: Double, val weightKg: Double? = null)
 
 object PersonalRecords {
     /**
@@ -37,7 +37,7 @@ object PersonalRecords {
             if (set.load == ProgressionLoad.ASSISTANCE && old.any { it.load == set.load && (it.weightKg ?: 0.0) < (set.weightKg ?: 0.0) }) return@mapNotNull null
             val previous = old.filter { it.load == set.load && it.weightKg == set.weightKg &&
                 (set.load != ProgressionLoad.WEIGHTED_BODYWEIGHT || recordWeight(it) == recordWeight(set)) }.maxOfOrNull { it.reps } ?: return@mapNotNull null
-            if (set.reps > previous) RecordHit(id, RecordKind.SAME_WEIGHT_REPS, set.reps.toDouble(), previous.toDouble()) else null
+            if (set.reps > previous) RecordHit(id, RecordKind.SAME_WEIGHT_REPS, set.reps.toDouble(), previous.toDouble(), recordWeight(set)) else null
         }.maxByOrNull { it.value }
         if (repHit != null) return listOf(repHit)
         fun estimate(set: LoggedSet): Double? {

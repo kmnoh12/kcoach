@@ -17,6 +17,8 @@ data class WorkoutUiModel(
     val nextSetText: String?,
     /** The just-completed set whose rest is running (the execution cursor may already point ahead). */
     val restingSet: Pair<Int, Int>? = null,
+    /** A record the just-finished set broke; the screen shows it briefly. */
+    val recordBanner: RecordBannerUi? = null,
 )
 
 data class ExerciseUi(

@@ -224,7 +224,7 @@ class ResultUi(
     val subtitle: String,
     val sections: List<ResultSectionUi>,
     val footnote: String,
-    val records: List<Pair<String, String>> = emptyList(),
+    val records: List<RecordUi> = emptyList(),
 )
 
 @Composable
@@ -245,7 +245,9 @@ fun WorkoutResultScreen(result: ResultUi, back: () -> Unit, toRecords: () -> Uni
                 Text("개 갱신", color = KColors.White, fontSize = 18.sp, modifier = Modifier.padding(bottom = 10.dp))
             }
             Spacer(Modifier.height(6.dp))
-            SectionCard("오늘 깬 기록", result.records)
+            Text("오늘 깬 기록", color = KColors.Soft, fontSize = 15.sp)
+            Spacer(Modifier.height(10.dp))
+            RecordList(result.records)
         }
         Spacer(Modifier.height(28.dp))
         Text("세트별 센서 추정", color = KColors.Soft, fontSize = 15.sp)

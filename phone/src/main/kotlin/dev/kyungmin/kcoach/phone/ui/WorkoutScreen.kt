@@ -172,6 +172,7 @@ fun ActiveWorkoutScreen(
                     },
                 )
             }
+            RecordBanner(model.recordBanner)
             RestBar(
                 rest = rest,
                 idleSeconds = current?.restSeconds ?: 0,

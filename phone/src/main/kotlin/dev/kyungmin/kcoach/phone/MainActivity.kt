@@ -22,6 +22,8 @@ import androidx.compose.ui.unit.dp
 import dev.kyungmin.kcoach.phone.ui.BigChoiceSheet
 import dev.kyungmin.kcoach.phone.ui.ChoiceSheet
 import dev.kyungmin.kcoach.phone.ui.ConfirmDialog
+import dev.kyungmin.kcoach.phone.ui.RecordBannerUi
+import dev.kyungmin.kcoach.phone.ui.RecordUi
 import dev.kyungmin.kcoach.phone.ui.StopWorkoutDialog
 import dev.kyungmin.kcoach.phone.ui.InputDialog
 import dev.kyungmin.kcoach.phone.ui.ExerciseInfoScreen
@@ -1541,20 +1543,55 @@ class MainActivity : ComponentActivity() {
     private fun volumeUnit(workout: ActiveWorkout) = if (workout.usePounds) 2.20462 else 1.0
 
     /** Remembers what was really done today, so the next session can compare and build on it. */
-    private var newRecords = mutableListOf<Pair<String, String>>()
-    private var lastWorkoutRecords: List<Pair<String, String>> = emptyList()
+    private var newRecords = mutableListOf<RecordUi>()
+    private var lastWorkoutRecords: List<RecordUi> = emptyList()
 
-    private fun recordDisplay(name: String, hit: dev.kyungmin.kcoach.core.RecordHit, pounds: Boolean): Pair<String, String> {
-        val label = when (hit.kind) {
-            RecordKind.HEAVIEST_WEIGHT -> "최고 중량"
-            RecordKind.SAME_WEIGHT_REPS -> "같은 무게 최다 횟수"
-            RecordKind.ESTIMATED_ONE_REP_MAX -> "최고 추정 1RM"
-            RecordKind.BEST_VOLUME -> "최고 볼륨"
+    private fun recordDisplay(name: String, hit: dev.kyungmin.kcoach.core.RecordHit, pounds: Boolean): RecordUi =
+        RecordPresentation.record(name, hit, pounds)
+
+    // Record shown for a few seconds after a set. State is per running session so a restart does not replay it.
+    private var recordBannerSession: String? = null
+    private var recordBannerKey: String? = null
+    private var recordBannerState: RecordBannerUi? = null
+    private var recordBannerAtMs = 0L
+    private var recordBannerSeq = 0L
+    private var recordBase: dev.kyungmin.kcoach.core.ExerciseHistory? = null
+    private val recordTracker = RecordBannerTracker()
+
+    private fun recordBannerFor(workout: ActiveWorkout): RecordBannerUi? {
+        if (activeWorkout !== workout) return null
+        if (workout.sessionId != recordBannerSession) {
+            recordBannerSession = workout.sessionId
+            recordBannerKey = workout.lastCompletedSetKey // already done before this screen existed: nothing to announce
+            recordBannerState = null
+            recordBase = null
+            recordTracker.reset()
+            return null
         }
-        val reps = hit.kind == RecordKind.SAME_WEIGHT_REPS
-        val unit = if (!reps && pounds) 2.20462 else 1.0
-        val suffix = if (reps) "회" else if (pounds) "lb" else "kg"
-        return "$name · $label" to "${cleanWeight(hit.previous * unit)} → ${cleanWeight(hit.value * unit)}$suffix"
+        val key = workout.lastCompletedSetKey
+        if (key != recordBannerKey) {
+            recordBannerKey = key
+            if (key != null) runCatching { detectRecordAfterSet(workout, key) }
+                .onFailure { Log.w(EVENT_TAG, "record check after set failed", it) }
+        }
+        return recordBannerState?.takeIf { System.currentTimeMillis() - recordBannerAtMs < RECORD_BANNER_MODEL_MS }
+    }
+
+    private fun detectRecordAfterSet(workout: ActiveWorkout, key: String) {
+        val exerciseIndex = workout.routine.exercises.withIndex().firstNotNullOfOrNull { (exerciseIndex, exercise) ->
+            exercise.sets.withIndex().firstOrNull { (setIndex, set) ->
+                set.completed && "${workout.sessionId}:${SetIdentity.key(exercise.exercise.id, setIndex, set.setId, set.attemptId)}" == key
+            }?.let { exerciseIndex }
+        } ?: return
+        val today = java.time.Instant.ofEpochMilli(workout.startedAtMs).atZone(java.time.ZoneId.systemDefault()).toLocalDate().toEpochDay()
+        val log = ProgressionPlanStore(this).logs(workoutSnapshot(workout), today, workout.analyses)
+            .firstOrNull { it.exerciseIndex == exerciseIndex } ?: return
+        if (log.sets.none { it.completed && it.repsEntered }) return
+        val base = recordBase ?: FinishedWorkoutStore(this).historyForRecords().also { recordBase = it }
+        val hit = recordTracker.pick(PersonalRecords.detect(base, log)) ?: return
+        recordBannerState = RecordBannerUi(++recordBannerSeq,
+            RecordPresentation.record(workout.routine.exercises[exerciseIndex].exercise.name, hit, workout.usePounds))
+        recordBannerAtMs = System.currentTimeMillis()
     }
 
     private fun recordHistory(workout: ActiveWorkout) {
@@ -1655,6 +1692,7 @@ class MainActivity : ComponentActivity() {
             restEndAtMs = activeRestEndAtMs,
             pausedRestRemainingMs = pausedRestRemainingMs,
             nextSetText = nextText,
+            recordBanner = recordBannerFor(workout),
             restingSet = if (activeWorkout === workout && (activeRestEndAtMs > 0L || pausedRestRemainingMs > 0L)) {
                 workout.routine.exercises.flatMapIndexed { exerciseIndex, exercise ->
                     exercise.sets.mapIndexedNotNull { setIndex, set ->
@@ -3113,6 +3151,7 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         private const val EVENT_TAG = "KCoachEvent"
+        private const val RECORD_BANNER_MODEL_MS = 6_000L
         private const val STATE_VISIBLE_RESULT = "visibleFinishedWorkoutResult"
         private const val STATE_ROOT_TAB = "visibleRootTab"
         private const val STATE_CALIBRATION_EXERCISE = "selectedCalibrationExercise"

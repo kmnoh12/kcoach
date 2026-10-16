@@ -34,7 +34,7 @@ class PersonalRecordsTest {
 
     @Test fun sameWeightRepsAreTheSecondTier() {
         val hits = PersonalRecords.detect(history, log(10, 62.5 to 7))
-        assertEquals(listOf(RecordHit("bench", RecordKind.SAME_WEIGHT_REPS, 7.0, 6.0)), hits)
+        assertEquals(listOf(RecordHit("bench", RecordKind.SAME_WEIGHT_REPS, 7.0, 6.0, weightKg = 62.5)), hits)
     }
     @Test fun lowerWeightHighRepsAndWarmupsAreNotRecords() {
         assertEquals(emptyList(), PersonalRecords.detect(history, log(10, 60.0 to 15)))

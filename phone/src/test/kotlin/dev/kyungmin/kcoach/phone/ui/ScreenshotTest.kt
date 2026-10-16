@@ -124,7 +124,11 @@ class ScreenshotTest {
                 "등·이두", "68분 · 22세트 · 세션 12345678",
                 listOf(ResultSectionUi("랫 풀 다운 · 세트 1", SetAnalysisUi("lat_pull_down", "랫 풀 다운", 0, 10, 10, 10, 0.87).resultMetricRows())),
                 ANALYSIS_ESTIMATE_NOTE,
-                listOf("랫 풀 다운 · 최고 중량" to "60 → 62.5kg", "시티드 로우 · 최고 볼륨" to "2,400 → 2,640kg"),
+                listOf(
+                    RecordUi("랫 풀 다운", RecordTier.MAX_WEIGHT, "62.5kg", "이전 60kg · +2.5kg"),
+                    RecordUi("시티드 로우", RecordTier.REPS, "50kg 12회", "이 무게 최고 횟수 · 이전 10회"),
+                    RecordUi("덤벨 컬", RecordTier.ESTIMATE, "추정 1RM 24 → 25kg", ""),
+                ),
             ),
             {}, {},
         )
