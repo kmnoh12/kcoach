@@ -7,8 +7,8 @@ class KCoachApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         LocalExitDiagnostics.install(this)
-        WorkoutTermination(this).recover().onFailure {
-            android.util.Log.e("KCoachEvent", "Stopped workout archive recovery deferred", it)
+        WorkoutLaunchRecovery(this).recover().onFailure {
+            android.util.Log.e("KCoachEvent", "Workout launch cleanup deferred", it)
         }
         val profiles = UserProfileStore(this)
         runCatching { profiles.migrate() }.onFailure {

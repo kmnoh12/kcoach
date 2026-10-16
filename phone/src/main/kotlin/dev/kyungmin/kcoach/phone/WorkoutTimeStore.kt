@@ -21,6 +21,9 @@ internal class WorkoutTimeStore(context: Context) {
         rows.put(JSONObject().put("at", at).put("phase", phase))
         check(prefs.edit().putString(snapshot.sessionId, row.toString()).commit())
     }
+    fun discard(sessionId: String) = synchronized(lock) {
+        check(prefs.edit().remove(sessionId).commit())
+    }
     fun close(sessionId: String, nowMs: Long) = synchronized(lock) {
         val row = prefs.getString(sessionId, null)?.let(::JSONObject) ?: return@synchronized
         if (!row.has("end")) check(prefs.edit().putString(sessionId, row.put("end", nowMs).toString()).commit())

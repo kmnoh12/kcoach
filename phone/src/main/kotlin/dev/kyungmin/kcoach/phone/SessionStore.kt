@@ -17,7 +17,7 @@ class SessionStore(private val context: Context) {
 
     /** Prevent an old Activity from overwriting a completion committed by a service. */
     fun saveActive(snapshot: WorkoutSnapshot): Boolean = synchronized(lock) {
-        if (capturePrefs.getString("active", null) != null) return@synchronized false
+        if (capturePrefs.getString("active", null) != null || isSessionClosed(snapshot.sessionId)) return@synchronized false
         val revision = prefs.getLong(KEY_REVISION, 0)
         if (observedRevision != revision && (observedRevision != null || prefs.contains(KEY_ACTIVE_SNAPSHOT))) return@synchronized false
         commit(snapshot)
@@ -204,6 +204,7 @@ class SessionStore(private val context: Context) {
         val session = prefs.getString(KEY_ACTIVE_SNAPSHOT, null)?.let(WorkoutSnapshotCodec::decode)?.sessionId
         val edit = prefs.edit().remove(KEY_ACTIVE_SNAPSHOT).putLong(KEY_REVISION, revision)
         if (session != null) edit.putString(KEY_CLOSED_SESSIONS, closedList(session))
+        edit.remove(KEY_PREPARED).remove(KEY_MANUAL_REVISIONS)
         edit.commit().also { if (it) observedRevision = revision }
     }
 

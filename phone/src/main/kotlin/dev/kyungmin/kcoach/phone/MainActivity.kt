@@ -484,6 +484,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val resetHome = WorkoutTermination(this).consumeHomeReset()
+        val restorationState = savedInstanceState.takeUnless { resetHome }
         window.statusBarColor = bg
         window.navigationBarColor = bg
         otaCoordinator = dev.kyungmin.kcoach.updates.OtaCoordinator.get(this)
@@ -510,17 +512,17 @@ class MainActivity : ComponentActivity() {
         )
         startService(Intent(this, PhoneWearListenerService::class.java))
         startService(Intent(this, PhoneWorkoutService::class.java))
-        handledResultRequests.addAll(savedInstanceState?.getStringArrayList(STATE_HANDLED_RESULT_REQUESTS).orEmpty())
+        handledResultRequests.addAll(restorationState?.getStringArrayList(STATE_HANDLED_RESULT_REQUESTS).orEmpty())
         val requestKey = WorkoutResultIntent.requestKey(intent)
         val replayedRequest = requestKey != null && requestKey in handledResultRequests
-        val requestedResultShown = !replayedRequest && showRequestedWorkoutResult(intent)
-        val restoredResult = if (requestedResultShown) null else savedInstanceState?.getString(STATE_VISIBLE_RESULT)
+        val requestedResultShown = !resetHome && !replayedRequest && showRequestedWorkoutResult(intent)
+        val restoredResult = if (requestedResultShown) null else restorationState?.getString(STATE_VISIBLE_RESULT)
             ?.let { loadFinishedWorkoutResult(it) ?: lastWorkoutResult?.takeIf { saved -> saved.sessionId == it } }
         if (restoredResult != null) showWorkoutResult(restoredResult)
         val resultShown = requestedResultShown || restoredResult != null
-        selectedCalibrationExerciseId = savedInstanceState?.getString(STATE_CALIBRATION_EXERCISE)
+        selectedCalibrationExerciseId = restorationState?.getString(STATE_CALIBRATION_EXERCISE)
             ?: selectedCalibrationExerciseId
-        val restoredTab = savedInstanceState?.getString(STATE_ROOT_TAB)
+        val restoredTab = restorationState?.getString(STATE_ROOT_TAB)
             ?.let { saved -> RootTab.values().firstOrNull { it.name == saved } }
         if (!resultShown && restoredTab != null) {
             when (restoredTab) {
