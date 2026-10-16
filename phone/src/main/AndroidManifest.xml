@@ -50,15 +50,6 @@
         <activity android:name=".SettingsActivity" android:exported="false" />
         <activity android:name=".WorkoutProfileActivity" android:exported="false" />
         <activity android:name=".WorkoutTempoSettingsActivity" android:exported="false" />
-        <activity android:name=".AiCoachActivity" android:exported="false" />
-        <activity android:name=".ChatGptAccountActivity" android:exported="true" android:launchMode="singleTop">
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="kcoach" android:host="chatgpt" android:path="/return" />
-            </intent-filter>
-        </activity>
         <service
             android:name=".PhoneWearListenerService"
             android:exported="true">

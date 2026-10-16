@@ -20,7 +20,7 @@ class WorkoutProfileUiTest {
 
     @Test fun signedOutUserCanSaveUnknownBodyFactsAndExplicitWearing() {
         var saved: DeviceWorkoutProfile? = null
-        compose.setContent { WorkoutProfileTheme { WorkoutProfileEditor(AiCoachProfile(), null, {}, { saved = it }) } }
+        compose.setContent { WorkoutProfileTheme { WorkoutProfileEditor(WorkoutProfile(), null, {}, { saved = it }) } }
         compose.onNodeWithText("여성").performScrollTo().performClick()
         compose.onNodeWithText("골격근량 (kg, 선택)").performScrollTo().assertExists()
         compose.onNodeWithText("오른손").performScrollTo().performClick()
@@ -36,7 +36,7 @@ class WorkoutProfileUiTest {
 
     @Test fun incompleteWearingCannotBeSavedAndClearReallyMeansUnknown() {
         var saved: DeviceWorkoutProfile? = null
-        compose.setContent { WorkoutProfileTheme { WorkoutProfileEditor(AiCoachProfile(), null, {}, { saved = it }) } }
+        compose.setContent { WorkoutProfileTheme { WorkoutProfileEditor(WorkoutProfile(), null, {}, { saved = it }) } }
         compose.onNodeWithText("왼손").performScrollTo().performClick()
         compose.onNodeWithText("저장").performClick()
         assertNull(saved)

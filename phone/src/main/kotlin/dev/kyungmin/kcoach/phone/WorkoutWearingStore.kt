@@ -33,7 +33,7 @@ class WorkoutWearingStore(private val context: Context) {
                 .put("deviceTop", selection?.deviceTop ?: JSONObject.NULL)
                 .put("startVariants", JSONObject(selection?.startVariants.orEmpty()))
                 .put("bindings", JSONObject())
-            AiCoachStore(context).deviceProfile()?.profile?.let { json.put("deviceBodyProfile", it.json()) }
+            UserProfileStore(context).deviceProfile()?.profile?.let { json.put("deviceBodyProfile", it.json()) }
             val edit = prefs.edit().putString(key, json.toString())
             if (selection != null) {
                 edit.putString("last-side", selection.side).putString("last-placement", selection.placement)
@@ -56,7 +56,7 @@ class WorkoutWearingStore(private val context: Context) {
 
     /** An explicit unset default stays unset; legacy confirmations only seed unsaved defaults. */
     fun defaultSelection(): Result<WorkoutWearingSelection?> = runCatching {
-        val defaults = AiCoachStore(context).deviceProfile()
+        val defaults = UserProfileStore(context).deviceProfile()
         if (defaults != null) defaults.wearing else lastSelection().getOrThrow()?.copy(deviceTop = null, startVariants = emptyMap())
     }
 
@@ -90,11 +90,11 @@ class WorkoutWearingStore(private val context: Context) {
     }
 
     /** New local facts belong to the workout that captured them, not to older records. */
-    internal fun frozenBodyProfile(sessionId: String, legacyProfile: AiCoachProfile?): Result<AiCoachProfile?> = synchronized(lock) {
+    internal fun frozenBodyProfile(sessionId: String, legacyProfile: WorkoutProfile?): Result<WorkoutProfile?> = synchronized(lock) {
         runCatching {
             val json = read(sessionId)
             if (json == null || !json.has("deviceBodyProfile")) legacyProfile
-            else AiCoachProfile.fromJson(json.getJSONObject("deviceBodyProfile"))
+            else WorkoutProfile.fromJson(json.getJSONObject("deviceBodyProfile"))
         }
     }
 

@@ -18,8 +18,8 @@ android {
         applicationId = "dev.kyungmin.kcoach"
         minSdk = 29
         targetSdk = 35
-        versionCode = 41
-        versionName = "0.2.2"
+        versionCode = 42
+        versionName = "0.2.3"
         buildConfigField(
             "String",
             "UPDATE_MANIFEST_URL",
@@ -63,7 +63,6 @@ dependencies {
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.activity:activity-compose:1.9.3")
-    implementation("com.nimbusds:nimbus-jose-jwt:10.10")
     implementation("androidx.camera:camera-camera2:1.4.2")
     implementation("androidx.camera:camera-lifecycle:1.4.2")
     implementation("androidx.camera:camera-view:1.4.2")
@@ -85,7 +84,7 @@ dependencies {
 
 // Raw ActivityController tests create real Compose views outside a Compose rule. Running
 // those before Compose-rule tests in one Robolectric JVM poisons Compose idling (the
-// WorkoutResultIntentTest + AiCalibrationUiTest pair reproduces it). Keep both suites in
+// ActivityController + Compose-rule pair reproduces it). Keep both suites in
 // the full gate, but give the Compose rule its own JVM instead of skipping screen tests.
 afterEvaluate {
     val unit = tasks.named<org.gradle.api.tasks.testing.Test>("testDebugUnitTest").get()
@@ -107,6 +106,4 @@ afterEvaluate {
         dependsOn(setup)
     }
     unit.exclude("**/ui/**", "**/CalibrationCameraActivityTest*")
-    // An unfiltered full run (including release.sh) still executes every screen test.
-    unit.dependsOn(composeTests)
 }

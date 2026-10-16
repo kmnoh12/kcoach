@@ -10,7 +10,7 @@ import java.time.temporal.ChronoUnit
 /** User-selected session-average basis; no HR regression, volume multiplier, or inferred body mass. */
 internal class WorkoutEnergyStore(context: Context) {
     private val prefs = context.getSharedPreferences("workout-energy", Context.MODE_PRIVATE)
-    fun estimate(evidence: FinishedWorkoutStore.Evidence, profile: AiCoachProfile?): JSONObject {
+    fun estimate(evidence: FinishedWorkoutStore.Evidence, profile: WorkoutProfile?): JSONObject {
         val date = Instant.ofEpochMilli(evidence.snapshot.startedAtMs).atZone(ZoneId.systemDefault()).toLocalDate()
         val days = profile?.weightMeasuredOn?.takeIf { it.isNotBlank() }?.let { ChronoUnit.DAYS.between(LocalDate.parse(it), date) }
         val valid = profile?.ageYears in 19..59 && profile?.weightKg != null && days != null && days in 0..90 &&

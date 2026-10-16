@@ -49,7 +49,6 @@ internal class FinishedWorkoutStore(private val context: Context) {
         check(prefs.edit().putString(key, record.toString()).commit()) { "Failed to save finished session" }
         WorkoutTimeStore(context).close(snapshot.sessionId, record.optLong("finishedAtMs", snapshot.startedAtMs + minutes * 60_000L + snapshot.totalPausedMs))
         project(key, record)
-        AutomaticWorkoutReview.finished(context, snapshot.sessionId)
     }
 
     fun reconcile(sessionId: String, indexedOnly: Boolean = false) = synchronized(lock) {

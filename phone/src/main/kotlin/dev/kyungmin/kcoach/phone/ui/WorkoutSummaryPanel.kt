@@ -36,14 +36,11 @@ internal data class WorkoutSummaryRead(val record: FinishedWorkoutStore.Evidence
 @Composable
 internal fun WorkoutSummaryPanel(sessionId: String) {
     val app = LocalContext.current.applicationContext
-    val auth = remember { ChatGptAuth.get(app) }
-    val account = auth.state.value.activeProfileId.takeIf { auth.state.value.connected }
-    val loaded by produceState<WorkoutSummaryRead?>(null, sessionId, account) {
+    val loaded by produceState<WorkoutSummaryRead?>(null, sessionId) {
         value = withContext(Dispatchers.IO) { runCatching {
             val records = FinishedWorkoutStore(app).allEvidence()
             val record = FinishedWorkoutStore(app).evidenceForSessions(setOf(sessionId)).single()
-            val profileStore = AiCoachStore(app)
-            val legacyProfile = account?.takeIf { sessionId in profileStore.sessionIds(it) }?.let(profileStore::profile)
+            val legacyProfile = UserProfileStore(app).profileForSession(sessionId)
             val profile = WorkoutWearingStore(app).frozenBodyProfile(sessionId, legacyProfile).getOrThrow()
             val previousId = WorkoutComparison.previous(record.snapshot, records.map { it.snapshot })?.sessionId
             WorkoutSummaryRead(record, records.firstOrNull { it.snapshot.sessionId == previousId },
@@ -83,8 +80,16 @@ internal fun WorkoutSummaryContent(read: WorkoutSummaryRead) {
                     Text("${sets.size}세트 · ${volume?.let { n(it) + " kg" } ?: "볼륨 미확인"}", color = KColors.Muted, fontSize = 13.sp)
                     val changes = WorkoutComparison.compare(read.record.snapshot, read.previous?.snapshot).filter { it.condition.exerciseId == id }
                     if (changes.any { it.condition.missingFields.isNotEmpty() }) Text("기구·수행 조건 일부 미입력 · 입력이 같은 범위의 비교예요", color = KColors.Muted, fontSize = 12.sp)
-                    changes.forEach { change -> Text(change.volumeChange?.let { "같은 수행 조건의 지난 기록 대비 ${if (it >= 0) "+" else ""}${n(it)} kg · 일반 세트" }
-                        ?: "같은 수행 조건의 이전 기록이 없어요", color = KColors.Soft, fontSize = 13.sp) }
+                    changes.forEach { change ->
+                        Text(change.volumeChange?.let { "같은 수행 조건의 지난 기록 대비 ${if (it >= 0) "+" else ""}${n(it)} kg · 일반 세트" }
+                            ?: "같은 수행 조건의 이전 기록이 없어요", color = KColors.Soft, fontSize = 13.sp)
+                        if (change.setCountChanged) Text("완료한 본세트 수가 달라요 · 볼륨 증가만으로 수행 향상을 판단하지 않아요", color = KColors.Muted, fontSize = 12.sp)
+                        change.sameWeight.filter { it.comparableSetCount }.forEach { same ->
+                            val delta = same.currentReps - same.previousReps
+                            Text("${n(same.weightKg)} kg · 같은 세트 수에서 ${same.previousReps} → ${same.currentReps}회 (${if (delta >= 0) "+" else ""}$delta)", color = KColors.Soft, fontSize = 13.sp)
+                        }
+                        change.sameReps.forEach { same -> Text("${same.reps}회 · 중량 ${same.previousWeightsKg.joinToString { n(it) }} → ${same.currentWeightsKg.joinToString { n(it) }} kg", color = KColors.Soft, fontSize = 13.sp) }
+                    }
                 }
             }
             if (expanded == id) sets.forEach { set -> Text("${set.setIndex + 1}세트 · ${if (set.setType == "WARMUP") "웜업 · " else ""}${set.weightKg?.let(::n) ?: "중량 미입력"} kg × ${set.performedReps?.toString() ?: "횟수 미입력"}회", color = KColors.Soft, fontSize = 14.sp) }

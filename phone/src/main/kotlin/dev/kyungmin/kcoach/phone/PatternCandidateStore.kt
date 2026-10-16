@@ -246,31 +246,6 @@ class PatternCandidateStore(private val context: Context) {
         }
     }
 
-    /** GPT tuning reads only the selected candidate's frozen training sources, never later validation clips. */
-    internal fun calibrationTrainingSets(candidateId: String): Result<List<ReviewedPatternSet>> = synchronized(lock) {
-        runCatching {
-            val candidate = load(candidateId).getOrThrow()
-            checkCurrentSources(candidate.profile)
-            candidate.profile.sources.sortedBy { it.captureId }.take(6).map { source ->
-                readSet(captures.load(source.captureId).getOrThrow()).getOrThrow()
-            }
-        }
-    }
-
-    internal fun saveCalibrationVariant(baseId: String, expectedHash: String, changes: List<PatternParameterChange>, id: String): Result<PatternCandidate> = synchronized(lock) {
-        runCatching {
-            val base = load(baseId).getOrThrow(); require(base.sha256 == expectedHash)
-            checkCurrentSources(base.profile)
-            if (candidateFile(id).exists()) {
-                val old = load(id).getOrThrow()
-                require(PatternCalibrationParameters.apply(base.profile, changes, id, old.profile.version) == old.profile)
-                return@runCatching old
-            }
-            val version = Math.addExact(list().getOrThrow().filter { it.profile.compatibility == base.profile.compatibility }.maxOf { it.profile.version }, 1)
-            saveCandidate(PatternCalibrationParameters.apply(base.profile, changes, id, version)).getOrThrow()
-        }
-    }
-
     /** Pins all currently confirmed compatible material without filtering by predicted success. */
     fun freezeRegressionDataset(candidateId: String): Result<FrozenPatternBenchmark> = synchronized(lock) {
         runCatching {

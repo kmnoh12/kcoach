@@ -13,11 +13,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.kyungmin.kcoach.phone.ui.*
 
-/** Device defaults are editable without OAuth. Account-owned profiles and records are preserved. */
+/** Local body and wearing defaults. */
 class WorkoutProfileActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val store = AiCoachStore(applicationContext)
+        val store = UserProfileStore(applicationContext)
         val loaded = runCatching { store.deviceProfile() }
         val wearing = runCatching { WorkoutWearingStore(this).defaultSelection().getOrThrow() }
         setContent {
@@ -28,7 +28,7 @@ class WorkoutProfileActivity : ComponentActivity() {
                         TextButton(onClick = ::finish) { Text("돌아가기") }
                     }
                 } else {
-                    val profile = remember { loaded.getOrNull()?.profile ?: AiCoachProfile() }
+                    val profile = remember { loaded.getOrNull()?.profile ?: WorkoutProfile() }
                     WorkoutProfileEditor(profile, wearing.getOrNull(), ::finish) { value ->
                         store.saveDeviceProfile(value)
                         finish()
@@ -46,7 +46,7 @@ internal fun WorkoutProfileTheme(content: @Composable () -> Unit) {
 }
 
 @Composable
-internal fun WorkoutProfileEditor(profile: AiCoachProfile, previous: WorkoutWearingSelection?,
+internal fun WorkoutProfileEditor(profile: WorkoutProfile, previous: WorkoutWearingSelection?,
     back: () -> Unit, save: (DeviceWorkoutProfile) -> Unit) {
     var side by rememberSaveable { mutableStateOf(previous?.side) }
     var placement by rememberSaveable { mutableStateOf(previous?.placement) }
@@ -66,7 +66,7 @@ internal fun WorkoutProfileEditor(profile: AiCoachProfile, previous: WorkoutWear
             }
         }
         TextButton(onClick = { side = null; placement = null }) { Text("착용 상태 미설정") }
-        Text("기본 프로필은 폰에 저장해요. AI 상담의 계정별 프로필이나 연결 기록은 자동으로 바뀌지 않아요.",
+        Text("프로필은 폰에 저장해요. 이전 운동에 저장된 신체 정보는 바뀌지 않아요.",
             color = KColors.Muted, fontSize = 12.sp)
     }) { draft ->
         require((side == null) == (placement == null))

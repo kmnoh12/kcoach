@@ -1019,7 +1019,6 @@ class MainActivity : ComponentActivity() {
         )
         showStandalone(ComposeView(this).apply {
             setContent { WorkoutResultScreen(ui, back = { onBackPressed() }, toRecords = { showRecords() },
-                aiReview = { dev.kyungmin.kcoach.phone.ui.WorkoutReviewPanel(result.sessionId) },
                 summary = { dev.kyungmin.kcoach.phone.ui.WorkoutSummaryPanel(result.sessionId) }) }
         })
         visibleWorkoutResultSessionId = result.sessionId
@@ -1233,7 +1232,6 @@ class MainActivity : ComponentActivity() {
             install = { otaCoordinator.installBoth(this) },
             openCalibration = ::showCalibration,
             openSettings = { startActivity(Intent(this, SettingsActivity::class.java)) },
-            openCoach = { startActivity(Intent(this, AiCoachActivity::class.java)) },
             observeUpdate = { report -> otaCoordinator.observe { state -> report(UpdateUi(state.message, state.readyToInstall, state.busy)) } },
         )
         showScaffold(ComposeView(this).apply {
