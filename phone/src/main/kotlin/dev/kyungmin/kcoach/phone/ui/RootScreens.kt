@@ -106,7 +106,8 @@ private fun TabBarBody(selected: Int, onSelect: (Int) -> Unit) {
     val density = LocalDensity.current
     var preview by remember { mutableStateOf<Int?>(null) }
     val target = preview ?: selected
-    val shape = RoundedCornerShape(12.dp)
+    // Concentric with the 6dp selected thumb inside a 4dp padding: 6 + 4 = 10 (KShape.Panel).
+    val shape = KShape.Panel
     Box(
         Modifier
             .fillMaxWidth()
