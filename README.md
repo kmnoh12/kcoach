@@ -34,7 +34,6 @@
 배포는 버전을 올리고 커밋한 뒤 `tools/release.sh "변경 내용"`을 실행한다.
 서명은 이 Mac의 `~/.android/debug.keystore`다. 이 키를 잃으면 기존 앱을 지우고 새로 깔아야 한다.
 
-`tools/update_server.py`는 예전 LAN 방식 앱(폰 0.5.11 이하, 워치 0.1.25 이하)을 GitHub 방식으로 한 번 옮길 때만 쓴다.
 
 ## 실기 검증
 
