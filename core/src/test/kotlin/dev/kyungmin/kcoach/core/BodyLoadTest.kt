@@ -19,6 +19,12 @@ class BodyLoadTest {
         assertEquals(emptyMap(), BodyLoad.setsByPart(listOf(log("mystery", 100, 3)), parts::get, today = 100))
     }
 
+    @Test fun savedLayoutDoesNotCountUnfinishedOrUnenteredSetsAsTraining() {
+        val rows = listOf(LoggedSet(50.0, 6), LoggedSet(50.0, 0, completed = false, repsEntered = false),
+            LoggedSet(50.0, 0, repsEntered = false))
+        assertEquals(mapOf("가슴" to 1), BodyLoad.setsByPart(listOf(ExerciseLog("bench", 100, rows)), parts::get, 100))
+    }
+
     @Test
     fun intensityIsCappedAtOne() {
         val result = BodyLoad.intensity(mapOf("가슴" to 6, "등" to 40))

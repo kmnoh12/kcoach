@@ -8,7 +8,7 @@ object BodyLoad {
     /** Sets per body part over the last [days] days ending at [today], from the logs of every exercise. */
     fun setsByPart(logs: List<ExerciseLog>, partOf: (String) -> String?, today: Long, days: Int = 7): Map<String, Int> =
         logs.filter { it.epochDay in (today - days + 1)..today }
-            .mapNotNull { log -> partOf(log.exerciseId)?.let { it to log.sets.size } }
+            .mapNotNull { log -> partOf(log.exerciseId)?.let { part -> part to log.sets.count { it.completed && it.repsEntered } } }
             .groupBy({ it.first }, { it.second })
             .mapValues { (_, counts) -> counts.sum() }
 

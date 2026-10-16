@@ -35,10 +35,18 @@ class PerformedRepsTest {
             MainActivity::class.java.getDeclaredMethod(method, active.javaClass).apply { isAccessible = true }.invoke(activity, active)
         }
     }
+    private fun assertProjectedSixReps(log: ExerciseLog) {
+        assertEquals(2, log.sets.size)
+        assertEquals(listOf(true, false), log.sets.map { it.completed })
+        assertEquals(listOf(true, false), log.sets.map { it.repsEntered })
+        assertEquals(listOf(10, 10), log.sets.map { it.targetReps })
+        assertEquals(listOf(6, 0), log.sets.map { it.reps })
+        assertEquals(30.0, log.volumeKg, 0.001)
+    }
     @Test fun measuredSixRepsProduceThirtyKgRatherThanTargetFifty() {
         val (activity, active) = restoredCompleted(6); record(activity, active)
         val exercise = ExerciseHistoryStore(app).load().last("external_rotation")!!
-        assertEquals(6, exercise.sets.single().reps)
+        assertProjectedSixReps(exercise)
         assertEquals(30.0, exercise.volumeKg, 0.001)
         assertEquals(30, WorkoutLogStore(app).load().single().volumeKg)
     }
@@ -71,7 +79,7 @@ class PerformedRepsTest {
         val original = watchSnapshot(); val store = FinishedWorkoutStore(app)
         store.finish(original, "어깨전문", 12); SessionStore(app).apply { loadActive(); clearActive() }
         nativeCount(original.sessionId, 6); store.reconcile(original.sessionId)
-        assertEquals(6, ExerciseHistoryStore(app).load().last("external_rotation")!!.sets.single().reps)
+        assertProjectedSixReps(ExerciseHistoryStore(app).load().last("external_rotation")!!)
         assertEquals(30, WorkoutLogStore(app).load().single().volumeKg)
         store.finish(original, "어깨전문", 99); store.replay()
         assertEquals(1, WorkoutLogStore(app).load().size)
@@ -90,7 +98,7 @@ class PerformedRepsTest {
     @Test fun explicitManualEntryIsNotOverwrittenByNativeAnalysis() {
         val (activity, active) = restoredCompleted(6); record(activity, active)
         nativeCount("background-session", 12); FinishedWorkoutStore(app).reconcile("background-session")
-        assertEquals(6, ExerciseHistoryStore(app).load().last("external_rotation")!!.sets.single().reps)
+        assertProjectedSixReps(ExerciseHistoryStore(app).load().last("external_rotation")!!)
         assertEquals(30, WorkoutLogStore(app).load().single().volumeKg)
     }
     @Test fun separateSessionsOnTheSameDayRemainSeparate() {
@@ -115,10 +123,10 @@ class PerformedRepsTest {
         assertEquals(0L, ExerciseHistoryStore(app).load().last("external_rotation")!!.epochDay)
     }
 
-    @Test fun lateAnalysisRemovesAnInflatedVolumeRecord() {
+    @Test fun lateAnalysisRemovesAnInflatedRepetitionRecord() {
         ExerciseHistoryStore(app).add(ExerciseLog("external_rotation", 0, listOf(LoggedSet(5.0, 8)), "earlier"))
         val original = watchSnapshot(); val store = FinishedWorkoutStore(app); store.finish(original, "어깨전문", 12)
-        assertTrue(store.recordHits(original.sessionId).any { it.second.kind == RecordKind.BEST_VOLUME })
+        assertTrue(store.recordHits(original.sessionId).any { it.second.kind == RecordKind.SAME_WEIGHT_REPS })
         nativeCount(original.sessionId, 6); store.reconcile(original.sessionId)
         assertTrue(store.recordHits(original.sessionId).isEmpty())
     }

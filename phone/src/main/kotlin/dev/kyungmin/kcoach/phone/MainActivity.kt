@@ -50,10 +50,6 @@ import dev.kyungmin.kcoach.core.RecordKind
 import dev.kyungmin.kcoach.core.WorkoutLog
 import dev.kyungmin.kcoach.core.WorkoutStats
 import dev.kyungmin.kcoach.core.ExerciseHistory
-import dev.kyungmin.kcoach.core.ExerciseLog
-import dev.kyungmin.kcoach.core.LoggedSet
-import dev.kyungmin.kcoach.core.NextTarget
-import dev.kyungmin.kcoach.core.NextTargetAdvisor
 import dev.kyungmin.kcoach.core.ExerciseSubstitutes
 import dev.kyungmin.kcoach.core.ExerciseTaxonomy
 import dev.kyungmin.kcoach.core.SetInsight
@@ -720,6 +716,9 @@ class MainActivity : ComponentActivity() {
         onExit: (() -> Unit)? = null,
         animateIn: Boolean = false,
     ) {
+        if (active == null && activeWorkout == null) {
+            prefillProgression(routine)
+        }
         stopTicker()
         currentScreen = Screen.ROUTINE
         selectedRoutine = routine
@@ -1022,11 +1021,8 @@ class MainActivity : ComponentActivity() {
             lastWorkoutResult = result
             val store = FinishedWorkoutStore(this)
             val pounds = store.usePounds(result.sessionId)
-            val unit = if (pounds) 2.20462 else 1.0
-            val unitLabel = if (pounds) "lb" else "kg"
             lastWorkoutRecords = store.recordHits(result.sessionId).map { (name, hit) ->
-                val kind = if (hit.kind == RecordKind.HEAVIEST_WEIGHT) "최고 중량" else "최고 볼륨"
-                "$name · $kind" to "${cleanWeight(hit.previous * unit)} → ${cleanWeight(hit.value * unit)}$unitLabel"
+                recordDisplay(name, hit, pounds)
             }
         }
         if (lastWorkoutResult?.sessionId == result.sessionId) persistLastWorkoutResult(result)
@@ -1296,6 +1292,7 @@ class MainActivity : ComponentActivity() {
             if (activeWorkout != null) showActiveWorkout()
             return
         }
+        prefillProgression(routine)
         val wearing = runCatching {
             val settings = WorkoutWearingStore(this)
             WorkoutPreparation.selection(settings.defaultSelection().getOrThrow(),
@@ -1321,6 +1318,8 @@ class MainActivity : ComponentActivity() {
             exerciseIndex = safeExerciseIndex,
             setIndex = safeSetIndex,
         )
+        if (ProgressionPlanStore(this).register(workout.sessionId, routine,
+                workout.routine.exercises.flatMap { it.sets }.map { it.setId }).isFailure) return
         WorkoutWearingStore(this).beginSession(workout.sessionId, wearing).onFailure {
             Toast.makeText(this, "착용 상태를 저장하지 못했어요. 다시 시작해 주세요.", Toast.LENGTH_LONG).show()
             return
@@ -1357,6 +1356,8 @@ class MainActivity : ComponentActivity() {
                 setId = java.util.UUID.randomUUID().toString(), attemptId = java.util.UUID.randomUUID().toString(),
                 identityRequired = true) }.toMutableList())
         }.toMutableList()))
+        if (ProgressionPlanStore(this).register(prepared.sessionId, routine,
+                prepared.routine.exercises.flatMap { it.sets }.map { it.setId }).isFailure) return
         val plan = workoutSnapshot(prepared).copy(startedAtMs = 0, restEndAtMs = 0, pausedRestRemainingMs = 0)
         sessionStore.prepareForWatch(plan, System.currentTimeMillis())
             .onSuccess { sendWear(WearSync.PATH_WORKOUT_OFFER, it.encode()) }
@@ -1543,18 +1544,28 @@ class MainActivity : ComponentActivity() {
     private var newRecords = mutableListOf<Pair<String, String>>()
     private var lastWorkoutRecords: List<Pair<String, String>> = emptyList()
 
+    private fun recordDisplay(name: String, hit: dev.kyungmin.kcoach.core.RecordHit, pounds: Boolean): Pair<String, String> {
+        val label = when (hit.kind) {
+            RecordKind.HEAVIEST_WEIGHT -> "최고 중량"
+            RecordKind.SAME_WEIGHT_REPS -> "같은 무게 최다 횟수"
+            RecordKind.ESTIMATED_ONE_REP_MAX -> "최고 추정 1RM"
+            RecordKind.BEST_VOLUME -> "최고 볼륨"
+        }
+        val reps = hit.kind == RecordKind.SAME_WEIGHT_REPS
+        val unit = if (!reps && pounds) 2.20462 else 1.0
+        val suffix = if (reps) "회" else if (pounds) "lb" else "kg"
+        return "$name · $label" to "${cleanWeight(hit.previous * unit)} → ${cleanWeight(hit.value * unit)}$suffix"
+    }
+
     private fun recordHistory(workout: ActiveWorkout) {
         newRecords = mutableListOf()
         val today = java.time.Instant.ofEpochMilli(workout.startedAtMs).atZone(java.time.ZoneId.systemDefault()).toLocalDate().toEpochDay()
-        workout.routine.exercises.forEach { item ->
-            val done = item.sets.filter { it.completed }.mapNotNull { set -> set.performedReps?.let { LoggedSet(set.weightKg, it) } }
-            if (done.isEmpty()) return@forEach
-            val log = ExerciseLog(item.exercise.id, today, done, workout.sessionId, workout.startedAtMs)
-            PersonalRecords.detect(history, log).forEach { hit ->
-                val label = if (hit.kind == RecordKind.HEAVIEST_WEIGHT) "최고 중량" else "최고 볼륨"
-                val unit = volumeUnit(workout)
-                val value = "%s → %s".format(cleanWeight(hit.previous * unit), cleanWeight(hit.value * unit)) + if (workout.usePounds) "lb" else "kg"
-                newRecords += "${item.exercise.name} · $label" to value
+        val previous = FinishedWorkoutStore(this).historyForRecords()
+        ProgressionPlanStore(this).logs(workoutSnapshot(workout), today, workout.analyses).forEach { log ->
+            if (log.sets.none { it.completed && it.repsEntered }) return@forEach
+            val item = workout.routine.exercises[log.exerciseIndex]
+            PersonalRecords.detect(previous, log).forEach { hit ->
+                newRecords += recordDisplay(item.exercise.name, hit, workout.usePounds)
             }
             historyCache = historyStore.add(log)
         }
@@ -1598,41 +1609,20 @@ class MainActivity : ComponentActivity() {
         )
     }
 
-    private fun plannedReps(item: RoutineExercise): Int =
-        item.sets.filter { it.setType != SetType.WARMUP }.maxOfOrNull { it.targetReps } ?: 10
+    private fun prefillProgression(routine: WorkoutRoutine) {
+        ProgressionPlanStore(this).prefill(routine)
+            .onSuccess { if (routines.any { it === routine }) saveRoutineLibrary() }
+            .onFailure { Log.e(EVENT_TAG, "progression prefill failed", it) }
+    }
 
     private fun historyUi(item: RoutineExercise, workout: ActiveWorkout): HistoryUi? {
         val last = history.last(item.exercise.id) ?: return null
-        val unitLabel = if (workout.usePounds) "lb" else "kg"
-        val lastLine = "지난번 " + last.sets.take(4).joinToString(" · ") { set ->
+        val performed = last.sets.filter { it.completed && it.repsEntered }
+        if (performed.isEmpty()) return null
+        val lastLine = "지난번 " + performed.take(4).joinToString(" · ") { set ->
             if (set.weightKg == null) "${set.reps}회" else "${formatActiveWeight(set.weightKg, workout.usePounds)}×${set.reps}"
-        } + if (last.sets.size > 4) " …" else ""
-        val next = NextTargetAdvisor.advise(last, plannedReps(item))
-        val workSets = item.sets.filter { it.setType != SetType.WARMUP }
-        val alreadyApplied = when (next) {
-            is NextTarget.RaiseWeight -> workSets.isNotEmpty() && workSets.all { (it.weightKg ?: 0.0) >= next.toKg }
-            is NextTarget.AddRep -> workSets.sumOf { it.targetReps } > last.totalReps
-            is NextTarget.Hold -> false
-        }
-        if (alreadyApplied) {
-            return HistoryUi(lastLine, (last.volumeKg * volumeUnit(workout)).toInt(), null, null, false)
-        }
-        val (text, applicable) = when (next) {
-            is NextTarget.RaiseWeight -> "${formatActiveWeight(next.toKg, workout.usePounds)}${unitLabel}로 올리기" to true
-            is NextTarget.AddRep -> "전체 반복 1회 더" to true
-            is NextTarget.Hold -> "중량 유지" to false
-        }
-        return HistoryUi(lastLine, (last.volumeKg * volumeUnit(workout)).toInt(), text, next.reason, applicable)
-    }
-
-    private fun applySuggestion(item: RoutineExercise) {
-        val last = history.last(item.exercise.id) ?: return
-        val pending = item.sets.filter { !it.completed && it.setType != SetType.WARMUP }
-        when (val next = NextTargetAdvisor.advise(last, plannedReps(item))) {
-            is NextTarget.RaiseWeight -> pending.forEach { it.weightKg = next.toKg }
-            is NextTarget.AddRep -> pending.lastOrNull()?.let { it.targetReps += 1 }
-            is NextTarget.Hold -> Unit
-        }
+        } + if (performed.size > 4) " …" else ""
+        return HistoryUi(lastLine, (last.volumeKg * volumeUnit(workout)).toInt(), null, null, false)
     }
 
     /** Replaces the not-yet-started sets of an exercise with what was done last time. */
@@ -1640,7 +1630,8 @@ class MainActivity : ComponentActivity() {
         val last = history.last(item.exercise.id) ?: return
         if (item.sets.any { it.completed }) return
         item.sets.clear()
-        last.sets.forEach { item.sets += PlannedSet(it.weightKg, it.reps) }
+        last.sets.forEach { item.sets += PlannedSet(it.weightKg, it.targetReps ?: it.reps,
+            setType = if (it.isWarmup) SetType.WARMUP else SetType.NORMAL) }
     }
 
     private fun buildWorkoutModel(workout: ActiveWorkout): WorkoutUiModel {
@@ -1830,8 +1821,8 @@ class MainActivity : ComponentActivity() {
         }
 
         override fun onApplySuggestion(exerciseIndex: Int) {
-            val routineExercise = exercise(exerciseIndex) ?: return
-            applySuggestion(routineExercise)
+            if (exercise(exerciseIndex) == null) return
+            // Targets are prefilled once from finished history; user edits remain authoritative.
             workout()?.let(::persistActiveWorkout)
             bumpWorkoutUi()
         }
@@ -2444,6 +2435,7 @@ class MainActivity : ComponentActivity() {
 
     private fun showExercisePreview(routine: WorkoutRoutine, index: Int) {
         if (index !in routine.exercises.indices) return
+        if (activeWorkout == null) prefillProgression(routine)
         showActiveWorkout(ActiveWorkout(routine = routine, exerciseIndex = index))
     }
 
