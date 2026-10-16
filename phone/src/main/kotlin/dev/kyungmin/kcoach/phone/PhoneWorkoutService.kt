@@ -63,8 +63,8 @@ class PhoneWorkoutService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         taskRemoved = true
-        WorkoutTermination(this).stop().onFailure {
-            Log.e("KCoachEvent", "Task removal archive deferred; stop intent retained", it)
+        WorkoutTermination(this).stop(saveCompleted = false).onFailure {
+            Log.e("KCoachEvent", "Task removal discard deferred; stop intent retained", it)
         }
         CalibrationCaptureStore(this).recoverInterrupted().mapCatching { previous ->
             if (previous != null) PhoneCommandOutbox(this).enqueue(WearSync.command("STOP", previous.id, "", 0, 0))
