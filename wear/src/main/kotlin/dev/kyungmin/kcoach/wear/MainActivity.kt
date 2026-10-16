@@ -608,12 +608,14 @@ class MainActivity : Activity() {
             val roundTop = if (canvasHeight > canvasWidth * 1.15f) 0f else {
                 (canvasHeight - roundDiameter) / 2f
             }
-            val inset = 8f * density
+            paint.strokeWidth = 2.5f * density
+            // The stroke is centered on the arc, so half of it plus a hairline gap keeps the outer
+            // edge of the ring right against the rim of the display instead of floating inside it.
+            val inset = paint.strokeWidth / 2f + 1f * density
             val left = (canvasWidth - roundDiameter) / 2f + inset
             val top = roundTop + inset
             val right = (canvasWidth + roundDiameter) / 2f - inset
             val bottom = roundTop + roundDiameter - inset
-            paint.strokeWidth = 2.5f * density
             // -90 degrees is 12 o'clock: the ring advances clockwise from the
             // top-center of the circular watch face.
             canvas.drawArc(RectF(left, top, right, bottom), -90f, 360f * fraction, false, paint)
