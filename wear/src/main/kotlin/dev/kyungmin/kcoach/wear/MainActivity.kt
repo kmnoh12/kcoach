@@ -473,7 +473,7 @@ class MainActivity : Activity() {
         face.action.alpha = if (phoneResultPending) 0.5f else 1f
         face.hint.text = ""; face.hint.setTextColor(WatchWorkoutFace.MUTED); face.noticeAction = null
         face.size(face.value, if (active) 88f else 24f)
-        face.value.setTextColor(WatchWorkoutFace.BONE)
+        face.value.setTextColor(WatchWorkoutFace.SAGE)
         face.restCard.visibility = View.GONE; face.restGo.visibility = View.GONE; face.jog.visibility = View.GONE
         val controlsReady = resting && !paused && workoutControls.supportsControls() && setId.isNotBlank() && attemptId.isNotBlank()
         if (active) {
@@ -483,7 +483,7 @@ class MainActivity : Activity() {
                 WatchWorkoutFace.MUTED, dot = if (!paused && !manualRequired && running) WatchWorkoutFace.SAGE else null)
             face.target.text = "/ ${targetReps}회"
             face.value.text = count?.toString() ?: "—"
-            face.value.setTextColor(if (count != null && count > targetReps) WatchWorkoutFace.ORANGE else WatchWorkoutFace.BONE)
+            face.value.setTextColor(if (count != null && count > targetReps) WatchWorkoutFace.ORANGE else WatchWorkoutFace.SAGE)
             face.weight.text = weightKg?.let { if (it % 1.0 == 0.0) it.toInt().toString() else "%.1f".format(it) } ?: "—"
             face.unit.text = "kg"; face.heart.show(if (resting) 0 else heartRate); face.heartRate.text = heartRate.takeIf { it > 0 }?.toString() ?: "—"
             if (manualRequired && count == null) face.hint.text = "위로 · 횟수 기록"
@@ -512,6 +512,7 @@ class MainActivity : Activity() {
             face.heart.show(0)
         } else {
             face.title.text = "이번 주 운동"; face.setSubtitle("", WatchWorkoutFace.MUTED)
+            face.value.setTextColor(WatchWorkoutFace.BONE)
             face.value.text = homeStore.weekCount()?.let { "${it}회" } ?: "—"
             face.size(face.value, 40f)
             val recent = homeStore.overview()?.optJSONObject("recent")

@@ -141,9 +141,14 @@ internal class WatchWorkoutFace(context: Context) : FrameLayout(context) {
     companion object {
         val BONE = Color.rgb(237, 232, 220)
         val SAGE = Color.rgb(143, 207, 186)
-        val YELLOW = Color.rgb(255, 210, 51)
-        val ORANGE = Color.rgb(255, 160, 51)
-        val DEEP_AMBER = Color.rgb(196, 88, 0)
+        /** Rest: a soft yellow. */
+        val YELLOW = Color.rgb(255, 222, 112)
+        /** Over the target: a light amber, kept distinct from the rest yellow. */
+        val ORANGE = Color.rgb(255, 180, 94)
+        /** The second lap of the over-target ring. */
+        val DEEP_AMBER = Color.rgb(224, 135, 46)
+        /** Heart-rate zone 4 stays the strong orange. */
+        private val ZONE_ORANGE = Color.rgb(255, 160, 51)
         val RED = Color.rgb(229, 72, 59)
         val WHITE = Color.rgb(241, 238, 231)
         val MUTED = Color.rgb(148, 144, 138)
@@ -151,7 +156,7 @@ internal class WatchWorkoutFace(context: Context) : FrameLayout(context) {
         val CARD = Color.rgb(42, 41, 39)
         val TRACK = Color.rgb(27, 27, 26)
         /** Heart-rate zone colours, zone 1..5. The bands are a placeholder until a max heart rate is known. */
-        private val ZONES = intArrayOf(Color.rgb(124, 142, 156), Color.rgb(77, 163, 255), Color.rgb(79, 209, 139), ORANGE, RED)
+        private val ZONES = intArrayOf(Color.rgb(124, 142, 156), Color.rgb(77, 163, 255), Color.rgb(79, 209, 139), ZONE_ORANGE, RED)
         private const val ASSUMED_MAX_HEART_RATE = 185
         fun zone(heartRate: Int): Int = when {
             heartRate <= 0 -> 0

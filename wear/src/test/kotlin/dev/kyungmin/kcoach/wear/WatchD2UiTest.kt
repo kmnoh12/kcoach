@@ -41,7 +41,7 @@ class WatchD2UiTest {
     @Test fun onlyAboveTheTargetTurnsOrangeAndHeartRateHasNoBpmLabel() {
         val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
         val face = views(controller.get().window.decorView).filterIsInstance<WatchWorkoutFace>().single()
-        broadcast(20); assertEquals(WatchWorkoutFace.BONE, face.value.currentTextColor)
+        broadcast(20); assertEquals(WatchWorkoutFace.SAGE, face.value.currentTextColor)
         broadcast(21); assertEquals(WatchWorkoutFace.ORANGE, face.value.currentTextColor)
         assertEquals("112", face.heartRate.text.toString()); assertEquals(android.view.View.VISIBLE, face.heart.visibility)
         assertFalse(views(face).filterIsInstance<TextView>().any { it.text.contains("bpm") })
