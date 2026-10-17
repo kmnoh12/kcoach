@@ -129,3 +129,53 @@ readiness. No detector settings were tuned between these three comparisons.
 The third capture's original files, integrity report, and replay CSV are retained
 under ignored `work/evidence/9fb34269/`. Production routing and versions remain
 unchanged; this is a local analysis-only commit without push or deployment.
+
+## Adopted in source after user authorization
+
+`rope_extension` now resolves to the existing FLEXION_EXTENSION pose-return
+family (`flexion-extension-pose-v4`), already used for preacher curls. No other
+exercise binding or detector thresholds change. This is a shared exercise
+default, not a user-specific fitted model. The family supplies a 350 ms minimum
+rep duration; the earlier direct comparison used the old press profile's 400 ms
+minimum. Both produce the same reviewed totals on these captures.
+
+Frozen rope press-return v3/v4 snapshots still decode and replay the original
+combined-signal algorithm. The exception is restricted to the migrated rope and
+dumbbell-shoulder-press exercise identities, rather than accepting historical
+press routing for every flexion exercise. Existing captured counts are not
+rewritten by this source change.
+
+Verification on the changed source:
+
+- Added routing/snapshot test first; it failed on the old rope binding, then
+  passed after the migration. Other press bindings and rejection of an
+  incompatible bench snapshot are covered in the same narrow test class.
+- `RopePoseEvidenceTest` passed over the three full raw captures, retaining
+  historical counts 11/6/7 and asserting new counts 10/10/10 without target or
+  camera input. Set-end `finish()` creates no extra repetition. Private captures
+  are optional external test inputs, not embedded fixtures.
+- `ProfiledMotionRepDetectorTest` passed, including partial-return, unreliable
+  input, and non-cycle rejection cases. No full suite or Android package build
+  was run.
+
+Video review was extended from sparse second-capture frames and an unreviewed
+third video to all eight dense contact sheets in each of those captures (70
+selected frames each). The first capture's nine contact sheets had already been
+inspected. Rope release/phone approach is distinct from the working cycles;
+the new detector's final events occur before those handling tails, with no
+subsequent committed repetitions in the full sensor replay. Initial movement
+classification remains based on the user's reviewed total, not a new manual
+boundary annotation.
+
+An exploratory elbow-angle check using departure at 140 degrees and return at
+100 degrees yields 10 working cycles in each capture. In the second capture it
+also finds an extra cycle at approximately 31.26 video seconds during handling;
+the watch pose detector does not count that event. At a 150-degree departure,
+the camera check misses one actual working excursion in the second and third
+captures, so this camera threshold is neither ground truth nor a production
+change. Its working-cycle sequence supports coarse correspondence with the
+watch detections, not frame-accurate labels given clock uncertainty.
+
+Source and targeted replay checks are complete. A newly installed phone/watch
+version and live workout behavior have not been verified. No version bump,
+push, APK release, deployment, or device installation is part of this change.

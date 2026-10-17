@@ -17,6 +17,10 @@ tasks.test {
     inputs.property("peakComparisonSessions", System.getenv("KCOACH_PEAK_SESSIONS").orEmpty())
     inputs.property("pressEvidenceZip", System.getenv("KCOACH_PRESS_EVIDENCE_ZIP").orEmpty())
     inputs.property("selectedEvidenceZip", System.getenv("KCOACH_EVIDENCE_ZIP").orEmpty())
+    inputs.property("ropeEvidenceDirectory", System.getenv("KCOACH_ROPE_EVIDENCE_DIR").orEmpty())
+    System.getenv("KCOACH_ROPE_EVIDENCE_DIR")?.takeIf { file(it).isDirectory }?.let {
+        inputs.files(fileTree(it) { include("*/watch.kcs", "*/watch.manifest") })
+    }
     System.getenv("KCOACH_EVIDENCE_ZIP")?.takeIf { file(it).isFile }?.let { inputs.file(it) }
     System.getenv("KCOACH_PRESS_EVIDENCE_ZIP")?.takeIf { file(it).isFile }?.let { inputs.file(it) }
 }

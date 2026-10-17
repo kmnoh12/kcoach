@@ -5,6 +5,25 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
 class TrackingProfileSnapshotTest {
+    @Test fun `rope uses pose counting while frozen press snapshots retain their algorithm`() {
+        val current = ExerciseTrackingProfiles.resolve("rope_extension")
+        assertEquals(MotionFamily.FLEXION_EXTENSION, current.family)
+        assertEquals(TrackingSignal.ROTATION_ENERGY, current.signal)
+        for (version in listOf("v3", "v4")) {
+            val old = current.copy(family = MotionFamily.PRESS_RETURN, signal = TrackingSignal.COMBINED_MOTION,
+                id = "press-return-family-$version")
+            assertEquals(old, TrackingProfileSnapshot.decode(TrackingProfileSnapshot.encode(old)))
+        }
+        for (id in listOf("cable_pushdown", "flat_bench", "ez_lying_extension")) {
+            assertEquals(MotionFamily.PRESS_RETURN, ExerciseTrackingProfiles.resolve(id).family)
+        }
+        val other = ExerciseTrackingProfiles.resolve("flat_bench")
+        assertFailsWith<IllegalArgumentException> {
+            TrackingProfileSnapshot.decode(TrackingProfileSnapshot.encode(other.copy(
+                family = MotionFamily.FLEXION_EXTENSION, signal = TrackingSignal.ROTATION_ENERGY,
+                id = MotionFamily.FLEXION_EXTENSION.sharedAlgorithmId)))
+        }
+    }
     @Test fun `old shoulder press snapshots replay old family while new captures use vertical engine`() {
         val current = ExerciseTrackingProfiles.resolve("dumbbell_shoulder_press")
         assertEquals(MotionFamily.VERTICAL_PRESS_RETURN, current.family)

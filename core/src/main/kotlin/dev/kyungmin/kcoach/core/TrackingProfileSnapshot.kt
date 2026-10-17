@@ -29,8 +29,11 @@ object TrackingProfileSnapshot {
                 "unsupported recorded detector version"
             }
             val generic = ExerciseTrackingProfiles.resolve(p.exerciseId, p.label)
-            // Frozen shoulder-press v3/v4 captures must still replay their original combined-signal engine.
-            val historicalPress = generic.family == MotionFamily.VERTICAL_PRESS_RETURN &&
+            // Only explicitly migrated exercises may replay their old combined-signal press engine.
+            val migratedPress = p.exerciseId == "dumbbell_shoulder_press" &&
+                generic.family == MotionFamily.VERTICAL_PRESS_RETURN ||
+                p.exerciseId == "rope_extension" && generic.family == MotionFamily.FLEXION_EXTENSION
+            val historicalPress = migratedPress &&
                 p.family == MotionFamily.PRESS_RETURN && p.signal == TrackingSignal.COMBINED_MOTION
             require((p.family == generic.family && p.signal == generic.signal || historicalPress) && p.mode == generic.mode &&
                 p.capabilityTier == generic.capabilityTier && p.countMode == generic.countMode) {

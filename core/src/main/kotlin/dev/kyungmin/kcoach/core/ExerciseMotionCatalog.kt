@@ -99,7 +99,7 @@ object ExerciseMotionCatalog {
         binding("machine_fly", "머신 플라이", MotionFamily.MULTI_AXIS_RETURN),
         binding("cable_pushdown", "케이블 푸시다운", MotionFamily.PRESS_RETURN),
         binding("cable_overhead_extension", "케이블 오버헤드 익스텐션", MotionFamily.FLEXION_EXTENSION),
-        binding("rope_extension", "로프 익스텐션", MotionFamily.PRESS_RETURN),
+        binding("rope_extension", "로프 익스텐션", MotionFamily.FLEXION_EXTENSION),
         binding("rope_overhead_extension", "로프 오버헤드 익스텐션", MotionFamily.FLEXION_EXTENSION),
         binding("dumbbell_triceps_extension", "덤벨 트라이셉스 익스텐션", MotionFamily.FLEXION_EXTENSION),
         binding("ez_lying_extension", "이지바 라잉 익스텐션", MotionFamily.PRESS_RETURN),
