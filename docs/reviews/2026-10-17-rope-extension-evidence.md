@@ -96,3 +96,36 @@ boundary review and broader exercise-specific checks.
 Original extracted files and replay CSV are retained privately under ignored
 `work/evidence/cfc9dc8b/`. Only this analysis note is added to version control;
 the production engine, versions, and releases are unchanged.
+
+## Third capture 9fb34269
+
+The third supplied capture is again `rope_extension`, left wrist, outside,
+with a user-reviewed total of 10 and no reviewed repetition boundaries.
+All nine indexed archive entries pass integrity checks. Raw SHA-256:
+`82dbf1ff759fe2c23952b57e139a76d97eb195ecf1d397f88417cfd01ab6ea6f`.
+There are 1,534 samples over 30.706 seconds at 49.925 Hz, longest gap 20.315 ms.
+Both sensor accuracy fields are HIGH throughout; no unreliable samples,
+missing original clocks, or stale acceleration joins are reported. The export
+includes 238 camera records and a video; no video boundary review was performed
+for this third-capture comparison.
+
+The selected original-evidence replay test passed. Frozen and current profiles
+both produce 7, matching the captured watch count, with sensor end times
+7.93, 12.73, 17.54, 21.55, 23.93, 26.46, and 28.82 seconds. The same unchanged,
+unadopted ReturnToPose detector produces 10, with end times 6.45, 8.97, 11.29,
+13.76, 16.12, 18.64, 21.15, 23.49, 26.10, and 28.60 seconds. This remains a
+detector-only replay without target count or camera input.
+
+| Capture | Reviewed total | Frozen/current | Unadopted pose comparison |
+|---|---:|---:|---:|
+| 9cf833a3 | 10 | 11 | 10 |
+| cfc9dc8b | 10 | 6 | 10 |
+| 9fb34269 | 10 | 7 | 10 |
+
+These three explored captures strengthen the case for evaluating the existing
+pose detector for this exercise. Matching totals in three captures from one
+user do not establish boundary accuracy, other-user performance, or release
+readiness. No detector settings were tuned between these three comparisons.
+The third capture's original files, integrity report, and replay CSV are retained
+under ignored `work/evidence/9fb34269/`. Production routing and versions remain
+unchanged; this is a local analysis-only commit without push or deployment.
