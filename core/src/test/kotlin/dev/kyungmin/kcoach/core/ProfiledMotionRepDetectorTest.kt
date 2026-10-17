@@ -134,7 +134,7 @@ class ProfiledMotionRepDetectorTest {
         assertEquals(36, profiles.count { it.family != MotionFamily.UNOBSERVABLE_MANUAL })
         assertEquals(7, profiles.count { it.mode == TrackingMode.MANUAL_REQUIRED })
         assertTrue(profiles.filter { it.mode != TrackingMode.MANUAL_REQUIRED }.all {
-            it.id.endsWith("-v4")
+            it.id == it.family.sharedAlgorithmId
         })
     }
 

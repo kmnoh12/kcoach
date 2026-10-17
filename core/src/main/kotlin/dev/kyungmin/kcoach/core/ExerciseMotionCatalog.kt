@@ -43,6 +43,10 @@ object MotionFamilyTemplates {
             400L, 5_000L, 550L, 0.13, 0.12, 0.07, 110L, 1_800L,
         ),
         MotionFamilyTemplate(
+            MotionFamily.VERTICAL_PRESS_RETURN, TrackingSignal.DYNAMIC_ACCELERATION,
+            600L, 8_000L, 0L, 0.0, 0.12, 0.04, 150L, 3_000L,
+        ),
+        MotionFamilyTemplate(
             MotionFamily.PULL_RETURN, TrackingSignal.COMBINED_MOTION,
             500L, 6_000L, 650L, 0.15, 0.14, 0.07, 120L, 2_200L,
         ),
@@ -103,7 +107,7 @@ object ExerciseMotionCatalog {
         binding("crossover_reverse_fly", "크로스오버 리버스 플라이", MotionFamily.MULTI_AXIS_RETURN),
         binding("smith_shoulder_press", "스미스 숄더프레스", MotionFamily.PRESS_RETURN),
         binding("machine_shoulder_press", "머신 숄더프레스", MotionFamily.PRESS_RETURN),
-        binding("dumbbell_shoulder_press", "덤벨 숄더프레스", MotionFamily.PRESS_RETURN),
+        binding("dumbbell_shoulder_press", "덤벨 숄더프레스", MotionFamily.VERTICAL_PRESS_RETURN),
         binding("dumbbell_lateral_raise", "덤벨 레터럴 레이즈", MotionFamily.MULTI_AXIS_RETURN),
         binding("one_arm_cable_lateral", "원 암 케이블 레터럴", MotionFamily.MULTI_AXIS_RETURN),
         binding("machine_reverse_fly", "머신 리버스 플라이", MotionFamily.MULTI_AXIS_RETURN),

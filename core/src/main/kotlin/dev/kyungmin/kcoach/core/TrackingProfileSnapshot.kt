@@ -29,7 +29,10 @@ object TrackingProfileSnapshot {
                 "unsupported recorded detector version"
             }
             val generic = ExerciseTrackingProfiles.resolve(p.exerciseId, p.label)
-            require(p.family == generic.family && p.signal == generic.signal && p.mode == generic.mode &&
+            // Frozen shoulder-press v3/v4 captures must still replay their original combined-signal engine.
+            val historicalPress = generic.family == MotionFamily.VERTICAL_PRESS_RETURN &&
+                p.family == MotionFamily.PRESS_RETURN && p.signal == TrackingSignal.COMBINED_MOTION
+            require((p.family == generic.family && p.signal == generic.signal || historicalPress) && p.mode == generic.mode &&
                 p.capabilityTier == generic.capabilityTier && p.countMode == generic.countMode) {
                 "recorded profile contradicts exercise measurement policy"
             }

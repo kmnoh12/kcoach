@@ -24,7 +24,7 @@ enum class CameraMotion(val restDegrees: Double, val excursionDegrees: Double, v
             if (profile.mode == TrackingMode.MANUAL_REQUIRED) return null
             return when (profile.family) {
                 MotionFamily.FLEXION_EXTENSION, MotionFamily.PULL_RETURN -> ELBOW_FOLD
-                MotionFamily.PRESS_RETURN -> ELBOW_PRESS
+                MotionFamily.PRESS_RETURN, MotionFamily.VERTICAL_PRESS_RETURN -> ELBOW_PRESS
                 MotionFamily.MULTI_AXIS_RETURN -> if (exerciseId.contains("lateral") || name.contains("레터럴")) SHOULDER_RAISE else null
                 else -> null
             }
