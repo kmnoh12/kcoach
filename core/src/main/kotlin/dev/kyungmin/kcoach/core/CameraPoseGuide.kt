@@ -21,13 +21,15 @@ enum class CameraPoseFamily(
     val leg: Pair<Double, Double>? = null,
     /** Apparent shoulder width relative to a straight-on view; below 1 the user is turned toward a 45-degree oblique view. */
     val widthScale: Double = if (front) 1.0 else kotlin.math.cos(Math.toRadians(CameraOrientationPolicy.OBLIQUE)),
+    /** Both arms fold in toward the head: the far arm is the near arm mirrored, not swung the same way. */
+    val mirrorFarArm: Boolean = false,
 ) {
     STAND_ARMS_DOWN_SIDE(false, 0.0, 0.0 to 4.0),
     STAND_ARMS_DOWN_FRONT(true, 0.0, 8.0 to 6.0),
     STAND_ELBOW_BENT_SIDE(false, 8.0, -6.0 to 100.0),
     OVERHEAD_EXTENSION_SIDE(false, 0.0, 170.0 to -70.0),
     // Start pose: upper arms straight up beside the head, forearms folded down behind it (the wrist is hidden by the head).
-    CABLE_OVERHEAD_EXTENSION_SIDE(false, 5.0, 175.0 to -20.0),
+    CABLE_OVERHEAD_EXTENSION_SIDE(false, 2.0, 190.0 to -18.0, mirrorFarArm = true),
     // 45 degrees: a pure side view points the forearm along the camera axis, which hides the wrist and flattens its depth.
     EXTERNAL_ROTATION_OBLIQUE(true, 0.0, 0.0 to -90.0, widthScale = kotlin.math.cos(Math.toRadians(CameraOrientationPolicy.OBLIQUE))),
     PREACHER_SIDE(false, 10.0, 45.0 to 40.0),
@@ -149,8 +151,10 @@ object CameraPoseGuide {
         val far = anchor.shoulder + GuidePoint(-f * SHOULDER_WIDTH * family.widthScale * h, 0.0)
         val limbs = mutableListOf<GuideLimb>()
         for ((s, primary) in listOf(far to false, anchor.shoulder to true)) {
-            val elbow = s + dir(upper) * (UPPER_ARM * h)
-            limbs += GuideLimb(listOf(s, elbow, elbow + dir(fore) * (FOREARM * h)), .055 * h, primary)
+            val mirror = if (family.mirrorFarArm && !primary) -1.0 else 1.0
+            fun armDir(degrees: Double) = dir(degrees).let { GuidePoint(it.x * mirror, it.y) }
+            val elbow = s + armDir(upper) * (UPPER_ARM * h)
+            limbs += GuideLimb(listOf(s, elbow, elbow + armDir(fore) * (FOREARM * h)), .055 * h, primary)
         }
         family.leg?.let { (thigh, shank) ->
             for ((offset, primary) in listOf(-.03 to false, 0.0 to true)) {
@@ -159,7 +163,9 @@ object CameraPoseGuide {
                 limbs += GuideLimb(listOf(start, knee, knee + dir(shank) * (SHANK * h)), .07 * h, primary)
             }
         }
-        return GuideFigure(anchor.shoulder + up * (HEAD_OFFSET * h), HEAD_RADIUS * h, listOf(anchor.shoulder, far, hip + GuidePoint(-f * HIP_WIDTH * family.widthScale * h, 0.0), hip), .12 * h,
+        // Turned 45 degrees, the head sits between the two shoulders, not over the near one.
+        val neck = GuidePoint((anchor.shoulder.x + far.x) / 2, anchor.shoulder.y)
+        return GuideFigure(neck + up * (HEAD_OFFSET * h), HEAD_RADIUS * h, listOf(anchor.shoulder, far, hip + GuidePoint(-f * HIP_WIDTH * family.widthScale * h, 0.0), hip), .12 * h,
             limbs, family.lowerBody)
     }
 
