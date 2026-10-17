@@ -61,20 +61,13 @@ class CameraStartPoseHarnessTest {
                 }
             }
         }
-        // The drawing is a 2D projection. Give it anatomical depth, rather than pretending a side
-        // drawing is a front-facing 3D body. Angles and source pose proportions remain unchanged.
+        // The drawing is a 2D projection of a small 3D skeleton. The gate reads that skeleton in body axes
+        // (a frontal view, depth along z), and the yaw rotation below turns it to the exercise's camera target.
         if (!family.front) {
-            for (onLeft in listOf(true, false)) {
-                val sign = if (onLeft) 1.0 else -1.0
-                for (base in listOf(11, 13, 15, 23, 25, 27)) {
-                    val index = idx(base, onLeft)
-                    val p = image[index]
-                    if ((p.visibility ?: 0.0) == 0.0) continue
-                    val reference = image[idx(11, onLeft)]
-                    world[index] = world[index].copy(x = sign * (if (base < 23) .13 else .095),
-                        y = (p.y - image[idx(11, left)].y) * h / bodyHeight,
-                        z = -(p.x - reference.x) * w / bodyHeight)
-                }
+            for ((index, joint) in CameraPoseGuide.bodyFrameJoints(family)) {
+                if ((image[index].visibility ?: 0.0) == 0.0) continue
+                // Body x is the person's right; the person's left sits at world +x when they face the camera.
+                world[index] = world[index].copy(x = -joint[0], y = -joint[1], z = -joint[2])
             }
         }
         if (c.id == "external_rotation") {
@@ -82,13 +75,6 @@ class CameraStartPoseHarnessTest {
             // not a wrist crossing through the chest in the frontal plane.
             for ((elbow, wrist) in listOf(13 to 15, 14 to 16)) {
                 world[wrist] = world[elbow].copy(z = world[elbow].z - .146)
-            }
-        }
-        if (c.id == "chest_press") {
-            // Machine handles/elbows sit outside the torso, rather than inside its silhouette.
-            for (onLeft in listOf(true, false)) for (base in listOf(13, 15)) {
-                val index = idx(base, onLeft)
-                world[index] = world[index].copy(x = if (onLeft) .20 else -.20)
             }
         }
         val target = c.guide.viewTarget!!

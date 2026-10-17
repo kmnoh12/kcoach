@@ -23,11 +23,13 @@ enum class CameraPoseFamily(
     val widthScale: Double = if (front) 1.0 else kotlin.math.cos(Math.toRadians(CameraOrientationPolicy.OBLIQUE)),
     /** Degrees each arm segment (upper arm, forearm) leans inward toward the midline; 0 keeps the arm in the sagittal plane. */
     val armInward: Pair<Double, Double> = 0.0 to 0.0,
+    /** Seen from behind at 45 degrees (the camera policy's rear oblique) instead of from the front at 45 degrees. */
+    val rear: Boolean = false,
 ) {
     STAND_ARMS_DOWN_SIDE(false, 0.0, 0.0 to 4.0),
     STAND_ARMS_DOWN_FRONT(true, 0.0, 8.0 to 6.0),
     STAND_ELBOW_BENT_SIDE(false, 8.0, -6.0 to 100.0),
-    OVERHEAD_EXTENSION_SIDE(false, 0.0, 170.0 to -70.0),
+    OVERHEAD_EXTENSION_SIDE(false, 2.0, 170.0 to -15.0, armInward = 2.0 to 40.0),
     // Start pose: upper arms straight up beside the head, forearms folded down and back behind it (the wrist is hidden by the head).
     CABLE_OVERHEAD_EXTENSION_SIDE(false, 2.0, 170.0 to -15.0, armInward = 2.0 to 40.0),
     // 45 degrees: a pure side view points the forearm along the camera axis, which hides the wrist and flattens its depth.
@@ -35,13 +37,16 @@ enum class CameraPoseFamily(
     PREACHER_SIDE(false, 10.0, 45.0 to 40.0),
     INCLINE_ARMS_DOWN_SIDE(false, 45.0, 0.0 to 0.0),
     INCLINE_PRESS_SIDE(false, 45.0, 180.0 to 180.0),
-    SEATED_ARMS_UP_SIDE(false, -12.0, 150.0 to 165.0),
-    SEATED_PRESS_FRONT(false, 0.0, 80.0 to 175.0),
+    // Wide grip overhead, seen from behind: arms go up and out.
+    SEATED_ARMS_UP_SIDE(false, -12.0, 180.0 to 180.0, armInward = -35.0 to -25.0, rear = true),
+    // Hands at shoulder height, elbows out to the sides and a little forward.
+    SEATED_PRESS_FRONT(false, 0.0, 15.0 to 180.0, armInward = -80.0 to 0.0),
     SEATED_ARMS_FORWARD_SIDE(false, 2.0, 85.0 to 88.0),
-    SEATED_CHEST_PRESS_SIDE(false, -5.0, -30.0 to 80.0),
+    // Handles at the chest: elbows out and slightly back, forearms pointing forward.
+    SEATED_CHEST_PRESS_SIDE(false, -5.0, -10.0 to 90.0, armInward = -70.0 to 0.0),
     ARMS_OPEN_FRONT(true, 0.0, 80.0 to 85.0),
     // Hands together in front of the chest. The fly gate measures elbow-shoulder-opposite shoulder, which a side view hides.
-    FLY_CLOSED_FRONT(true, 0.0, 0.0 to -75.0),
+    FLY_CLOSED_FRONT(true, 0.0, 8.0 to -75.0),
     BENT_OVER_SIDE(false, 62.0, 0.0 to 0.0),
     LYING_ARMS_UP_SIDE(false, 90.0, 180.0 to 180.0),
     LYING_EXTENSION_SIDE(false, 90.0, 170.0 to 70.0),
@@ -147,6 +152,42 @@ object CameraPoseGuide {
         return buildTurned(family, anchor)
     }
 
+    private class SideJoints(val shoulder: DoubleArray, val elbow: DoubleArray, val wrist: DoubleArray,
+        val hip: DoubleArray, val knee: DoubleArray?, val ankle: DoubleArray?)
+
+    private fun vec(x: Double, y: Double, z: Double) = doubleArrayOf(x, y, z)
+    private fun plus(a: DoubleArray, b: DoubleArray, k: Double) = vec(a[0] + b[0] * k, a[1] + b[1] * k, a[2] + b[2] * k)
+    private fun hipCenterOf(family: CameraPoseFamily) = Math.toRadians(family.torsoLean).let { vec(0.0, -TORSO * cos(it), -TORSO * sin(it)) }
+
+    /** Segment direction in body axes from a sagittal angle (degrees from straight down, positive forward) and an inward lean. */
+    private fun segment(sagittal: Double, inward: Double, inwardSign: Double): DoubleArray {
+        val a = Math.toRadians(sagittal); val b = Math.toRadians(inward)
+        return vec(inwardSign * sin(b), -cos(a) * cos(b), sin(a) * cos(b))
+    }
+
+    /** One body side, in body axes (x = the person's right, y = up, z = forward) in body heights, the shoulder line at y = 0. */
+    private fun sideJoints(family: CameraPoseFamily, side: Double): SideJoints {
+        val (upper, fore) = family.arm; val (upperIn, foreIn) = family.armInward
+        val shoulder = vec(side * SHOULDER_WIDTH / 2, 0.0, 0.0)
+        val inwardSign = -sign(side)
+        val elbow = plus(shoulder, segment(upper, upperIn, inwardSign), UPPER_ARM)
+        val wrist = plus(elbow, segment(fore, foreIn, inwardSign), FOREARM)
+        val hip = plus(hipCenterOf(family), vec(side * HIP_WIDTH / 2, 0.0, 0.0), 1.0)
+        val legs = family.leg
+        val knee = legs?.let { plus(hip, segment(it.first, 0.0, 0.0), THIGH) }
+        val ankle = if (legs != null && knee != null) plus(knee, segment(legs.second, 0.0, 0.0), SHANK) else null
+        return SideJoints(shoulder, elbow, wrist, hip, knee, ankle)
+    }
+
+    /** Landmark index (11..16 arms, 23..28 legs; odd = left) to body-frame position, for tests of the start-pose gate. */
+    internal fun bodyFrameJoints(family: CameraPoseFamily): Map<Int, DoubleArray> = buildMap {
+        for (onLeft in listOf(true, false)) {
+            val j = sideJoints(family, if (onLeft) -1.0 else 1.0); val o = if (onLeft) 0 else 1
+            put(11 + o, j.shoulder); put(13 + o, j.elbow); put(15 + o, j.wrist); put(23 + o, j.hip)
+            j.knee?.let { put(25 + o, it) }; j.ankle?.let { put(27 + o, it) }
+        }
+    }
+
     /**
      * Side families as a small 3D skeleton (MediaPipe-style joints) in body axes: x = the person's right, y = up, z = forward.
      * It is turned by the family's yaw and projected straight onto the image, so shoulder width, the head between the
@@ -154,37 +195,26 @@ object CameraPoseGuide {
      */
     private fun buildTurned(family: CameraPoseFamily, anchor: GuideAnchor): GuideFigure {
         val h = anchor.bodyHeight
-        val yaw = kotlin.math.acos(family.widthScale.coerceIn(0.0, 1.0))
+        val yaw = kotlin.math.acos(family.widthScale.coerceIn(0.0, 1.0)).let { if (family.rear) Math.PI - it else it }
         val f = anchor.facing.toDouble(); val cy = cos(yaw); val sy = sin(yaw)
         fun p(x: Double, y: Double, z: Double) = doubleArrayOf(x, y, z)
         fun screen(v: DoubleArray) = GuidePoint(-v[0] * cy + v[2] * f * sy, -v[1])
-        val anchorIsLeft = anchor.other.x <= anchor.shoulder.x
+        // From the front the left shoulder is on the image right; from behind it is on the image left.
+        val anchorIsLeft = if (family.rear) anchor.other.x >= anchor.shoulder.x else anchor.other.x <= anchor.shoulder.x
         val anchorSide = if (anchorIsLeft) -1.0 else 1.0
         val origin = screen(p(anchorSide * SHOULDER_WIDTH / 2, 0.0, 0.0))
         fun map(v: DoubleArray) = screen(v).let { GuidePoint(anchor.shoulder.x + (it.x - origin.x) * h, anchor.shoulder.y + (it.y - origin.y) * h) }
         fun add(a: DoubleArray, b: DoubleArray, k: Double) = p(a[0] + b[0] * k, a[1] + b[1] * k, a[2] + b[2] * k)
         val lean = Math.toRadians(family.torsoLean)
         val hipCenter = p(0.0, -TORSO * cos(lean), -TORSO * sin(lean))
-        // Segment direction from a sagittal angle (degrees from straight down, positive forward) and an inward lean.
-        fun segment(sagittal: Double, inward: Double, inwardSign: Double): DoubleArray {
-            val a = Math.toRadians(sagittal); val b = Math.toRadians(inward)
-            return p(inwardSign * sin(b), -cos(a) * cos(b), sin(a) * cos(b))
-        }
         val limbs = mutableListOf<GuideLimb>()
-        val (upper, fore) = family.arm; val (upperIn, foreIn) = family.armInward
         for ((side, primary) in listOf(-anchorSide to false, anchorSide to true)) {
-            val shoulder = p(side * SHOULDER_WIDTH / 2, 0.0, 0.0)
-            val inwardSign = -sign(side)
-            val elbow = add(shoulder, segment(upper, upperIn, inwardSign), UPPER_ARM)
-            val wrist = add(elbow, segment(fore, foreIn, inwardSign), FOREARM)
-            limbs += GuideLimb(listOf(map(shoulder), map(elbow), map(wrist)), .03 * h, primary)
+            val j = sideJoints(family, side)
+            limbs += GuideLimb(listOf(map(j.shoulder), map(j.elbow), map(j.wrist)), .03 * h, primary)
         }
-        family.leg?.let { (thigh, shank) ->
-            for ((side, primary) in listOf(-anchorSide to false, anchorSide to true)) {
-                val hip = add(hipCenter, p(side * HIP_WIDTH / 2, 0.0, 0.0), 1.0)
-                val knee = add(hip, segment(thigh, 0.0, 0.0), THIGH)
-                limbs += GuideLimb(listOf(map(hip), map(knee), map(add(knee, segment(shank, 0.0, 0.0), SHANK))), .04 * h, primary)
-            }
+        if (family.leg != null) for ((side, primary) in listOf(-anchorSide to false, anchorSide to true)) {
+            val j = sideJoints(family, side)
+            limbs += GuideLimb(listOf(map(j.hip), map(j.knee!!), map(j.ankle!!)), .04 * h, primary)
         }
         val shoulders = p(0.0, 0.0, 0.0)
         fun joint(side: Double, level: DoubleArray, width: Double) = map(add(level, p(side * width / 2, 0.0, 0.0), 1.0))
