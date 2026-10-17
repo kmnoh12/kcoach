@@ -46,7 +46,7 @@ class WearSensorQualityServiceTest {
         }
         fun cycles(quality: Int) {
             val amplitude = 100 * PI / 180
-            repeat(130) { sample(0.0, 0.0, quality) }
+            repeat(160) { sample(0.0, 0.0, quality) }
             repeat(3) {
                 for (i in 1..50) { val p = i / 50.0; sample(amplitude * (1 - cos(PI * p)) / 2, amplitude * PI * sin(PI * p) / 2, quality) }
                 for (i in 1..150) { val p = i / 150.0; sample(amplitude * (1 + cos(PI * p)) / 2, -amplitude * PI * sin(PI * p) / 6, quality) }
@@ -57,6 +57,7 @@ class WearSensorQualityServiceTest {
             service.onStartCommand(Intent().putExtra("command", "START").putExtra("session", "quality")
                 .putExtra("exerciseId", "barbell_biceps_curl").putExtra("setId", "set").putExtra("attemptId", "attempt")
                 .putExtra("targetReps", 10).putExtra("commandRevision", 1L), 0, 1)
+            repeat(160) { sample(0.0, 0.0, 3) } // the three-second still start hold, before any quality problem
             cycles(0)
             assertEquals("A reliable gyro must not turn bad acceleration into live counts", 0, reps())
             cycles(3)

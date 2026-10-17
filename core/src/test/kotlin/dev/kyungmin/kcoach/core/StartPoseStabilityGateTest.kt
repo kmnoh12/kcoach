@@ -98,6 +98,21 @@ class StartPoseStabilityGateTest {
         assertTrue(observation.ready)
     }
 
+    @Test
+    fun aWorkoutStartNeedsThreeStillSecondsAndAnyMovementRestartsTheCount() {
+        val gate = StartPoseStabilityGate(config.copy(stableDurationMs = StartPoseGateConfig.WORKOUT_HOLD_MS, requireSetupMotion = false))
+        var timestamp = 1_000_000_000L
+        var observation = gate.observe(sample(timestamp, gyro = 0.05f))
+        repeat(28) { timestamp += 100_000_000L; observation = gate.observe(sample(timestamp, gyro = 0.05f)) }
+        assertFalse(observation.ready, "2.8 s of stillness is not enough")
+        timestamp += 100_000_000L; observation = gate.observe(sample(timestamp, gyro = 1.5f))
+        assertFalse(observation.stable, "a shake restarts the hold")
+        repeat(25) { timestamp += 100_000_000L; observation = gate.observe(sample(timestamp, gyro = 0.05f)) }
+        assertFalse(observation.ready, "2.5 s after the shake is still not enough")
+        repeat(6) { timestamp += 100_000_000L; observation = gate.observe(sample(timestamp, gyro = 0.05f)) }
+        assertTrue(observation.ready)
+    }
+
     private fun arm(gate: StartPoseStabilityGate, startTimestamp: Long): Long {
         var timestamp = startTimestamp
         repeat(2) {

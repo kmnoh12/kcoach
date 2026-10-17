@@ -24,6 +24,9 @@ data class StartPoseGateConfig(
     val maxAccelerationAgeMs: Long = 100L,
 ) {
     companion object {
+        /** A workout set waits for the wrist to hold still this long before the start buzz and counting. */
+        const val WORKOUT_HOLD_MS = 3_000L
+
         fun forProfile(profile: ExerciseTrackingProfile): StartPoseGateConfig = when (profile.signal) {
             TrackingSignal.FOREARM_ROTATION -> StartPoseGateConfig(
                 maxGyroMagnitude = 0.75,

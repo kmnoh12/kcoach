@@ -1110,7 +1110,7 @@ class WearWorkoutService : Service(), SensorEventListener {
         forearmRotationDetector = null; profiledMotionDetector = null
         // Repetition-pattern selection and wrist preparation are independent. Keep the frozen
         // direction gate (or its restored ready state) when switching the primary counter.
-        if (startDirectionSnapshot.isEmpty()) {
+        if (startDirectionSnapshot.isEmpty() && !requiresStillStart()) {
             startPoseGate = null; measurementReady = true; measurementArmed = true
         }
     }
@@ -1205,24 +1205,28 @@ class WearWorkoutService : Service(), SensorEventListener {
         } else {
             null
         }
-        // START/SET is already an explicit request for this set. No exercise name alone has a
-        // hardware-reviewed wrist target yet. Do not reinterpret an arbitrary quiet wrist as
-        // a correct pose or make deferred grips wait two seconds. The legacy calibration
-        // baseline is a separate sensor-stability task, not an exercise posture verdict.
+        // No exercise name alone has a hardware-reviewed wrist target, so this is not a posture verdict:
+        // a workout set only waits for the wrist to hold still for a few seconds after START or the end
+        // of a rest, then buzzes and starts counting. The legacy calibration baseline is a separate task.
         val needsCalibrationBaseline = (calibrationStage == CalibrationStage.BASELINE || sessionId.startsWith("calibration-paired-")) &&
             trackingProfile.mode != TrackingMode.MANUAL_REQUIRED
         val direction = startDirectionSnapshot.takeIf { it.isNotEmpty() }?.let(dev.kyungmin.kcoach.core.StartDirectionRuntimeCodec::decode)
         startDirectionStatus = if (direction != null) "WAITING" else dev.kyungmin.kcoach.core.StartWristOrientationPolicy.uncheckedStartStatus(exerciseId)
-        measurementReady = !needsCalibrationBaseline && direction == null
-        measurementArmed = measurementReady
+        val needsStillStart = direction == null && requiresStillStart()
+        measurementReady = !needsCalibrationBaseline && direction == null && !needsStillStart
+        measurementArmed = measurementReady || needsStillStart
         startPoseGate = if (measurementReady) null else
             StartPoseStabilityGate(direction?.gateConfig ?: StartPoseGateConfig.forProfile(trackingProfile).copy(requireSetupMotion = false,
-                stableDurationMs = if (sessionId.startsWith("calibration-paired-")) 3_000L else 2_000L))
+                stableDurationMs = if (sessionId.startsWith("calibration-paired-") || needsStillStart) StartPoseGateConfig.WORKOUT_HOLD_MS else 2_000L))
         if (measurementReady && trackingProfile.mode != TrackingMode.MANUAL_REQUIRED) {
             forearmRotationDetector?.beginCounting()
             profiledMotionDetector?.beginCounting()
         }
     }
+
+    /** A workout set that is counted by sensors waits for the wrist to hold still before it starts measuring. */
+    private fun requiresStillStart() = dev.kyungmin.kcoach.core.CapturePurpose.forSession(sessionId) == dev.kyungmin.kcoach.core.CapturePurpose.WORKOUT &&
+        trackingProfile.mode != TrackingMode.MANUAL_REQUIRED
 
     private fun startRest(intent: Intent) {
         countingPaused = false
@@ -1320,7 +1324,8 @@ class WearWorkoutService : Service(), SensorEventListener {
             } else {
                 startPoseGate = StartPoseStabilityGate(startDirectionSnapshot.takeIf { it.isNotEmpty() }
                     ?.let(dev.kyungmin.kcoach.core.StartDirectionRuntimeCodec::decode)?.gateConfig
-                    ?: StartPoseGateConfig.forProfile(trackingProfile).copy(requireSetupMotion = false))
+                    ?: StartPoseGateConfig.forProfile(trackingProfile).copy(requireSetupMotion = false,
+                        stableDurationMs = if (requiresStillStart()) StartPoseGateConfig.WORKOUT_HOLD_MS else StartPoseGateConfig().stableDurationMs))
                 measurementArmed = true
                 sendLiveState(currentWorkingPhase(), true, force = true)
             }

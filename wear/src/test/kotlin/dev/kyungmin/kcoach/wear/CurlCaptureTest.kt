@@ -48,7 +48,7 @@ class CurlCaptureTest {
             t += 20_000_000L
         }
         repeat(3) { send(0.0, 1.2) }
-        repeat(130) { send(0.0, 0.0) }
+        repeat(160) { send(0.0, 0.0) }
         assertEquals(true, field("measurementReady").get(service))
         val amplitude = 100.0 * PI / 180.0
         repeat(5) {

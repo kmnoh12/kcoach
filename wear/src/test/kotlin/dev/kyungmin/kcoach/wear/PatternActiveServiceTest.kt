@@ -215,6 +215,10 @@ class PatternActiveServiceTest {
             .putExtra("exerciseId", "dumbbell_curl").putExtra("exerciseName", "컬").putExtra("targetReps", 1)
             .putExtra("setId", "set").putExtra("attemptId", "attempt")
             .putExtra("patternWearing", PatternWearingContext(key.localUserId, key.side, key.placement).encode()), 0, 1)
+        // This test is about the bound snapshot, not the three-second start hold: mark the hold as already satisfied.
+        if (!paired) listOf("measurementReady", "measurementArmed").forEach {
+            WearWorkoutService::class.java.getDeclaredField(it).apply { isAccessible = true }.setBoolean(service, true)
+        }
         fun send(type: Int, values: FloatArray) {
             val event = SensorEvent::class.java.getDeclaredConstructor(Int::class.javaPrimitiveType).apply { isAccessible = true }.newInstance(3)
             event.sensor = ShadowSensor.newInstance(type); event.timestamp = SystemClock.elapsedRealtimeNanos()

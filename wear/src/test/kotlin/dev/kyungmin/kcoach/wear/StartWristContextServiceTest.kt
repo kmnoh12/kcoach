@@ -158,7 +158,7 @@ class StartWristContextServiceTest {
         val app = RuntimeEnvironment.getApplication()
         val first = Robolectric.buildService(WearWorkoutService::class.java).create()
         first.get().onStartCommand(command(), 0, 1)
-        assertEquals("WORKING_START_UNCHECKED", state().getStringExtra("phase"))
+        assertEquals("PREPARING", state().getStringExtra("phase"))
         sample(first.get()); sample(first.get())
         first.get().onStartCommand(Intent().putExtra("command", "PAUSE").putExtra("session", "session").putExtra("commandRevision", 2L), 0, 2)
         first.get().onStartCommand(command(declared.copy(deviceTop = "HAND"), 3), 0, 3)
@@ -168,15 +168,15 @@ class StartWristContextServiceTest {
         val restored = Robolectric.buildService(WearWorkoutService::class.java).create()
         try {
             restored.get().onStartCommand(Intent().putExtra("command", "RESUME").putExtra("session", "session").putExtra("commandRevision", 4L), 0, 4)
-            assertEquals("WORKING_START_UNCHECKED", state().getStringExtra("phase"))
-            sample(restored.get())
+            assertEquals("PREPARING", state().getStringExtra("phase"))
+            repeat(160) { sample(restored.get()) } // a still wrist for three seconds starts the measurement and its capture
             restored.get().onStartCommand(Intent().putExtra("command", "STOP").putExtra("session", "session").putExtra("commandRevision", 5L), 0, 5)
             val manifest = WireCodec.decode(app.filesDir.listFiles()!!.single { it.name.endsWith(".manifest") }.readText())
             assertEquals(declared, StartWristContextCodec.decode(manifest.payload.getValue("startWristContext")))
             assertEquals(WearClockEpoch.current(app).deviceId, manifest.payload["startWristDeviceId"])
             assertEquals("UNCONFIRMED", manifest.payload["startDirectionStatus"])
             val raw = app.filesDir.listFiles()!!.single { it.name.endsWith(".kcs") }
-            assertEquals(3, SensorCaptureFormat.read(raw.inputStream()).sampleCount)
+            assertTrue("Only samples after the still start hold are captured", SensorCaptureFormat.read(raw.inputStream()).sampleCount in 1..30)
         } finally { restored.destroy() }
     }
     @Test fun authoritativeRestSyncDoesNotRequireAWorkingStartContext() {
