@@ -67,6 +67,48 @@ class ManualWatchFlowTest {
             assertEquals("PENDING", state().getStringExtra("manualStatus"))
         } finally { controller.destroy() }
     }
+    @Test fun currentWeightIsImmediateDurableAndFollowsPhoneSyncWithoutChangingCountDraft() {
+        val controller = Robolectric.buildService(WearWorkoutService::class.java).create()
+        val service = controller.get()
+        try {
+            service.onStartCommand(request("START").putExtra("exerciseId", "leg_press")
+                .putExtra("targetReps", 12).putExtra("weightKg", 30.0), 0, 1)
+            service.onStartCommand(request("EDIT_SET").putExtra("which", "CURRENT")
+                .putExtra("reps", -1).putExtra("weightKg", 35.0), 0, 2)
+            assertEquals(35.0, state().getDoubleExtra("weightKg", -1.0), 0.0)
+            assertTrue(state().getBooleanExtra("running", false))
+            val command = WatchWorkoutOutbox(RuntimeEnvironment.getApplication()).pending().single()
+            assertEquals("CURRENT", command.which); assertEquals(-1, command.reps)
+            assertEquals(35.0, command.weightKg!!, 0.0)
+            // Phone resync uses this same attempt and the persisted edited weight.
+            service.onStartCommand(request("SYNC").putExtra("exerciseId", "leg_press")
+                .putExtra("syncPhase", "WORKING").putExtra("targetReps", 12).putExtra("weightKg", 37.5), 0, 3)
+            assertEquals(37.5, state().getDoubleExtra("weightKg", -1.0), 0.0)
+            assertEquals(0, state().getIntExtra("reps", -1))
+            assertEquals(12, state().getIntExtra("targetReps", -1))
+            assertEquals(listOf(command), WatchWorkoutOutbox(RuntimeEnvironment.getApplication()).pending())
+        } finally { controller.destroy() }
+    }
+
+    @Test fun currentRejectsRestRepsMissingWeightAndMismatchedIdentity() {
+        val controller = Robolectric.buildService(WearWorkoutService::class.java).create()
+        val service = controller.get()
+        try {
+            service.onStartCommand(request("START").putExtra("exerciseId", "leg_press").putExtra("weightKg", 30.0), 0, 1)
+            fun edit() = request("EDIT_SET").putExtra("which", "CURRENT").putExtra("weightKg", 35.0)
+            val missing = edit().apply { removeExtra("weightKg") }
+            for (invalid in listOf(missing, edit().putExtra("reps", 0), edit().putExtra("session", "other"),
+                edit().putExtra("attemptId", "old"))) {
+                service.onStartCommand(invalid, 0, 2)
+                assertEquals(30.0, state().getDoubleExtra("weightKg", -1.0), 0.0)
+                assertTrue(WatchWorkoutOutbox(RuntimeEnvironment.getApplication()).pending().isEmpty())
+            }
+            rest(service)
+            service.onStartCommand(edit(), 0, 3)
+            assertTrue(WatchWorkoutOutbox(RuntimeEnvironment.getApplication()).pending().isEmpty())
+        } finally { controller.destroy() }
+    }
+
     @Test fun editsForwardPreviousAndNextWithoutInventingLocalResultsAndAckIsVisible() {
         val controller = Robolectric.buildService(WearWorkoutService::class.java).create()
         val service = controller.get()

@@ -84,7 +84,9 @@ class SessionStore(private val context: Context) {
                     WorkoutSnapshotCodec.decode(json.getString("snapshot")).copy(startedAtMs = nowMs)
                 }
                 WatchWorkoutAction.REST_ADJUST, WatchWorkoutAction.EDIT_SET -> {
-                    if (current?.sessionId != command.sessionId || current.phase != WorkoutPhase.RESTING || current.paused)
+                    val editingCurrent = command.action == WatchWorkoutAction.EDIT_SET && command.which == "CURRENT"
+                    val requiredPhase = if (editingCurrent) WorkoutPhase.WORKING else WorkoutPhase.RESTING
+                    if (current?.sessionId != command.sessionId || current.phase != requiredPhase || current.paused)
                         return@runCatching rejected(WatchWorkoutControlStatus.STALE)
                     val target = WorkoutSessionReducer.nextPendingSet(current)
                     // REST/SYNC identifies the next set, including an empty identity after the final set.
@@ -92,8 +94,10 @@ class SessionStore(private val context: Context) {
                         return@runCatching rejected(WatchWorkoutControlStatus.STALE)
                     val previous = current.plannedSets.singleOrNull {
                         SetIdentity.completionKey(current.sessionId, it) == current.lastCompletedSetKey && it.completed
-                    } ?: return@runCatching rejected(WatchWorkoutControlStatus.STALE)
+                    }
+                    if (!editingCurrent && previous == null) return@runCatching rejected(WatchWorkoutControlStatus.STALE)
                     if (command.action == WatchWorkoutAction.REST_ADJUST) {
+                        requireNotNull(previous)
                         val seconds = requireNotNull(command.restSeconds)
                         val sets = current.plannedSets.map {
                             if (it.exerciseIndex == previous.exerciseIndex) it.copy(
@@ -113,8 +117,9 @@ class SessionStore(private val context: Context) {
                                 performedReps = if (set.completed && command.reps >= 0) command.reps else set.performedReps,
                                 repSource = if (set.completed && command.reps >= 0) SetRepSource.MANUAL else set.repSource)
                         }
-                        current.copy(plannedSets = sets, performedReps = sets.filter { it.completed }
-                            .groupBy { it.exerciseId }.mapValues { (_, values) -> values.sumOf { it.performedReps ?: 0 } })
+                        current.copy(plannedSets = sets, performedReps = if (editingCurrent) current.performedReps else
+                            sets.filter { it.completed }.groupBy { it.exerciseId }
+                                .mapValues { (_, values) -> values.sumOf { it.performedReps ?: 0 } })
                     }
                 }
                 WatchWorkoutAction.NEXT_SET -> {
