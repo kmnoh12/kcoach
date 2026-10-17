@@ -9,3 +9,6 @@ work/
 
 # Review research data (large, regenerable with docs/research/gym-app-bad-reviews/collect_reviews_v2.py)
 docs/research/gym-app-bad-reviews/*.csv
+
+# agent worktrees
+.claude/worktrees/
