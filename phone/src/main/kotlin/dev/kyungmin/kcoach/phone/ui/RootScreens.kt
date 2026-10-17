@@ -225,7 +225,7 @@ fun HomeScreen(ui: HomeUi, running: RunningUi?, actions: HomeActions) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.Bottom) {
                 Text("홈", color = KColors.White, fontSize = 32.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
                 Text("이번 주 ", color = KColors.Muted, fontSize = 13.sp)
-                Text("${ui.weekCount}회", color = KColors.Accent, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                Text("${ui.weekCount}회", color = KColors.Sage, fontSize = 13.sp, fontWeight = FontWeight.Medium)
             }
             Spacer(Modifier.height(10.dp))
             WeekStrip(ui.week)
@@ -259,7 +259,7 @@ fun HomeScreen(ui: HomeUi, running: RunningUi?, actions: HomeActions) {
                     }
                     Spacer(Modifier.width(8.dp))
                     Box(Modifier.weight(1f).height(52.dp), contentAlignment = Alignment.Center) {
-                        ActionButton("새 루틴", Color(0xFFCFF1E8), KColors.OnAccent, outlined = false, modifier = Modifier.fillMaxWidth(0.9f).height(47.dp), onClick = actions.add, icon = KIcon.Plus)
+                        ActionButton("새 루틴", KColors.SurfaceRaised, KColors.White, outlined = false, modifier = Modifier.fillMaxWidth(0.9f).height(47.dp), onClick = actions.add, icon = KIcon.Plus)
                     }
                 }
             } else {
@@ -270,7 +270,7 @@ fun HomeScreen(ui: HomeUi, running: RunningUi?, actions: HomeActions) {
 }
 
 /** Brighter than KColors.Hairline so the routine list rows read as separate rows on the near-black home. */
-private val ROUTINE_DIVIDER = Color(0xFF2E3533)
+private val ROUTINE_DIVIDER = Color(0xFF302E2B)
 
 @Composable
 private fun WeekStrip(week: List<WeekDayUi>) {
@@ -291,9 +291,9 @@ private fun WeekStrip(week: List<WeekDayUi>) {
                 val barHeight by animateDpAsState(if (entered) target else minBar, Motion.panel(), label = "bar")
                 val color = when {
                     day.load != null -> KColors.Accent
-                    day.isToday -> KColors.White
-                    day.isFuture -> Color(0xFF161A19)
-                    else -> Color(0xFF1F2322)
+                    day.isToday -> KColors.Sage
+                    day.isFuture -> KColors.Surface
+                    else -> KColors.SurfaceRaised
                 }
                 Box(Modifier.fillMaxWidth().height(barHeight).clip(androidx.compose.foundation.shape.RoundedCornerShape(3.dp)).background(color))
                 Spacer(Modifier.height(3.dp))
@@ -315,7 +315,7 @@ private fun RestHero(row: RoutineRowUi2, onClick: () -> Unit) {
             .padding(horizontal = 16.dp)
             .fillMaxWidth()
             .clip(KShape.Control)
-            .border(0.5.dp, Color(0xFF333A38), KShape.Control)
+            .border(0.5.dp, Color(0xFF383631), KShape.Control)
             .pressable(onClick)
             .padding(start = 12.dp, top = 12.dp, end = 8.dp, bottom = 10.dp),
         verticalAlignment = Alignment.Bottom,
@@ -380,7 +380,7 @@ private fun ActionButton(text: String, background: Color, content: Color, outlin
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(KShape.Control)
             .background(background)
-            .then(if (outlined) Modifier.border(0.5.dp, Color(0xFF3A4240), KShape.Control) else Modifier)
+            .then(if (outlined) Modifier.border(0.5.dp, Color(0xFF3F3D39), KShape.Control) else Modifier)
             .clickable(interactionSource = source, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {

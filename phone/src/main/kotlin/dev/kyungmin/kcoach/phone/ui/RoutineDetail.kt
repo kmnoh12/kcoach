@@ -261,7 +261,7 @@ private fun RoutineButton(
             .height(66.dp)
             .clip(KShape.Control)
             .background(background)
-            .then(if (background == Color.Transparent) Modifier.border(0.5.dp, Color(0xFF3A4240), KShape.Control) else Modifier)
+            .then(if (background == Color.Transparent) Modifier.border(0.5.dp, Color(0xFF3F3D39), KShape.Control) else Modifier)
             .pressable(onClick),
         contentAlignment = Alignment.Center,
     ) {

@@ -30,18 +30,21 @@ object Motion {
 }
 
 object KColors {
-    val Bg = Color(0xFF0B0C0C)
-    val Surface = Color(0xFF161A19)
-    val SurfaceRaised = Color(0xFF1F2322)
-    val Selected = Color(0xFF262B2A)
-    val White = Color(0xFFF2F4F3)
-    val Muted = Color(0xFF8A9390)
-    val Soft = Color(0xFF98A3A0)
-    val Faint = Color(0xFF4F5654)
-    val Hairline = Color(0xFF232827)
-    val Accent = Color(0xFF2DD4BF)
-    val OnAccent = Color(0xFF04201C)
-    val AccentWash = Color(0xFF10312C)
+    val Bg = Color(0xFF151514)
+    val Surface = Color(0xFF1D1C1A)
+    val SurfaceRaised = Color(0xFF2A2927)
+    val Selected = Color(0xFF32312E)
+    val White = Color(0xFFF1EEE7)
+    val Muted = Color(0xFF94908A)
+    val Soft = Color(0xFFA39F98)
+    val Faint = Color(0xFF5A5751)
+    val Hairline = Color(0xFF262624)
+    /** Bone: the lead colour for big numbers and primary buttons. */
+    val Accent = Color(0xFFEDE8DC)
+    /** Muted sage: state only (measuring, today, progress, records). */
+    val Sage = Color(0xFF8FCFBA)
+    val OnAccent = Color(0xFF171612)
+    val AccentWash = Color(0xFF1F2B27)
     val Red = Color(0xFFE5483B)
 }
 

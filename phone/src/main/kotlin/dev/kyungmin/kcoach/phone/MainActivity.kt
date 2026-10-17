@@ -193,16 +193,16 @@ class MainActivity : ComponentActivity() {
         val captureStates: MutableMap<String, CaptureState> = mutableMapOf(),
     )
 
-    private val bg = Color.rgb(11, 12, 12)
-    private val surface = Color.rgb(22, 26, 25)
-    private val surfaceRaised = Color.rgb(31, 35, 34)
-    private val white = Color.rgb(242, 244, 243)
-    private val muted = Color.rgb(138, 147, 144)
-    private val faint = Color.rgb(79, 86, 84)
-    private val amber = Color.rgb(45, 212, 191)
-    private val amberDark = Color.rgb(45, 212, 191)
-    private val blue = Color.rgb(152, 163, 160)
-    private val green = Color.rgb(45, 212, 191)
+    private val bg = Color.rgb(21, 21, 20)
+    private val surface = Color.rgb(29, 28, 26)
+    private val surfaceRaised = Color.rgb(42, 41, 39)
+    private val white = Color.rgb(241, 238, 231)
+    private val muted = Color.rgb(148, 144, 138)
+    private val faint = Color.rgb(90, 87, 81)
+    private val amber = Color.rgb(237, 232, 220)
+    private val amberDark = Color.rgb(237, 232, 220)
+    private val blue = Color.rgb(163, 159, 152)
+    private val green = Color.rgb(143, 207, 186)
 
     private val routines = WorkoutData.defaultRoutines()
     private val routineLibraryStore by lazy { RoutineLibraryStore(this) }
@@ -2488,7 +2488,7 @@ class MainActivity : ComponentActivity() {
 
     private fun anatomyPlaceholder(heightDp: Int): View = FrameLayout(this).apply {
         minimumHeight = dp(heightDp)
-        background = rounded(Color.rgb(23, 26, 26), 20)
+        background = rounded(Color.rgb(30, 29, 27), 20)
         outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
         clipToOutline = true
     }

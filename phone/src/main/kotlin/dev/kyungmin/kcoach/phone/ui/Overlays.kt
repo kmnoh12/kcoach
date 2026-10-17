@@ -477,7 +477,7 @@ fun StopWorkoutDialog(
     ) { Text("저장하고 종료", color = KColors.OnAccent, fontSize = 16.sp, fontWeight = FontWeight.Medium) }
     Spacer(Modifier.height(10.dp))
     Box(
-        Modifier.fillMaxWidth().heightIn(min = 50.dp).clip(KShape.Control).border(0.5.dp, Color(0xFF3A4240), KShape.Control)
+        Modifier.fillMaxWidth().heightIn(min = 50.dp).clip(KShape.Control).border(0.5.dp, Color(0xFF3F3D39), KShape.Control)
             .pressable { dismiss(); onDiscard() },
         contentAlignment = Alignment.Center,
     ) { Text("저장 안 하고 종료", color = KColors.Red, fontSize = 16.sp, fontWeight = FontWeight.Medium) }

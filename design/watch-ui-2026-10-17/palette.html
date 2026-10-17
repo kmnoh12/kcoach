@@ -1,0 +1,303 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>팔레트 비교 시안</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0B0C0C; --surface:#161A19; --raised:#1F2322; --hair:#232827;
+  --white:#F2F4F3; --soft:#98A3A0; --muted:#8A9390; --faint:#4F5654;
+  --mint:#2DD4BF; --on-mint:#04201C; --wash:#10312C;
+  --z1:#7C8E9C; --z2:#4DA3FF; --z3:#4FD18B; --z4:#FFA033; --z5:#E5483B; --rest:#FFD233; --over:#FFA033; --red:#E5483B;
+  --font:Roboto,"Noto Sans KR","Apple SD Gothic Neo",sans-serif;
+}
+*{box-sizing:border-box;margin:0}
+body{background:var(--bg);color:var(--white);font-family:var(--font);padding:48px 24px 72px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto}
+h1{font-size:22px;font-weight:500;letter-spacing:-.2px}
+.lead{color:var(--soft);font-size:14px;line-height:1.7;margin-top:8px;max-width:680px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:56px 32px;margin-top:44px}
+@media(max-width:980px){.grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:640px){.grid{grid-template-columns:1fr}}
+.item{display:flex;flex-direction:column;align-items:center}
+.cap{margin-top:18px;text-align:left;width:min(100%,340px)}
+.cap b{display:block;font-size:14px;font-weight:500}
+.cap span{display:block;color:var(--soft);font-size:12.5px;line-height:1.65;margin-top:4px}
+.tag{display:inline-block;color:var(--mint);font-size:11px;letter-spacing:.3px;margin-bottom:6px}
+
+/* 워치: 432 격자를 --u 로 환산 */
+.watch{width:min(100%,340px);aspect-ratio:1;border-radius:50%;background:#000;position:relative;container-type:size;overflow:hidden;
+  box-shadow:0 0 0 2px #1b1d1d,0 0 0 9px #0f1010,0 0 0 10px #232626}
+.face{--u:calc(100cqw/432);position:absolute;inset:0}
+.abs{position:absolute;left:0;right:0;text-align:center;white-space:nowrap}
+.ring{position:absolute;inset:0;width:100%;height:100%}
+.clock{top:calc(var(--u)*42);font-size:calc(var(--u)*26);color:var(--white);font-weight:500;letter-spacing:.2px;line-height:1}
+.name{font-size:calc(var(--u)*34);font-weight:700;line-height:1;letter-spacing:-.3px}
+.sub{font-size:calc(var(--u)*22);color:var(--soft);line-height:1}
+.num{font-family:Roboto,sans-serif;font-weight:500;line-height:1;letter-spacing:calc(var(--u)*-4)}
+.dots{bottom:calc(var(--u)*20);display:flex;justify-content:center;gap:calc(var(--u)*9)}
+.dots i{width:calc(var(--u)*8);height:calc(var(--u)*8);border-radius:50%;background:var(--faint)}
+.dots i.on{background:var(--white)}
+.chev{position:absolute;left:50%;width:calc(var(--u)*34);height:calc(var(--u)*17);margin-left:calc(var(--u)*-17);fill:none;stroke:var(--soft);stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.chev.u{top:calc(var(--u)*14)}.chev.d{bottom:calc(var(--u)*17)}
+.jog{position:absolute;left:calc(var(--u)*80);right:calc(var(--u)*80);top:calc(var(--u)*226);height:calc(var(--u)*48);background:var(--raised);border-radius:calc(var(--u)*12)}
+.jog i{position:absolute;top:50%;transform:translateY(-50%);font-style:normal;color:var(--muted);font-size:calc(var(--u)*26);font-weight:500;line-height:1}
+.jog .jm{left:calc(var(--u)*18)}.jog .jp{right:calc(var(--u)*18)}
+.jog .knob{position:absolute;top:calc(var(--u)*4);left:50%;width:calc(var(--u)*92);height:calc(var(--u)*40);margin-left:calc(var(--u)*-46);border-radius:calc(var(--u)*9);background:#323837;color:var(--white);font-size:calc(var(--u)*22);font-weight:700;display:flex;align-items:center;justify-content:center}
+.jog.adj .knob{transform:translateX(calc(var(--u)*64));background:var(--rest);color:#241A00}
+.jog.adj .jp{opacity:0}
+.stepper{position:absolute;left:calc(var(--u)*66);right:calc(var(--u)*66);top:calc(var(--u)*216);height:calc(var(--u)*38);display:flex;align-items:center;justify-content:space-between}
+.stp{display:flex;align-items:center;justify-content:center;width:calc(var(--u)*88);height:calc(var(--u)*38);border-radius:calc(var(--u)*12);background:var(--raised);color:var(--white);font-size:calc(var(--u)*24);font-weight:500;font-family:Roboto,sans-serif}
+.stp.on{background:var(--rest);color:#241A00}
+.hintrot{display:flex;color:var(--muted)}
+.rot{width:calc(var(--u)*30);height:calc(var(--u)*30);fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.ruler{position:absolute;left:calc(var(--u)*96);right:calc(var(--u)*96);top:calc(var(--u)*226);height:calc(var(--u)*28);overflow:hidden}
+.ruler .tk{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;align-items:center;gap:calc(var(--u)*8);height:100%}
+.ruler.adj .tk{transform:translate(calc(-50% - var(--u)*16),-50%)}
+.ruler .tk i{display:block;width:calc(var(--u)*2);height:calc(var(--u)*10);background:var(--faint);border-radius:1px;flex:none}
+.ruler .tk i.m{height:calc(var(--u)*18);background:var(--muted)}
+.ruler .caret{position:absolute;left:50%;top:0;bottom:0;width:calc(var(--u)*3);margin-left:calc(var(--u)*-1.5);background:var(--rest);border-radius:2px}
+.hair{position:absolute;height:calc(var(--u)*1.5);background:var(--hair)}
+svg.ic{width:1em;height:1em;stroke:currentColor;fill:none;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;vertical-align:-.12em}
+
+/* 1 · 측정 */
+.s1 .name{top:calc(var(--u)*72)}
+.s1 .sub{top:calc(var(--u)*116);display:flex;justify-content:center;align-items:center;gap:calc(var(--u)*10)}
+.s1 .sub .live{width:calc(var(--u)*9);height:calc(var(--u)*9);border-radius:50%;background:var(--mint)}
+.count{top:calc(var(--u)*148);height:calc(var(--u)*170);display:flex;justify-content:center;align-items:flex-end;gap:calc(var(--u)*14)}
+.count .num{font-size:calc(var(--u)*176);color:var(--mint)}
+.count .of{font-size:calc(var(--u)*30);color:var(--soft);padding-bottom:calc(var(--u)*30);font-weight:400;letter-spacing:0}
+.metrics{top:calc(var(--u)*338);display:flex;justify-content:center;align-items:center;gap:calc(var(--u)*44)}
+.metrics div{display:flex;align-items:baseline;gap:calc(var(--u)*6)}
+.metrics .v{font-size:calc(var(--u)*34);font-weight:500;color:var(--white);font-family:Roboto,sans-serif}
+.metrics .u{font-size:calc(var(--u)*20);color:var(--muted)}
+.metrics .h{align-self:center;display:flex;width:calc(var(--u)*32.4);height:calc(var(--u)*32.4);align-items:center;justify-content:center;color:var(--hc,var(--z2))}
+.heart{width:100%;height:100%;fill:currentColor;stroke:currentColor;stroke-width:1.2;stroke-linejoin:round;transform-origin:50% 55%;animation:beat var(--beat,.6s) ease-in-out infinite}
+@keyframes beat2{0%,24%{transform:scale(1.18)}25%,100%{transform:scale(1)}}
+.heart.two{animation:beat2 var(--beat,.6s) step-end infinite}
+@keyframes beat{0%{transform:scale(1)}14%{transform:scale(1.22)}28%{transform:scale(1)}42%{transform:scale(1.12)}56%,100%{transform:scale(1)}}
+@media(prefers-reduced-motion:reduce){.heart{animation:none}}
+.vsep{position:absolute;top:calc(var(--u)*336);left:50%;width:calc(var(--u)*1.5);height:calc(var(--u)*38);background:var(--hair)}
+
+/* 3 · 저장 */
+.s3 .check{top:calc(var(--u)*104);display:flex;justify-content:center}
+.s3 .check svg{width:calc(var(--u)*104);height:calc(var(--u)*104);stroke:var(--mint);stroke-width:2.2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.s3 .name2{top:calc(var(--u)*236);font-size:calc(var(--u)*36);font-weight:700;line-height:1}
+.s3 .sub{top:calc(var(--u)*284)}
+.s3 .sub b{color:var(--white);font-weight:500;font-family:Roboto,sans-serif;font-size:calc(var(--u)*28)}
+.s3 .rec{top:calc(var(--u)*336);font-size:calc(var(--u)*20);color:var(--mint);line-height:1}
+
+/* 4 · 휴식 */
+.s4 .lab{top:calc(var(--u)*78);font-size:calc(var(--u)*22);color:var(--rest);font-weight:500;line-height:1;letter-spacing:.3px}
+.s4 .big{top:calc(var(--u)*100);font-size:calc(var(--u)*126);color:var(--rest);}
+.s4 .goal{top:calc(var(--u)*216);font-size:calc(var(--u)*20);color:var(--muted);line-height:1}
+.panel{position:absolute;left:calc(var(--u)*72);right:calc(var(--u)*72);top:calc(var(--u)*296);height:calc(var(--u)*54);background:var(--surface);border-radius:calc(var(--u)*18);padding:0 calc(var(--u)*20)}
+.panel .row{height:50%;display:flex;align-items:center;justify-content:space-between}
+.panel .row:only-child{height:100%}
+.panel .row+.row{border-top:calc(var(--u)*1.5) solid var(--hair)}
+.panel .k{font-size:calc(var(--u)*19);color:var(--muted)}
+.panel .v{font-size:calc(var(--u)*25);font-weight:500;font-family:Roboto,"Noto Sans KR",sans-serif;color:var(--white)}
+.panel .row.next .k{color:var(--soft)}
+.panel .row.next .v{color:var(--white)}
+.skip{top:calc(var(--u)*368);font-size:calc(var(--u)*21);color:var(--soft);line-height:1}
+
+/* 5 · 보조 */
+.s5 .hr{top:calc(var(--u)*72);display:flex;justify-content:center;align-items:baseline;gap:calc(var(--u)*10)}
+.s5 .hr .num{font-size:calc(var(--u)*112);color:var(--z2);letter-spacing:calc(var(--u)*-3)}
+.s5 .hr .u{font-size:calc(var(--u)*22);color:var(--muted)}
+.zone{position:absolute;left:calc(var(--u)*84);right:calc(var(--u)*84);top:calc(var(--u)*204);height:calc(var(--u)*16);display:flex;gap:calc(var(--u)*5)}
+.zone i{flex:1;border-radius:calc(var(--u)*3);opacity:.28}
+.zone i.on{opacity:1}
+.zone i:nth-child(1){background:var(--z1)}.zone i:nth-child(2){background:var(--z2)}.zone i:nth-child(3){background:var(--z3)}.zone i:nth-child(4){background:var(--z4)}.zone i:nth-child(5){background:var(--z5)}
+.zlab{top:calc(var(--u)*232);font-size:calc(var(--u)*22);color:var(--z2);line-height:1;font-weight:700;letter-spacing:calc(var(--u)*1.5)}
+.pair{top:calc(var(--u)*290);display:flex;justify-content:center;gap:calc(var(--u)*48)}
+.pair div{display:flex;flex-direction:column;align-items:center;gap:calc(var(--u)*8)}
+.pair .v{font-size:calc(var(--u)*40);font-family:Roboto,sans-serif;font-weight:500;line-height:1}
+.pair .k{font-size:calc(var(--u)*18);color:var(--muted);line-height:1}
+
+/* 6 · 세트 메뉴 */
+.s6 .name{top:calc(var(--u)*64);font-size:calc(var(--u)*30)}
+.s6 .sub{top:calc(var(--u)*102)}
+.s6 .name{top:calc(var(--u)*58);font-size:calc(var(--u)*30)}
+.s6 .sub{top:calc(var(--u)*98)}
+.glow{position:absolute;left:0;right:0;bottom:0;height:calc(var(--u)*150);background:linear-gradient(to top,rgba(229,72,59,.50),rgba(229,72,59,.18) 55%,rgba(229,72,59,0));pointer-events:none}
+.skip.hot{color:#FF6A5C;font-weight:700}
+.chev.hot{stroke:#FF6A5C}
+.s4pull .pull{position:absolute;inset:0;transform:translateY(calc(var(--u)*-108))}
+.s4pull .glow{height:calc(var(--u)*190);background:linear-gradient(to top,rgba(229,72,59,.62),rgba(229,72,59,.22) 58%,rgba(229,72,59,0))}
+.s4pull .go{bottom:calc(var(--u)*62);font-size:calc(var(--u)*30);font-weight:700;color:#FF6A5C;line-height:1}
+.s4pull .ring{z-index:2}
+.seg{position:absolute;left:calc(var(--u)*50);right:calc(var(--u)*50);top:calc(var(--u)*108);height:calc(var(--u)*44);background:#2C3332;border-radius:calc(var(--u)*12);display:flex;padding:calc(var(--u)*4);gap:calc(var(--u)*4)}
+.seg b{flex:1;display:flex;align-items:center;justify-content:center;border-radius:calc(var(--u)*9);font-size:calc(var(--u)*20);font-weight:500;color:var(--muted)}
+.seg b.on{background:#4A5352;color:var(--white);font-weight:700}
+.edrow{position:absolute;left:calc(var(--u)*38);right:calc(var(--u)*38);height:calc(var(--u)*62);display:flex;gap:calc(var(--u)*8)}
+.edrow.r1{top:calc(var(--u)*134)}.edrow.r2{top:calc(var(--u)*206)}
+.eb{flex:0 0 calc(var(--u)*76);display:flex;align-items:center;justify-content:center;background:#343B3A;border-radius:calc(var(--u)*12);font-size:calc(var(--u)*34);font-weight:400;color:#FFFFFF;font-family:Roboto,sans-serif}
+.eb.s{flex:0 0 calc(var(--u)*62);font-size:calc(var(--u)*22);font-weight:500}
+.edrow .ev{background:#232928}
+.edrow .eb{font-weight:600;color:#FFFFFF}
+.edrow .eb:nth-child(2),.edrow .eb:nth-child(4){background:#343B3A}
+.edrow .eb:nth-child(1),.edrow .eb:nth-child(5){background:#505958}
+
+.ev{flex:1;display:flex;align-items:center;white-space:nowrap;justify-content:center;gap:calc(var(--u)*4);background:var(--surface);border-radius:calc(var(--u)*12);padding:0}
+.ev .n{font-size:calc(var(--u)*31);font-weight:500;font-family:Roboto,sans-serif;line-height:1.1}
+.ev .k{font-size:calc(var(--u)*16);color:var(--muted);padding-top:calc(var(--u)*4)}
+.s6 .btn.p{left:calc(var(--u)*76);right:calc(var(--u)*76);top:calc(var(--u)*298);height:calc(var(--u)*64);font-size:calc(var(--u)*24)}
+.btn{position:absolute;left:calc(var(--u)*68);right:calc(var(--u)*68);height:calc(var(--u)*66);border-radius:calc(var(--u)*14);display:flex;align-items:center;justify-content:center;font-size:calc(var(--u)*25);font-weight:700}
+.btn.p{background:var(--mint);color:var(--on-mint);top:calc(var(--u)*140)}
+.btn.s{background:var(--surface);color:var(--white);font-weight:500}
+.btn.s.a{top:calc(var(--u)*218)}
+.btn.s.b{top:calc(var(--u)*296)}
+
+/* 2 · 목표 초과 */
+.over .num{color:var(--over)}
+.over .tagline{top:calc(var(--u)*116);color:var(--rest);font-size:calc(var(--u)*22);line-height:1;font-weight:500}
+
+.notes{margin-top:72px;display:grid;grid-template-columns:repeat(2,1fr);gap:28px 48px;border-top:1px solid var(--hair);padding-top:36px}
+@media(max-width:760px){.notes{grid-template-columns:1fr}}
+.notes h2{font-size:15px;font-weight:500;margin-bottom:10px}
+.notes p,.notes li{color:var(--soft);font-size:13px;line-height:1.75}
+.notes ul{padding-left:18px}
+.sw{display:inline-block;width:11px;height:11px;border-radius:2px;margin-right:7px;vertical-align:-1px}
+
+/* 기록 갱신 · 보정 · 결과 */
+.wash{position:absolute;left:calc(var(--u)*58);right:calc(var(--u)*58);top:calc(var(--u)*104);height:calc(var(--u)*150);background:var(--wash);border-radius:calc(var(--u)*20)}
+.rec1 .tl{top:calc(var(--u)*76);font-size:calc(var(--u)*22);color:var(--mint);font-weight:700;letter-spacing:calc(var(--u)*.5);line-height:1}
+.rec1 .hd{top:calc(var(--u)*118);font-size:calc(var(--u)*100);color:var(--white);letter-spacing:calc(var(--u)*-3)}
+.rec1 .hd small{font-size:calc(var(--u)*34);color:var(--soft);font-weight:400;letter-spacing:0;margin-left:calc(var(--u)*6)}
+.rec1 .dt{top:calc(var(--u)*276);font-size:calc(var(--u)*24);color:var(--mint);line-height:1;font-weight:500}
+.rec1 .ex{top:calc(var(--u)*322);font-size:calc(var(--u)*22);color:var(--soft);line-height:1}
+.rec2 .tl{top:calc(var(--u)*92);font-size:calc(var(--u)*22);color:var(--mint);font-weight:700;line-height:1}
+.rec2 .hd{top:calc(var(--u)*134);font-size:calc(var(--u)*64);color:var(--white);letter-spacing:calc(var(--u)*-1.5)}
+.rec2 .hd small{font-size:calc(var(--u)*26);color:var(--soft);font-weight:400;letter-spacing:0;margin:0 calc(var(--u)*6) 0 calc(var(--u)*2)}
+.rec2 .dt{top:calc(var(--u)*226);font-size:calc(var(--u)*22);color:var(--soft);line-height:1}
+.rec2 .ex{top:calc(var(--u)*292);font-size:calc(var(--u)*22);color:var(--white);line-height:1;font-weight:500}
+.cal .tl{top:calc(var(--u)*84);font-size:calc(var(--u)*22);color:var(--mint);font-weight:700;letter-spacing:calc(var(--u)*1);line-height:1}
+.cal .msg{top:calc(var(--u)*122);font-size:calc(var(--u)*24);color:var(--soft);line-height:1}
+.cal .bg{top:calc(var(--u)*158);font-size:calc(var(--u)*150);color:var(--mint)}
+.cal .ft{top:calc(var(--u)*336);font-size:calc(var(--u)*20);color:var(--muted);line-height:1;display:flex;align-items:center;justify-content:center;gap:calc(var(--u)*10)}
+.cal .ft i{width:calc(var(--u)*9);height:calc(var(--u)*9);border-radius:50%;background:var(--mint)}
+.cal .cnt{top:calc(var(--u)*144);height:calc(var(--u)*150)}
+.res .t1{top:calc(var(--u)*74);font-size:calc(var(--u)*28);font-weight:700;color:var(--white);line-height:1;display:flex;align-items:center;justify-content:center;gap:calc(var(--u)*10)}
+.res .t1 svg{width:calc(var(--u)*30);height:calc(var(--u)*30);stroke:var(--mint);stroke-width:2.4;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.res .time{top:calc(var(--u)*108);font-size:calc(var(--u)*86);color:var(--white)}
+.res .tk{top:calc(var(--u)*204);font-size:calc(var(--u)*19);color:var(--muted);line-height:1}
+.res .grid2{top:calc(var(--u)*236);display:flex;justify-content:center;gap:calc(var(--u)*34)}
+.res .grid2 div{display:flex;flex-direction:column;align-items:center;gap:calc(var(--u)*6)}
+.res .grid2 .v{font-size:calc(var(--u)*36);font-weight:500;font-family:Roboto,sans-serif;line-height:1}
+.res .grid2 .k{font-size:calc(var(--u)*17);color:var(--muted);line-height:1}
+.res .rc{top:calc(var(--u)*308);font-size:calc(var(--u)*21);color:var(--mint);line-height:1;font-weight:500}
+.res .more{position:absolute;left:calc(var(--u)*106);right:calc(var(--u)*106);top:calc(var(--u)*340);height:calc(var(--u)*38);background:#343B3A;border-radius:calc(var(--u)*12);display:flex;align-items:center;justify-content:center;font-size:calc(var(--u)*20);font-weight:500}
+
+.count .win{display:block;width:calc(var(--u)*204);height:calc(var(--u)*170);overflow:hidden;position:relative}
+.count .strip{display:block;animation:roll 5.5s cubic-bezier(.4,0,.2,1) infinite}
+.count .strip .d{display:flex;align-items:flex-end;justify-content:center;height:calc(var(--u)*170);font-family:Roboto,sans-serif;font-weight:500;line-height:1;letter-spacing:calc(var(--u)*-4);font-size:calc(var(--u)*176);color:var(--mint)}
+@keyframes roll{
+0%,16%{transform:translateY(0)}20%,36%{transform:translateY(calc(var(--u)*-170))}40%,56%{transform:translateY(calc(var(--u)*-340))}60%,76%{transform:translateY(calc(var(--u)*-510))}80%,96%{transform:translateY(calc(var(--u)*-680))}100%{transform:translateY(calc(var(--u)*-850))}}
+.ring .progress{animation:fill 5.5s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes fill{0%,16%{stroke-dasharray:875 1313}20%,36%{stroke-dasharray:985 1313}40%,56%{stroke-dasharray:1094 1313}60%,76%{stroke-dasharray:1204 1313}80%,96%{stroke-dasharray:1313 1313}100%{stroke-dasharray:875 1313}}
+@media(prefers-reduced-motion:reduce){.count .strip,.ring .progress{animation:none}}
+
+:root{--bone:#EDE8DC;--sage:#8FCFBA}
+.cmp3{display:grid;grid-template-columns:repeat(3,1fr);gap:40px 20px;margin-top:28px}
+@media(max-width:900px){.cmp3{grid-template-columns:1fr}}
+.cmp{display:grid;grid-template-columns:1fr 1fr;gap:40px 28px;margin-top:28px}
+@media(max-width:700px){.cmp{grid-template-columns:1fr}}
+h2.sec{font-size:17px;font-weight:500;margin-top:64px}
+.bone .count .strip .d{color:var(--bone)}
+.bone .ring circle[stroke="#2DD4BF"]{stroke:var(--sage)}
+.bone .s1 .sub .live{background:var(--sage)}
+.bone .clock,.bone .name,.bone .metrics .v,.bone .panel .v{color:var(--bone)}
+.bone .skip{color:#BFB9AB}
+.bone .jog .knob{color:var(--bone)}
+.phone{width:min(100%,330px);aspect-ratio:9/20;border-radius:34px;position:relative;container-type:size;overflow:hidden;background:#0B0C0C;box-shadow:0 0 0 2px #1b1d1d,0 0 0 9px #0f1010,0 0 0 10px #232626}
+.phone.g1{background:#151514;--hl:#262624;--hb:#33322F;--ib:#2A2927;--b2:#2A2927}
+.phone.g2{background:#1F1E1B;--hl:#302E2A;--hb:#3D3B36;--ib:#35332F;--b2:#35332F}
+.pf{--p:calc(100cqw/900);position:absolute;inset:0;font-family:var(--font)}
+.pf .a{position:absolute;white-space:nowrap;line-height:1}
+.pf.cur{--big:#2DD4BF;--btn:#2DD4BF;--btnt:#04201C;--btn2:#CDEFE7;--btn2t:#04201C;--mark:#2DD4BF;--today:#F2F4F3;--cnt:#2DD4BF}
+.pf.bn{--big:#EDE8DC;--btn:#EDE8DC;--btnt:#171612;--btn2:var(--b2,#232928);--btn2t:#EDE8DC;--mark:#EDE8DC;--today:#8FCFBA;--cnt:#8FCFBA}
+.pf .ttl{left:calc(var(--p)*42);top:calc(var(--p)*68);font-size:calc(var(--p)*84);color:#F2F4F3}
+.pf .wk{right:calc(var(--p)*42);top:calc(var(--p)*118);font-size:calc(var(--p)*36);color:#98A3A0}
+.pf .wk b{color:var(--cnt);font-weight:700}
+.pf .bar{position:absolute;width:calc(var(--p)*105);border-radius:calc(var(--p)*12)}
+.pf .dayl{position:absolute;width:calc(var(--p)*105);text-align:center;font-size:calc(var(--p)*26);color:#8A9390;top:calc(var(--p)*274)}
+.pf .hero{position:absolute;left:calc(var(--p)*40);right:calc(var(--p)*40);top:calc(var(--p)*340);height:calc(var(--p)*242);border:calc(var(--p)*1.5) solid var(--hb,#2B3130);border-radius:calc(var(--p)*14)}
+.pf .big9{left:calc(var(--p)*72);top:calc(var(--p)*385);font-size:calc(var(--p)*150);color:var(--big);font-family:Roboto,sans-serif;font-weight:500}
+.pf .h1{left:calc(var(--p)*186);top:calc(var(--p)*402);font-size:calc(var(--p)*30);color:#98A3A0}
+.pf .h2{left:calc(var(--p)*186);top:calc(var(--p)*442);font-size:calc(var(--p)*56);color:#F2F4F3;font-weight:500}
+.pf .h3{left:calc(var(--p)*186);top:calc(var(--p)*516);font-size:calc(var(--p)*30);color:#98A3A0}
+.pf .sect{left:calc(var(--p)*42);top:calc(var(--p)*640);font-size:calc(var(--p)*32);color:#8A9390}
+.pf .sect2{right:calc(var(--p)*42);top:calc(var(--p)*640);font-size:calc(var(--p)*32);color:#8A9390}
+.pf .hl{position:absolute;left:0;right:0;height:calc(var(--p)*3);background:var(--hl,#1F2423)}
+.pf .rn{left:calc(var(--p)*42);font-size:calc(var(--p)*40);color:#F2F4F3}
+.pf .rs{left:calc(var(--p)*42);font-size:calc(var(--p)*30);color:#8A9390}
+.pf .rv{right:calc(var(--p)*120);font-size:calc(var(--p)*58);color:#F2F4F3;font-family:Roboto,sans-serif;font-weight:500;text-align:right}
+.pf .ru{right:calc(var(--p)*120);font-size:calc(var(--p)*26);color:#8A9390}
+.pf .no{right:calc(var(--p)*120);font-size:calc(var(--p)*32);color:#8A9390}
+.pf .dots3{position:absolute;right:calc(var(--p)*58);width:calc(var(--p)*8);height:calc(var(--p)*8);border-radius:50%;background:#6C7573;box-shadow:0 calc(var(--p)*-18) 0 #6C7573,0 calc(var(--p)*18) 0 #6C7573}
+.pf .b1,.pf .b2{position:absolute;top:calc(var(--p)*1847);width:calc(var(--p)*360);height:calc(var(--p)*116);border-radius:calc(var(--p)*18);display:flex;align-items:center;justify-content:center;font-size:calc(var(--p)*44)}
+.pf .b1{left:calc(var(--p)*60);background:var(--btn);color:var(--btnt)}
+.pf .b2{left:calc(var(--p)*480);background:var(--btn2);color:var(--btn2t)}
+</style></head><body><div class="wrap">
+<h1>팔레트 비교: 지금 민트 vs 뼈색 + 세이지 민트</h1>
+<p class="lead">검정 바탕은 그대로 두고 큰 숫자와 주요 버튼을 뼈색(#EDE8DC)으로, 상태 표시(측정 중 점, 진행 링, 오늘 표시)를 톤을 죽인 세이지 민트(#8FCFBA)로 바꾼 비교예요. 휴식 노랑, 목표 초과 주황, 심박 존 색은 그대로예요.</p>
+<h2 class="sec">워치 · 측정 중</h2>
+<div class="cmp"><div class="item"><div class="watch"><div class="face s1">
+    <svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#161A19" stroke-width="7"/><circle cx="216" cy="216" r="209" fill="none" stroke="#2DD4BF" stroke-width="7" stroke-linecap="round" stroke-dasharray="875 1313" transform="rotate(-90 216 216)" class="progress"/></svg>
+    <div class="abs clock">02:02</div>
+    <div class="abs name">덤벨 컬</div>
+    <div class="abs sub"><span class="live"></span>1세트 · 자동 측정</div>
+    <div class="abs count"><span class="win"><span class="strip"><span class="d">8</span><span class="d">9</span><span class="d">10</span><span class="d">11</span><span class="d">12</span><span class="d">8</span></span></span><span class="of">/ 12회</span></div>
+    <div class="hair" style="left:calc(var(--u)*96);right:calc(var(--u)*96);top:calc(var(--u)*322)"></div>
+    <div class="abs metrics">
+      <div><span class="v">20</span><span class="u">kg</span></div>
+      <div><span class="h" style="--hc:var(--z2);--beat:0.536s"><svg class="heart" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></span><span class="v">112</span></div>
+    </div>
+    <div class="vsep"></div>
+    <svg class="chev u" viewBox="0 0 24 12"><path d="M4 9.5L12 3l8 6.5"/></svg><svg class="chev d" viewBox="0 0 24 12"><path d="M4 2.5L12 9l8-6.5"/></svg>
+  </div></div><div class="cap"><span class="tag">지금</span><b>민트</b></div></div>
+<div class="item bone"><div class="watch"><div class="face s1">
+    <svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#161A19" stroke-width="7"/><circle cx="216" cy="216" r="209" fill="none" stroke="#2DD4BF" stroke-width="7" stroke-linecap="round" stroke-dasharray="875 1313" transform="rotate(-90 216 216)" class="progress"/></svg>
+    <div class="abs clock">02:02</div>
+    <div class="abs name">덤벨 컬</div>
+    <div class="abs sub"><span class="live"></span>1세트 · 자동 측정</div>
+    <div class="abs count"><span class="win"><span class="strip"><span class="d">8</span><span class="d">9</span><span class="d">10</span><span class="d">11</span><span class="d">12</span><span class="d">8</span></span></span><span class="of">/ 12회</span></div>
+    <div class="hair" style="left:calc(var(--u)*96);right:calc(var(--u)*96);top:calc(var(--u)*322)"></div>
+    <div class="abs metrics">
+      <div><span class="v">20</span><span class="u">kg</span></div>
+      <div><span class="h" style="--hc:var(--z2);--beat:0.536s"><svg class="heart" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></span><span class="v">112</span></div>
+    </div>
+    <div class="vsep"></div>
+    <svg class="chev u" viewBox="0 0 24 12"><path d="M4 9.5L12 3l8 6.5"/></svg><svg class="chev d" viewBox="0 0 24 12"><path d="M4 2.5L12 9l8-6.5"/></svg>
+  </div></div><div class="cap"><span class="tag">뼈색 + 세이지</span><b>횟수는 뼈색, 링은 세이지</b></div></div></div>
+<h2 class="sec">워치 · 휴식</h2>
+<div class="cmp"><div class="item"><div class="watch"><div class="face s4">
+    <svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#161A19" stroke-width="7"/><circle cx="216" cy="216" r="209" fill="none" stroke="#FFD233" stroke-width="7" stroke-linecap="round" stroke-dasharray="880 1313" transform="rotate(-90 216 216)"/></svg>
+    <div class="abs clock">02:05</div>
+    <div class="abs lab">휴식 · 목표 1:30</div>
+    <div class="abs num big">0:45</div>
+    <div class="jog"><i class="jm">−</i><i class="jp">+</i><b class="knob">10초</b></div>
+    <div class="panel">
+      <div class="row next"><span class="k">다음 2세트</span><span class="v">12회 × 20kg</span></div>
+    </div>
+    <div class="abs skip">다음 세트 시작</div>
+    <svg class="chev u" viewBox="0 0 24 12"><path d="M4 9.5L12 3l8 6.5"/></svg><svg class="chev d" viewBox="0 0 24 12"><path d="M4 2.5L12 9l8-6.5"/></svg>
+  </div></div><div class="cap"><span class="tag">지금</span><b>흰 글자</b></div></div>
+<div class="item bone"><div class="watch"><div class="face s4">
+    <svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#161A19" stroke-width="7"/><circle cx="216" cy="216" r="209" fill="none" stroke="#FFD233" stroke-width="7" stroke-linecap="round" stroke-dasharray="880 1313" transform="rotate(-90 216 216)"/></svg>
+    <div class="abs clock">02:05</div>
+    <div class="abs lab">휴식 · 목표 1:30</div>
+    <div class="abs num big">0:45</div>
+    <div class="jog"><i class="jm">−</i><i class="jp">+</i><b class="knob">10초</b></div>
+    <div class="panel">
+      <div class="row next"><span class="k">다음 2세트</span><span class="v">12회 × 20kg</span></div>
+    </div>
+    <div class="abs skip">다음 세트 시작</div>
+    <svg class="chev u" viewBox="0 0 24 12"><path d="M4 9.5L12 3l8 6.5"/></svg><svg class="chev d" viewBox="0 0 24 12"><path d="M4 2.5L12 9l8-6.5"/></svg>
+  </div></div><div class="cap"><span class="tag">뼈색 + 세이지</span><b>글자만 뼈색, 노랑은 그대로</b></div></div></div>
+<h2 class="sec">폰 · 홈</h2>
+<div class="cmp"><div class="item"><div class="phone "><div class="pf cur"><div class="a ttl">홈</div><div class="a wk">이번 주 <b>2회</b></div><i class="bar" style="left:calc(var(--p)*40.0);top:calc(var(--p)*205);height:calc(var(--p)*53);background:var(--mark)"></i><span class="dayl" style="left:calc(var(--p)*40.0);">월</span><i class="bar" style="left:calc(var(--p)*159.2);top:calc(var(--p)*249);height:calc(var(--p)*9);background:var(--ib,#232827)"></i><span class="dayl" style="left:calc(var(--p)*159.2);">화</span><i class="bar" style="left:calc(var(--p)*278.4);top:calc(var(--p)*205);height:calc(var(--p)*53);background:var(--mark)"></i><span class="dayl" style="left:calc(var(--p)*278.4);">수</span><i class="bar" style="left:calc(var(--p)*397.6);top:calc(var(--p)*249);height:calc(var(--p)*9);background:var(--today)"></i><span class="dayl" style="left:calc(var(--p)*397.6);color:#F2F4F3">목</span><i class="bar" style="left:calc(var(--p)*516.8);top:calc(var(--p)*249);height:calc(var(--p)*9);background:var(--ib,#232827)"></i><span class="dayl" style="left:calc(var(--p)*516.8);">금</span><i class="bar" style="left:calc(var(--p)*636.0);top:calc(var(--p)*249);height:calc(var(--p)*9);background:var(--ib,#232827)"></i><span class="dayl" style="left:calc(var(--p)*636.0);">토</span><i class="bar" style="left:calc(var(--p)*755.2);top:calc(var(--p)*249);height:calc(var(--p)*9);background:var(--ib,#232827)"></i><span class="dayl" style="left:calc(var(--p)*755.2);">일</span><div class="hero"></div><div class="a big9">9</div><div class="a h1">일째 쉬는 루틴</div><div class="a h2">팔·하체</div><div class="a h3">이두, 삼두, 하체 · 9종목</div><div class="a sect">내 루틴</div><div class="a sect2">최근 ⌄</div><div class="hl" style="top:calc(var(--p)*694)"></div><div class="a rn" style="top:calc(var(--p)*742)">어깨전문</div><div class="a rs" style="top:calc(var(--p)*802)">어깨, 등 · 7종목</div><div class="a no" style="top:calc(var(--p)*775)">기록 없음</div><i class="dots3" style="top:calc(var(--p)*787)"></i><div class="hl" style="top:calc(var(--p)*874)"></div><div class="a rn" style="top:calc(var(--p)*922)">등·이두</div><div class="a rs" style="top:calc(var(--p)*982)">등, 이두 · 7종목</div><div class="a rv" style="top:calc(var(--p)*918)">3</div><div class="a ru" style="top:calc(var(--p)*988)">일 전</div><i class="dots3" style="top:calc(var(--p)*966)"></i><div class="hl" style="top:calc(var(--p)*1053)"></div><div class="a rn" style="top:calc(var(--p)*1101)">가슴·삼두</div><div class="a rs" style="top:calc(var(--p)*1161)">가슴, 삼두 · 6종목</div><div class="a rv" style="top:calc(var(--p)*1098)">6</div><div class="a ru" style="top:calc(var(--p)*1168)">일 전</div><i class="dots3" style="top:calc(var(--p)*1146)"></i><div class="hl" style="top:calc(var(--p)*1232)"></div><div class="a rn" style="top:calc(var(--p)*1280)">팔·하체</div><div class="a rs" style="top:calc(var(--p)*1340)">이두, 삼두, 하체 · 9종목</div><div class="a rv" style="top:calc(var(--p)*1278)">9</div><div class="a ru" style="top:calc(var(--p)*1348)">일 전</div><i class="dots3" style="top:calc(var(--p)*1326)"></i><div class="hl" style="top:calc(var(--p)*1412)"></div><div class="b1">자유운동</div><div class="b2">+ 새 루틴</div></div></div><div class="cap"><span class="tag">지금</span><b>민트 채움 버튼, 민트 9</b></div></div>
+<div class="item"><div class="phone "><div class="pf bn"><div class="a ttl">홈</div><div class="a wk">이번 주 <b>2회</b></div><i class="bar" style="left:calc(var(--p)*40.0);top:calc(var(--p)*205);height:calc(var(--p)*53);background:var(--mark)"></i><span class="dayl" style="left:calc(var(--p)*40.0);">월</span><i class="bar" style="left:calc(var(--p)*159.2);top:calc(var(--p)*249);height:calc(var(--p)*9);background:var(--ib,#232827)"></i><span class="dayl" style="left:calc(var(--p)*159.2);">화</span><i class="bar" style="left:calc(var(--p)*278.4);top:calc(var(--p)*205);height:calc(var(--p)*53);background:var(--mark)"></i><span class="dayl" style="left:calc(var(--p)*278.4);">수</span><i class="bar" style="left:calc(var(--p)*397.6);top:calc(var(--p)*249);height:calc(var(--p)*9);background:var(--today)"></i><span class="dayl" style="left:calc(var(--p)*397.6);color:#F2F4F3">목</span><i class="bar" style="left:calc(var(--p)*516.8);top:calc(var(--p)*249);height:calc(var(--p)*9);background:var(--ib,#232827)"></i><span class="dayl" style="left:calc(var(--p)*516.8);">금</span><i class="bar" style="left:calc(var(--p)*636.0);top:calc(var(--p)*249);height:calc(var(--p)*9);background:var(--ib,#232827)"></i><span class="dayl" style="left:calc(var(--p)*636.0);">토</span><i class="bar" style="left:calc(var(--p)*755.2);top:calc(var(--p)*249);height:calc(var(--p)*9);background:var(--ib,#232827)"></i><span class="dayl" style="left:calc(var(--p)*755.2);">일</span><div class="hero"></div><div class="a big9">9</div><div class="a h1">일째 쉬는 루틴</div><div class="a h2">팔·하체</div><div class="a h3">이두, 삼두, 하체 · 9종목</div><div class="a sect">내 루틴</div><div class="a sect2">최근 ⌄</div><div class="hl" style="top:calc(var(--p)*694)"></div><div class="a rn" style="top:calc(var(--p)*742)">어깨전문</div><div class="a rs" style="top:calc(var(--p)*802)">어깨, 등 · 7종목</div><div class="a no" style="top:calc(var(--p)*775)">기록 없음</div><i class="dots3" style="top:calc(var(--p)*787)"></i><div class="hl" style="top:calc(var(--p)*874)"></div><div class="a rn" style="top:calc(var(--p)*922)">등·이두</div><div class="a rs" style="top:calc(var(--p)*982)">등, 이두 · 7종목</div><div class="a rv" style="top:calc(var(--p)*918)">3</div><div class="a ru" style="top:calc(var(--p)*988)">일 전</div><i class="dots3" style="top:calc(var(--p)*966)"></i><div class="hl" style="top:calc(var(--p)*1053)"></div><div class="a rn" style="top:calc(var(--p)*1101)">가슴·삼두</div><div class="a rs" style="top:calc(var(--p)*1161)">가슴, 삼두 · 6종목</div><div class="a rv" style="top:calc(var(--p)*1098)">6</div><div class="a ru" style="top:calc(var(--p)*1168)">일 전</div><i class="dots3" style="top:calc(var(--p)*1146)"></i><div class="hl" style="top:calc(var(--p)*1232)"></div><div class="a rn" style="top:calc(var(--p)*1280)">팔·하체</div><div class="a rs" style="top:calc(var(--p)*1340)">이두, 삼두, 하체 · 9종목</div><div class="a rv" style="top:calc(var(--p)*1278)">9</div><div class="a ru" style="top:calc(var(--p)*1348)">일 전</div><i class="dots3" style="top:calc(var(--p)*1326)"></i><div class="hl" style="top:calc(var(--p)*1412)"></div><div class="b1">자유운동</div><div class="b2">+ 새 루틴</div></div></div><div class="cap"><span class="tag">뼈색 + 세이지</span><b>주인공은 뼈색, 오늘 표시만 세이지</b><span>완료한 요일 막대, 큰 9, 자유운동 버튼이 뼈색이에요. 새 루틴 버튼은 연한 민트 면을 버리고 어두운 회색 면에 뼈색 글자로 바꿨어요. 세이지는 오늘 표시와 이번 주 횟수에만 써요.</span></div></div></div>
+<h2 class="sec">폰 · 배경 톤 (뼈색 기준)</h2>
+<div class="cmp3"><div class="item"><div class="phone "><div class="pf bn"><div class="a ttl">홈</div><div class="a wk">이번 주 <b>2회</b></div><i class="bar" style="left:calc(var(--p)*40.0);top:calc(var(--p)*205);height:calc(var(--p)*53);background:var(--mark)"></i><span class="dayl" style="left:calc(var(--p)*40.0);">월</span><i class="bar" style="left:calc(var(--p)*159.2);top:calc(var(--p)*249);height:calc(var(--p)*9);background:var(--ib,#232827)"></i><span class="dayl" style="left:calc(var(--p)*159.2);">화</span><i class="bar" style="left:calc(var(--p)*278.4);top:calc(var(--p)*205);height:calc(var(--p)*53);background:var(--mark)"></i><span class="dayl" style="left:calc(var(--p)*278.4);">수</span><i class="bar" style="left:calc(var(--p)*397.6);top:calc(var(--p)*249);height:calc(var(--p)*9);background:var(--today)"></i><span class="dayl" style="left:calc(var(--p)*397.6);color:#F2F4F3">목</span><i class="bar" style="left:calc(var(--p)*516.8);top:calc(var(--p)*249);height:calc(var(--p)*9);background:var(--ib,#232827)"></i><span class="dayl" style="left:calc(var(--p)*516.8);">금</span><i class="bar" style="left:calc(var(--p)*636.0);top:calc(var(--p)*249);height:calc(var(--p)*9);background:var(--ib,#232827)"></i><span class="dayl" style="left:calc(var(--p)*636.0);">토</span><i class="bar" style="left:calc(var(--p)*755.2);top:calc(var(--p)*249);height:calc(var(--p)*9);background:var(--ib,#232827)"></i><span class="dayl" style="left:calc(var(--p)*755.2);">일</span><div class="hero"></div><div class="a big9">9</div><div class="a h1">일째 쉬는 루틴</div><div class="a h2">팔·하체</div><div class="a h3">이두, 삼두, 하체 · 9종목</div><div class="a sect">내 루틴</div><div class="a sect2">최근 ⌄</div><div class="hl" style="top:calc(var(--p)*694)"></div><div class="a rn" style="top:calc(var(--p)*742)">어깨전문</div><div class="a rs" style="top:calc(var(--p)*802)">어깨, 등 · 7종목</div><div class="a no" style="top:calc(var(--p)*775)">기록 없음</div><i class="dots3" style="top:calc(var(--p)*787)"></i><div class="hl" style="top:calc(var(--p)*874)"></div><div class="a rn" style="top:calc(var(--p)*922)">등·이두</div><div class="a rs" style="top:calc(var(--p)*982)">등, 이두 · 7종목</div><div class="a rv" style="top:calc(var(--p)*918)">3</div><div class="a ru" style="top:calc(var(--p)*988)">일 전</div><i class="dots3" style="top:calc(var(--p)*966)"></i><div class="hl" style="top:calc(var(--p)*1053)"></div><div class="a rn" style="top:calc(var(--p)*1101)">가슴·삼두</div><div class="a rs" style="top:calc(var(--p)*1161)">가슴, 삼두 · 6종목</div><div class="a rv" style="top:calc(var(--p)*1098)">6</div><div class="a ru" style="top:calc(var(--p)*1168)">일 전</div><i class="dots3" style="top:calc(var(--p)*1146)"></i><div class="hl" style="top:calc(var(--p)*1232)"></div><div class="a rn" style="top:calc(var(--p)*1280)">팔·하체</div><div class="a rs" style="top:calc(var(--p)*1340)">이두, 삼두, 하체 · 9종목</div><div class="a rv" style="top:calc(var(--p)*1278)">9</div><div class="a ru" style="top:calc(var(--p)*1348)">일 전</div><i class="dots3" style="top:calc(var(--p)*1326)"></i><div class="hl" style="top:calc(var(--p)*1412)"></div><div class="b1">자유운동</div><div class="b2">+ 새 루틴</div></div></div><div class="cap"><span class="tag">지금</span><b>새까만 #0B0C0C</b></div></div>
+<div class="item"><div class="phone g1"><div class="pf bn"><div class="a ttl">홈</div><div class="a wk">이번 주 <b>2회</b></div><i class="bar" style="left:calc(var(--p)*40.0);top:calc(var(--p)*205);height:calc(var(--p)*53);background:var(--mark)"></i><span class="dayl" style="left:calc(var(--p)*40.0);">월</span><i class="bar" style="left:calc(var(--p)*159.2);top:calc(var(--p)*249);height:calc(var(--p)*9);background:var(--ib,#232827)"></i><span class="dayl" style="left:calc(var(--p)*159.2);">화</span><i class="bar" style="left:calc(var(--p)*278.4);top:calc(var(--p)*205);height:calc(var(--p)*53);background:var(--mark)"></i><span class="dayl" style="left:calc(var(--p)*278.4);">수</span><i class="bar" style="left:calc(var(--p)*397.6);top:calc(var(--p)*249);height:calc(var(--p)*9);background:var(--today)"></i><span class="dayl" style="left:calc(var(--p)*397.6);color:#F2F4F3">목</span><i class="bar" style="left:calc(var(--p)*516.8);top:calc(var(--p)*249);height:calc(var(--p)*9);background:var(--ib,#232827)"></i><span class="dayl" style="left:calc(var(--p)*516.8);">금</span><i class="bar" style="left:calc(var(--p)*636.0);top:calc(var(--p)*249);height:calc(var(--p)*9);background:var(--ib,#232827)"></i><span class="dayl" style="left:calc(var(--p)*636.0);">토</span><i class="bar" style="left:calc(var(--p)*755.2);top:calc(var(--p)*249);height:calc(var(--p)*9);background:var(--ib,#232827)"></i><span class="dayl" style="left:calc(var(--p)*755.2);">일</span><div class="hero"></div><div class="a big9">9</div><div class="a h1">일째 쉬는 루틴</div><div class="a h2">팔·하체</div><div class="a h3">이두, 삼두, 하체 · 9종목</div><div class="a sect">내 루틴</div><div class="a sect2">최근 ⌄</div><div class="hl" style="top:calc(var(--p)*694)"></div><div class="a rn" style="top:calc(var(--p)*742)">어깨전문</div><div class="a rs" style="top:calc(var(--p)*802)">어깨, 등 · 7종목</div><div class="a no" style="top:calc(var(--p)*775)">기록 없음</div><i class="dots3" style="top:calc(var(--p)*787)"></i><div class="hl" style="top:calc(var(--p)*874)"></div><div class="a rn" style="top:calc(var(--p)*922)">등·이두</div><div class="a rs" style="top:calc(var(--p)*982)">등, 이두 · 7종목</div><div class="a rv" style="top:calc(var(--p)*918)">3</div><div class="a ru" style="top:calc(var(--p)*988)">일 전</div><i class="dots3" style="top:calc(var(--p)*966)"></i><div class="hl" style="top:calc(var(--p)*1053)"></div><div class="a rn" style="top:calc(var(--p)*1101)">가슴·삼두</div><div class="a rs" style="top:calc(var(--p)*1161)">가슴, 삼두 · 6종목</div><div class="a rv" style="top:calc(var(--p)*1098)">6</div><div class="a ru" style="top:calc(var(--p)*1168)">일 전</div><i class="dots3" style="top:calc(var(--p)*1146)"></i><div class="hl" style="top:calc(var(--p)*1232)"></div><div class="a rn" style="top:calc(var(--p)*1280)">팔·하체</div><div class="a rs" style="top:calc(var(--p)*1340)">이두, 삼두, 하체 · 9종목</div><div class="a rv" style="top:calc(var(--p)*1278)">9</div><div class="a ru" style="top:calc(var(--p)*1348)">일 전</div><i class="dots3" style="top:calc(var(--p)*1326)"></i><div class="hl" style="top:calc(var(--p)*1412)"></div><div class="b1">자유운동</div><div class="b2">+ 새 루틴</div></div></div><div class="cap"><span class="tag">약한 차콜</span><b>#151514</b></div></div>
+<div class="item"><div class="phone g2"><div class="pf bn"><div class="a ttl">홈</div><div class="a wk">이번 주 <b>2회</b></div><i class="bar" style="left:calc(var(--p)*40.0);top:calc(var(--p)*205);height:calc(var(--p)*53);background:var(--mark)"></i><span class="dayl" style="left:calc(var(--p)*40.0);">월</span><i class="bar" style="left:calc(var(--p)*159.2);top:calc(var(--p)*249);height:calc(var(--p)*9);background:var(--ib,#232827)"></i><span class="dayl" style="left:calc(var(--p)*159.2);">화</span><i class="bar" style="left:calc(var(--p)*278.4);top:calc(var(--p)*205);height:calc(var(--p)*53);background:var(--mark)"></i><span class="dayl" style="left:calc(var(--p)*278.4);">수</span><i class="bar" style="left:calc(var(--p)*397.6);top:calc(var(--p)*249);height:calc(var(--p)*9);background:var(--today)"></i><span class="dayl" style="left:calc(var(--p)*397.6);color:#F2F4F3">목</span><i class="bar" style="left:calc(var(--p)*516.8);top:calc(var(--p)*249);height:calc(var(--p)*9);background:var(--ib,#232827)"></i><span class="dayl" style="left:calc(var(--p)*516.8);">금</span><i class="bar" style="left:calc(var(--p)*636.0);top:calc(var(--p)*249);height:calc(var(--p)*9);background:var(--ib,#232827)"></i><span class="dayl" style="left:calc(var(--p)*636.0);">토</span><i class="bar" style="left:calc(var(--p)*755.2);top:calc(var(--p)*249);height:calc(var(--p)*9);background:var(--ib,#232827)"></i><span class="dayl" style="left:calc(var(--p)*755.2);">일</span><div class="hero"></div><div class="a big9">9</div><div class="a h1">일째 쉬는 루틴</div><div class="a h2">팔·하체</div><div class="a h3">이두, 삼두, 하체 · 9종목</div><div class="a sect">내 루틴</div><div class="a sect2">최근 ⌄</div><div class="hl" style="top:calc(var(--p)*694)"></div><div class="a rn" style="top:calc(var(--p)*742)">어깨전문</div><div class="a rs" style="top:calc(var(--p)*802)">어깨, 등 · 7종목</div><div class="a no" style="top:calc(var(--p)*775)">기록 없음</div><i class="dots3" style="top:calc(var(--p)*787)"></i><div class="hl" style="top:calc(var(--p)*874)"></div><div class="a rn" style="top:calc(var(--p)*922)">등·이두</div><div class="a rs" style="top:calc(var(--p)*982)">등, 이두 · 7종목</div><div class="a rv" style="top:calc(var(--p)*918)">3</div><div class="a ru" style="top:calc(var(--p)*988)">일 전</div><i class="dots3" style="top:calc(var(--p)*966)"></i><div class="hl" style="top:calc(var(--p)*1053)"></div><div class="a rn" style="top:calc(var(--p)*1101)">가슴·삼두</div><div class="a rs" style="top:calc(var(--p)*1161)">가슴, 삼두 · 6종목</div><div class="a rv" style="top:calc(var(--p)*1098)">6</div><div class="a ru" style="top:calc(var(--p)*1168)">일 전</div><i class="dots3" style="top:calc(var(--p)*1146)"></i><div class="hl" style="top:calc(var(--p)*1232)"></div><div class="a rn" style="top:calc(var(--p)*1280)">팔·하체</div><div class="a rs" style="top:calc(var(--p)*1340)">이두, 삼두, 하체 · 9종목</div><div class="a rv" style="top:calc(var(--p)*1278)">9</div><div class="a ru" style="top:calc(var(--p)*1348)">일 전</div><i class="dots3" style="top:calc(var(--p)*1326)"></i><div class="hl" style="top:calc(var(--p)*1412)"></div><div class="b1">자유운동</div><div class="b2">+ 새 루틴</div></div></div><div class="cap"><span class="tag">진한 차콜</span><b>#1F1E1B</b></div></div></div>
+</div></body></html>

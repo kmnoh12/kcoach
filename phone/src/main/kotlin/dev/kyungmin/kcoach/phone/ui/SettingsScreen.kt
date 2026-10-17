@@ -88,7 +88,7 @@ fun SettingsScreen(
     }
 }
 
-private val GROUP_BORDER = Color(0xFF3A4240)
+private val GROUP_BORDER = Color(0xFF3F3D39)
 
 /** One switch for the whole app; the speed controls underneath dim while it is off. */
 @Composable

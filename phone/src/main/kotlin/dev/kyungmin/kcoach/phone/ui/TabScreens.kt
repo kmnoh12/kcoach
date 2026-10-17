@@ -123,7 +123,7 @@ fun RecordsScreen(
                     .fillMaxWidth()
                     .height(58.dp)
                     .clip(KShape.Control)
-                    .border(0.5.dp, Color(0xFF3A4240), KShape.Control)
+                    .border(0.5.dp, Color(0xFF3F3D39), KShape.Control)
                     .pressable(actions.openResult),
                 contentAlignment = Alignment.Center,
             ) {
@@ -330,7 +330,7 @@ private fun MenuButton(text: String, filled: Boolean = true, onClick: () -> Unit
             .fillMaxWidth()
             .height(58.dp)
             .clip(KShape.Control)
-            .then(if (filled) Modifier.background(KColors.Accent) else Modifier.border(0.5.dp, Color(0xFF3A4240), KShape.Control))
+            .then(if (filled) Modifier.background(KColors.Accent) else Modifier.border(0.5.dp, Color(0xFF3F3D39), KShape.Control))
             .pressable(onClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -357,7 +357,7 @@ private fun MenuTipBox() {
     }
     Box(
         Modifier.fillMaxWidth().heightIn(min = 72.dp).clip(KShape.Control)
-            .border(0.5.dp, Color(0xFF3A4240), KShape.Control).padding(horizontal = 16.dp, vertical = 14.dp),
+            .border(0.5.dp, Color(0xFF3F3D39), KShape.Control).padding(horizontal = 16.dp, vertical = 14.dp),
         contentAlignment = Alignment.CenterStart,
     ) {
         Text(MENU_TIPS[index], color = KColors.Soft, fontSize = 14.sp, maxLines = 2)
