@@ -83,6 +83,40 @@ class SessionStore(private val context: Context) {
                         command.planHash != offer.planHash) return@runCatching rejected(WatchWorkoutControlStatus.STALE)
                     WorkoutSnapshotCodec.decode(json.getString("snapshot")).copy(startedAtMs = nowMs)
                 }
+                WatchWorkoutAction.REST_ADJUST, WatchWorkoutAction.EDIT_SET -> {
+                    if (current?.sessionId != command.sessionId || current.phase != WorkoutPhase.RESTING || current.paused)
+                        return@runCatching rejected(WatchWorkoutControlStatus.STALE)
+                    val target = WorkoutSessionReducer.nextPendingSet(current)
+                    // REST/SYNC identifies the next set, including an empty identity after the final set.
+                    if (target?.setId.orEmpty() != command.setId || target?.attemptId.orEmpty() != command.attemptId)
+                        return@runCatching rejected(WatchWorkoutControlStatus.STALE)
+                    val previous = current.plannedSets.singleOrNull {
+                        SetIdentity.completionKey(current.sessionId, it) == current.lastCompletedSetKey && it.completed
+                    } ?: return@runCatching rejected(WatchWorkoutControlStatus.STALE)
+                    if (command.action == WatchWorkoutAction.REST_ADJUST) {
+                        val seconds = requireNotNull(command.restSeconds)
+                        val sets = current.plannedSets.map {
+                            if (it.exerciseIndex == previous.exerciseIndex) it.copy(
+                                exerciseRestSeconds = seconds,
+                                restSeconds = if (it === previous || it.restOverrideSeconds == null) seconds else it.restSeconds,
+                                restOverrideSeconds = if (it === previous && it.restOverrideSeconds != null) seconds else it.restOverrideSeconds)
+                            else it
+                        }
+                        current.copy(plannedSets = sets, restEndAtMs = requireNotNull(command.restEndAtMs).coerceIn(nowMs, nowMs + 1_800_000L))
+                    } else {
+                        val edited = if (command.which == "PREVIOUS") previous else target
+                            ?: return@runCatching rejected(WatchWorkoutControlStatus.REJECTED)
+                        val sets = current.plannedSets.map { set ->
+                            if (set !== edited) set else set.copy(
+                                weightKg = command.weightKg ?: set.weightKg,
+                                targetReps = if (!set.completed && command.reps >= 0) command.reps else set.targetReps,
+                                performedReps = if (set.completed && command.reps >= 0) command.reps else set.performedReps,
+                                repSource = if (set.completed && command.reps >= 0) SetRepSource.MANUAL else set.repSource)
+                        }
+                        current.copy(plannedSets = sets, performedReps = sets.filter { it.completed }
+                            .groupBy { it.exerciseId }.mapValues { (_, values) -> values.sumOf { it.performedReps ?: 0 } })
+                    }
+                }
                 WatchWorkoutAction.NEXT_SET -> {
                     if (current?.sessionId != command.sessionId) return@runCatching rejected(WatchWorkoutControlStatus.STALE)
                     val target = WorkoutSessionReducer.nextPendingSet(current)
