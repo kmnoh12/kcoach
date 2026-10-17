@@ -259,6 +259,7 @@ class MainActivity : Activity() {
     private fun buildUi(): View {
         face = WatchWorkoutFace(this)
         face.action.setOnClickListener { openFinishedWorkout() }
+        face.restGo.setOnClickListener { requestWorkoutControl() }
         val details = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL
             setPadding(dp(38), dp(28), dp(38), dp(30)); setBackgroundColor(Color.BLACK)
@@ -267,9 +268,9 @@ class MainActivity : Activity() {
             details.addView(view, LinearLayout.LayoutParams(-1, if (action) dp(48) else -2).apply { bottomMargin = dp(6) })
         }
         fun button(text: String, primary: Boolean = false, click: () -> Unit) = label(text, 15f,
-            if (primary) Color.rgb(6, 26, 19) else WatchWorkoutFace.WHITE, true).apply {
+            if (primary) Color.rgb(23, 22, 18) else WatchWorkoutFace.WHITE, true).apply {
             gravity = Gravity.CENTER; minHeight = dp(48); isFocusable = true
-            background = rounded(if (primary) WatchWorkoutFace.GREEN else Color.rgb(24, 29, 33), 6)
+            background = rounded(if (primary) WatchWorkoutFace.BONE else WatchWorkoutFace.CARD, 6)
             setOnClickListener { click() }
         }
         detailsTitle = label("", 16f, Color.WHITE, true).apply { gravity = Gravity.CENTER }; add(detailsTitle)
@@ -346,32 +347,40 @@ class MainActivity : Activity() {
         face.value.maxLines = if (complete) 2 else 1
         face.showDivider = active && !resting
         face.invalidate()
-        listOf(face.target, face.weight, face.unit, face.heart, face.heartRate).forEach { it.visibility = if (active) View.VISIBLE else View.GONE }
-        face.down.text = "⌄"; face.down.visibility = if (active || manualOutbox.unresolved().isNotEmpty()) View.VISIBLE else View.GONE
+        listOf(face.target, face.weight, face.unit, face.heartRate).forEach { it.visibility = if (active && !resting) View.VISIBLE else View.GONE }
+        face.down.visibility = View.GONE
+        face.showDownChevron = active || manualOutbox.unresolved().isNotEmpty()
         face.action.visibility = if (complete) View.VISIBLE else View.GONE
         face.action.text = "폰에서 보기"; face.action.isEnabled = !phoneResultPending
         face.action.alpha = if (phoneResultPending) 0.5f else 1f
         face.hint.text = ""
-        face.value.textSize = if (active) 48f else 24f
-        face.value.setTextColor(WatchWorkoutFace.GREEN)
+        face.value.textSize = if (active) 88f else 24f
+        face.value.setTextColor(WatchWorkoutFace.BONE)
+        face.restCard.visibility = View.GONE; face.restGo.visibility = View.GONE
         if (active) {
             face.title.text = exerciseName
-            face.subtitle.text = when { resting -> "휴식"; paused -> "일시정지"; manualRequired -> "${setIndex + 1}세트 · 직접 기록"; else -> "${setIndex + 1}세트 · 자동 측정" }
+            face.subtitle.text = when { resting -> "휴식 · 목표 ${restSeconds / 60}:${"%02d".format(restSeconds % 60)}"; paused -> "일시정지"; manualRequired -> "${setIndex + 1}세트 · 직접 기록"; else -> "${setIndex + 1}세트 · 자동 측정" }
+            face.subtitle.setTextColor(if (resting) WatchWorkoutFace.YELLOW else WatchWorkoutFace.MUTED)
             face.target.text = "/ ${targetReps}회"
             face.value.text = count?.toString() ?: "—"
-            face.value.setTextColor(if (count != null && count > targetReps) WatchWorkoutFace.ORANGE else WatchWorkoutFace.GREEN)
+            face.value.setTextColor(if (count != null && count > targetReps) WatchWorkoutFace.ORANGE else WatchWorkoutFace.BONE)
             face.weight.text = weightKg?.let { if (it % 1.0 == 0.0) it.toInt().toString() else "%.1f".format(it) } ?: "—"
-            face.unit.text = "kg"; face.heart.text = "♥"; face.heartRate.text = heartRate.takeIf { it > 0 }?.toString() ?: "—"
+            face.unit.text = "kg"; face.heart.show(if (resting) 0 else heartRate); face.heartRate.text = heartRate.takeIf { it > 0 }?.toString() ?: "—"
             face.hint.text = if (manualRequired && count == null) "아래로 · 횟수 기록" else ""
             if (running && runtimePhase in setOf("POSITIONING", "PREPARING", "BASELINE", "START_DIRECTION_WAITING")) {
-                face.value.text = "준비"; face.value.textSize = 28f
+                face.value.text = "준비"; face.value.textSize = 40f
                 face.hint.text = if (runtimePhase == "START_DIRECTION_WAITING") "손목 방향을 맞춰 주세요" else "손목을 잠시 멈춰 주세요"
             }
             if (resting) {
                 val left = RestCountdownCalculator.calculate(System.currentTimeMillis(), restEndAtMs, restSeconds).remainingSeconds
                 face.value.text = String.format("%d:%02d", left / 60, left % 60)
+                face.value.textSize = 63f; face.value.setTextColor(WatchWorkoutFace.YELLOW)
                 face.target.visibility = View.GONE
-                face.hint.text = "다음 세트 · ${targetReps}회"
+                face.hint.text = ""
+                face.restCard.text = "다음 세트   ${targetReps}회" + (weightKg?.let { " × ${if (it % 1.0 == 0.0) it.toInt().toString() else "%.1f".format(it)}kg" } ?: "")
+                face.restCard.visibility = View.VISIBLE
+                face.restGo.text = "다음 세트 시작"
+                face.restGo.visibility = if (workoutControls.supportsControls() && setId.isNotBlank() && attemptId.isNotBlank()) View.VISIBLE else View.GONE
             }
             if (paused) face.hint.text = "폰에서 계속할 수 있어요"
         } else if (complete) {
@@ -425,9 +434,13 @@ class MainActivity : Activity() {
         pendingManualButton.visibility = if (manualOutbox.unresolved().isEmpty()) View.GONE else View.VISIBLE
         pendingManualButton.text = "보관 중인 횟수 ${manualOutbox.unresolved().size}건"
         restText.visibility = View.GONE
+        if (!active) face.heart.show(0)
         if (resting && restEndAtMs > System.currentTimeMillis()) {
             restRing.setWindow(restEndAtMs - restSeconds.coerceAtLeast(1) * 1_000L, restEndAtMs); restRing.visibility = View.VISIBLE
+        } else if (active && !resting && !paused && count != null && targetReps > 0) {
+            restRing.setProgress(count.toFloat() / targetReps); restRing.visibility = View.VISIBLE
         } else restRing.visibility = View.GONE
+        rollCountIfChanged(active && !resting)
         val presentation = if (active) "active" else if (complete) "complete" else "home"
         if (lastPresentation != presentation) {
             lastPresentation = presentation
@@ -436,6 +449,27 @@ class MainActivity : Activity() {
     }
 
     private var lastPresentation = ""
+    private var lastCountShown = ""
+
+    /** The old number slides up and out while the new one rises in from below, quickly and without any bounce. */
+    private fun rollCountIfChanged(measuring: Boolean) {
+        val shown = face.value.text.toString()
+        if (!measuring || shown.firstOrNull()?.isDigit() != true) { lastCountShown = ""; return }
+        val old = lastCountShown
+        lastCountShown = shown
+        if (old.isEmpty() || old == shown || old.firstOrNull()?.isDigit() != true) return
+        val travel = dp(60).toFloat()
+        val interpolator = android.view.animation.PathInterpolator(.4f, 0f, .2f, 1f)
+        face.valueGhost.apply {
+            text = old; setTextColor(face.value.currentTextColor); textSize = face.value.textSize / resources.displayMetrics.scaledDensity
+            animate().cancel(); translationY = 0f; alpha = 1f
+            animate().translationY(-travel).alpha(0f).setDuration(180).setInterpolator(interpolator).start()
+        }
+        face.value.apply {
+            animate().cancel(); translationY = travel; alpha = 0f
+            animate().translationY(0f).alpha(1f).setDuration(180).setInterpolator(interpolator).start()
+        }
+    }
     private fun draftKey() = "$sessionId:$setId:$attemptId"
     private fun displayedCount(): Int? = getSharedPreferences("manual-count-drafts", MODE_PRIVATE).getString(draftKey(), null)?.toIntOrNull()
         ?: if (manualRequired && manualStatus.isBlank()) null else reps
@@ -576,14 +610,23 @@ class MainActivity : Activity() {
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
             strokeCap = Paint.Cap.ROUND
-            color = Color.rgb(255, 177, 0)
+            color = WatchWorkoutFace.YELLOW
         }
         private var startAtMs = 0L
         private var endAtMs = 0L
+        private var progress: Float? = null
 
         fun setWindow(startAtMs: Long, endAtMs: Long) {
             this.startAtMs = startAtMs
             this.endAtMs = endAtMs
+            progress = null
+            invalidate()
+        }
+
+        /** Measuring: the rim fills toward the target; past the target a second, darker lap builds on top. */
+        fun setProgress(fraction: Float) {
+            if (progress == fraction) return
+            progress = fraction
             invalidate()
         }
 
@@ -592,8 +635,9 @@ class MainActivity : Activity() {
             val now = System.currentTimeMillis()
             val total = endAtMs - startAtMs
             val remaining = (endAtMs - now).coerceAtLeast(0L)
-            if (total <= 0L || remaining <= 0L) return
-            val fraction = (remaining.toFloat() / total.toFloat()).coerceIn(0f, 1f)
+            val measured = progress
+            if (measured == null && (total <= 0L || remaining <= 0L)) return
+            val fraction = if (measured != null) measured.coerceIn(0f, 1f) else (remaining.toFloat() / total.toFloat()).coerceIn(0f, 1f)
             val density = resources.displayMetrics.density
             // A real round Wear display is normally square. Some emulator profiles
             // expose a tall canvas, so use the top square display region instead of
@@ -608,7 +652,7 @@ class MainActivity : Activity() {
             val roundTop = if (canvasHeight > canvasWidth * 1.15f) 0f else {
                 (canvasHeight - roundDiameter) / 2f
             }
-            paint.strokeWidth = 2.5f * density
+            paint.strokeWidth = 3.5f * density
             // The stroke is centered on the arc, so half of it plus a hairline gap keeps the outer
             // edge of the ring right against the rim of the display instead of floating inside it.
             val inset = paint.strokeWidth / 2f + 1f * density
@@ -618,7 +662,18 @@ class MainActivity : Activity() {
             val bottom = roundTop + roundDiameter - inset
             // -90 degrees is 12 o'clock: the ring advances clockwise from the
             // top-center of the circular watch face.
-            canvas.drawArc(RectF(left, top, right, bottom), -90f, 360f * fraction, false, paint)
+            val oval = RectF(left, top, right, bottom)
+            if (measured != null) {
+                paint.color = WatchWorkoutFace.TRACK; canvas.drawArc(oval, -90f, 360f, false, paint)
+                val over = measured > 1f
+                paint.color = if (over) WatchWorkoutFace.ORANGE else WatchWorkoutFace.SAGE
+                canvas.drawArc(oval, -90f, 360f * fraction, false, paint)
+                if (over) { paint.color = WatchWorkoutFace.DEEP_AMBER; canvas.drawArc(oval, -90f, 360f * (measured - 1f).coerceIn(0f, 1f), false, paint) }
+                paint.color = WatchWorkoutFace.YELLOW
+                return
+            }
+            paint.color = WatchWorkoutFace.YELLOW
+            canvas.drawArc(oval, -90f, 360f * fraction, false, paint)
             postInvalidateOnAnimation()
         }
     }
