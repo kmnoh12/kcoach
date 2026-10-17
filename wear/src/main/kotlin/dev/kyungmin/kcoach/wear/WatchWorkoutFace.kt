@@ -224,7 +224,7 @@ internal class WatchWorkoutFace(context: Context) : FrameLayout(context) {
         /** Over the target: a light amber, kept distinct from the rest yellow. */
         val ORANGE = Color.rgb(255, 180, 94)
         /** The second lap of the over-target ring. */
-        val DEEP_AMBER = Color.rgb(224, 135, 46)
+        val DEEP_AMBER = Color.rgb(217, 121, 31)
         /** Heart-rate zone 4 stays the strong orange. */
         private val ZONE_ORANGE = Color.rgb(255, 160, 51)
         val RED = Color.rgb(229, 72, 59)

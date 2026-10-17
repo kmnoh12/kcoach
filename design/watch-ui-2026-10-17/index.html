@@ -309,15 +309,18 @@ svg.ic{width:1em;height:1em;stroke:currentColor;fill:none;stroke-width:1.75;stro
 .over .num{color:inherit}
 .ovStrip{animation:ovRoll 8s cubic-bezier(.4,0,.2,1) infinite !important}
 @keyframes ovRoll{0%,16%{transform:translateY(0)}21%,38%{transform:translateY(calc(var(--u)*-170))}43%,60%{transform:translateY(calc(var(--u)*-340))}65%,82%{transform:translateY(calc(var(--u)*-510))}90%,100%{transform:translateY(calc(var(--u)*-680))}}
+/* 세이지 링이 11에서 12까지 한 바퀴로 이어져 완성된 뒤, 13에서 앰버가 12시부터 같은 방향으로 덮으며 한 바퀴를 칠하고, 그 위에 진한 앰버 겹이 쌓인다 */
 .ovBase{animation:ovBase 8s cubic-bezier(.4,0,.2,1) infinite}
-@keyframes ovBase{0%,16%{stroke:#8FCFBA;stroke-dasharray:1203 1313}21%,40%{stroke:#8FCFBA;stroke-dasharray:1313 1313}43%,82%{stroke:#FFB45E;stroke-dasharray:1313 1313}90%,100%{stroke:#8FCFBA;stroke-dasharray:1203 1313}}
+@keyframes ovBase{0%,16%{stroke-dasharray:1203 1313}21%,90%{stroke-dasharray:1313 1313}96%,100%{stroke-dasharray:1203 1313}}
+.ovSweep{animation:ovSweep 8s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes ovSweep{0%,42.9%{stroke-dasharray:0 1313;opacity:0}43%{stroke-dasharray:0 1313;opacity:1}51%,83%{stroke-dasharray:1313 1313;opacity:1}90%{stroke-dasharray:0 1313;opacity:1}90.1%,100%{stroke-dasharray:0 1313;opacity:0}}
 .ovLap{animation:ovLap 8s cubic-bezier(.4,0,.2,1) infinite}
-@keyframes ovLap{0%,40%{stroke-dasharray:0 1313}43%,60%{stroke-dasharray:110 1313}65%,82%{stroke-dasharray:219 1313}90%,100%{stroke-dasharray:0 1313}}
+@keyframes ovLap{0%,51%{stroke-dasharray:0 1313;opacity:0}51.1%{stroke-dasharray:0 1313;opacity:1}59%,60%{stroke-dasharray:110 1313;opacity:1}67%,78%{stroke-dasharray:219 1313;opacity:1}83%{stroke-dasharray:0 1313;opacity:1}83.1%,100%{stroke-dasharray:0 1313;opacity:0}}
 .over .ovSubA{animation:ovSubA 8s steps(1,end) infinite}
 .over .ovSubB{animation:ovSubB 8s steps(1,end) infinite}
 @keyframes ovSubA{0%,41%{opacity:1}42%,86%{opacity:0}87%,100%{opacity:1}}
 @keyframes ovSubB{0%,41%{opacity:0}42%,86%{opacity:1}87%,100%{opacity:0}}
-@media(prefers-reduced-motion:reduce){.ovStrip,.ovBase,.ovLap,.over .ovSubA,.over .ovSubB{animation:none !important}}
+@media(prefers-reduced-motion:reduce){.ovStrip,.ovBase,.ovSweep,.ovLap,.over .ovSubA,.over .ovSubB{animation:none !important}}
 </style>
 </head>
 <body>
@@ -349,7 +352,7 @@ svg.ic{width:1em;height:1em;stroke:currentColor;fill:none;stroke-width:1.75;stro
 <!-- 2 목표 초과 -->
 <div class="item">
   <div class="watch"><div class="face s1 over">
-    <svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#8FCFBA" stroke-width="7" stroke-linecap="round" stroke-dasharray="1203 1313" transform="rotate(-90 216 216)" class="ovBase"/><circle cx="216" cy="216" r="209" fill="none" stroke="#E0872E" stroke-width="7" stroke-linecap="round" stroke-dasharray="0 1313" transform="rotate(-90 216 216)" class="ovLap"/></svg>
+    <svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#1B1B1A" stroke-width="7"/><circle cx="216" cy="216" r="209" fill="none" stroke="#8FCFBA" stroke-width="7" stroke-linecap="round" stroke-dasharray="1203 1313" transform="rotate(-90 216 216)" class="ovBase"/><circle cx="216" cy="216" r="209" fill="none" stroke="#FFB45E" stroke-width="7" stroke-linecap="round" stroke-dasharray="0 1313" transform="rotate(-90 216 216)" class="ovSweep"/><circle cx="216" cy="216" r="209" fill="none" stroke="#D9791F" stroke-width="7" stroke-linecap="round" stroke-dasharray="0 1313" transform="rotate(-90 216 216)" class="ovLap"/></svg>
     <div class="abs clock">02:03</div>
     <div class="abs name">덤벨 컬</div>
     <div class="abs sub ovSubA"><span class="live"></span>1세트 · 자동 측정</div><div class="abs sub ovSubB" style="color:var(--over)">목표 초과</div>
@@ -362,7 +365,7 @@ svg.ic{width:1em;height:1em;stroke:currentColor;fill:none;stroke-width:1.75;stro
     <div class="vsep"></div>
     <svg class="chev u" viewBox="0 0 24 12"><path d="M4 9.5L12 3l8 6.5"/></svg><svg class="chev d" viewBox="0 0 24 12"><path d="M4 2.5L12 9l8-6.5"/></svg>
   </div></div>
-  <div class="cap"><span class="tag">2 · 목표 초과</span><b>링과 숫자가 같이 색을 바꿔요</b><span>목표를 넘으면 링이 한 바퀴 다 차고, 넘은 횟수만큼 12시부터 다시 한 겹 더 쌓여요. 시안은 11회에서 12회(목표를 채운 순간), 13회, 14회로 올라갔다가 다시 11회로 돌아오는 장면을 반복해요(12회까지는 세이지, 목표를 넘는 13회부터 숫자와 링이 연한 앰버로 바뀌고 두 번째 겹이 12시부터 자라요). 겹친 구간은 더 진한 앰버로 보여요(13/12면 1시 방향까지). 숫자도 주황으로 바뀌어요. 글자 "목표 초과"도 같이 떠서 색을 못 보는 사람도 알 수 있어요. 빨강은 오류와 삭제용으로 아껴요.</span></div>
+  <div class="cap"><span class="tag">2 · 목표 초과</span><b>링과 숫자가 같이 색을 바꿔요</b><span>목표를 넘으면 링이 한 바퀴 다 차고, 넘은 횟수만큼 12시부터 다시 한 겹 더 쌓여요. 시안은 11회에서 12회(목표를 채운 순간), 13회, 14회로 올라갔다가 다시 11회로 돌아오는 장면을 반복해요. 12회까지는 세이지 링이 한 줄로 이어져 한 바퀴가 완성되고, 13회로 넘어가는 순간 앰버가 12시부터 같은 방향으로 링 위를 덮으며 한 바퀴를 칠해요(색이 섞이지 않고 번져 가요). 그 위에 진한 앰버 겹이 12시부터 쌓여요. 겹친 구간은 더 진한 앰버로 보여요(13/12면 1시 방향까지). 숫자도 주황으로 바뀌어요. 글자 "목표 초과"도 같이 떠서 색을 못 보는 사람도 알 수 있어요. 빨강은 오류와 삭제용으로 아껴요.</span></div>
 </div>
 
 <!-- 3 저장 -->

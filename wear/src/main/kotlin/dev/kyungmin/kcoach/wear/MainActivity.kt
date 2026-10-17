@@ -978,9 +978,28 @@ class MainActivity : Activity() {
         /** Measuring: the rim fills toward the target; past the target a second, darker lap builds on top. */
         fun setProgress(fraction: Float) {
             if (progress == fraction) return
+            val wasOver = (progress ?: 0f) > 1f
             progress = fraction
+            val nowOver = fraction > 1f
+            if (wasOver != nowOver) sweepTo(if (nowOver) 1f else 0f)
+            else if (!nowOver && sweep != 0f) { sweepAnimator?.cancel(); sweep = 0f }
+            else if (nowOver && sweep != 1f && sweepAnimator?.isRunning != true) sweep = 1f
             invalidate()
         }
+
+        /** 0 is a plain sage ring, 1 is the ring painted amber all the way round, from 12 o'clock and clockwise. */
+        private var sweep = 0f
+        private var sweepAnimator: android.animation.ValueAnimator? = null
+        private fun sweepTo(target: Float) {
+            sweepAnimator?.cancel()
+            if (Moment.reducedMotion(context) || !isAttachedToWindow) { sweep = target; return }
+            sweepAnimator = android.animation.ValueAnimator.ofFloat(sweep, target).apply {
+                duration = 420; interpolator = android.view.animation.PathInterpolator(.4f, 0f, .2f, 1f)
+                addUpdateListener { sweep = it.animatedValue as Float; invalidate() }
+                start()
+            }
+        }
+        override fun onDetachedFromWindow() { sweepAnimator?.cancel(); super.onDetachedFromWindow() }
 
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
@@ -1017,10 +1036,13 @@ class MainActivity : Activity() {
             val oval = RectF(left, top, right, bottom)
             if (measured != null) {
                 paint.color = WatchWorkoutFace.TRACK; canvas.drawArc(oval, -90f, 360f, false, paint)
-                val over = measured > 1f
-                paint.color = if (over) WatchWorkoutFace.ORANGE else WatchWorkoutFace.SAGE
-                canvas.drawArc(oval, -90f, 360f * fraction, false, paint)
-                if (over) { paint.color = WatchWorkoutFace.DEEP_AMBER; canvas.drawArc(oval, -90f, 360f * (measured - 1f).coerceIn(0f, 1f), false, paint) }
+                // Sage fills up to a full ring at the target. Past it, amber paints over that ring from 12 o'clock
+                // (no colour mixing), and a deeper amber lap then builds on top.
+                paint.color = WatchWorkoutFace.SAGE
+                if (fraction > 0.003f) canvas.drawArc(oval, -90f, 360f * fraction, false, paint)
+                if (sweep > 0.003f) { paint.color = WatchWorkoutFace.ORANGE; canvas.drawArc(oval, -90f, 360f * sweep, false, paint) }
+                val lap = (measured - 1f).coerceIn(0f, 1f) * ((sweep - .65f) / .35f).coerceIn(0f, 1f)
+                if (lap > 0.003f) { paint.color = WatchWorkoutFace.DEEP_AMBER; canvas.drawArc(oval, -90f, 360f * lap, false, paint) }
                 paint.color = WatchWorkoutFace.YELLOW
                 return
             }
