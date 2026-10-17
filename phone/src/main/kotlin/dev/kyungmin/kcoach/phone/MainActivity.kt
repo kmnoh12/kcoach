@@ -194,16 +194,16 @@ class MainActivity : ComponentActivity() {
         val captureStates: MutableMap<String, CaptureState> = mutableMapOf(),
     )
 
-    private val bg = Color.rgb(21, 21, 20)
-    private val surface = Color.rgb(29, 28, 26)
-    private val surfaceRaised = Color.rgb(42, 41, 39)
-    private val white = Color.rgb(241, 238, 231)
-    private val muted = Color.rgb(148, 144, 138)
-    private val faint = Color.rgb(90, 87, 81)
-    private val amber = Color.rgb(237, 232, 220)
-    private val amberDark = Color.rgb(237, 232, 220)
+    private val bg = Color.rgb(0, 0, 0)
+    private val surface = Color.rgb(14, 14, 13)
+    private val surfaceRaised = Color.rgb(28, 27, 25)
+    private val white = Color.rgb(237, 232, 220)
+    private val muted = Color.rgb(143, 139, 130)
+    private val faint = Color.rgb(92, 89, 82)
+    private val amber = Color.rgb(118, 219, 185)
+    private val amberDark = Color.rgb(118, 219, 185)
     private val blue = Color.rgb(163, 159, 152)
-    private val green = Color.rgb(143, 207, 186)
+    private val green = Color.rgb(118, 219, 185)
 
     private val routines = WorkoutData.defaultRoutines()
     private val routineLibraryStore by lazy { RoutineLibraryStore(this) }

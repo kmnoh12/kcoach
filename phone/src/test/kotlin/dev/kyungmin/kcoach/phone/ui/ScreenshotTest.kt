@@ -197,7 +197,7 @@ class ScreenshotTest {
         val context = androidx.compose.ui.platform.LocalContext.current
         ActiveWorkoutScreen(
             workoutModel(false), noActions(),
-            LiveLine("Watch8 연결됨 · 랫 풀 다운 · 세트 3", "t").also { it.setTextColor(0xFF8FCFBA.toInt()) },
+            LiveLine("Watch8 연결됨 · 랫 풀 다운 · 세트 3", "t").also { it.setTextColor(0xFF76DBB9.toInt()) },
             LiveLine("7/10회 · 55kg · 심박 112bpm", "t"),
         ) { android.view.View(context) }
     }

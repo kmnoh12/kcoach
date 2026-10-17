@@ -71,7 +71,7 @@ fun RestBar(
     ) {
         // Thin progress line + grab handle.
         Box(Modifier.fillMaxWidth().height(3.dp).background(KColors.SurfaceRaised)) {
-            if (active) Box(Modifier.fillMaxWidth(rest.fraction).fillMaxHeight().background(KColors.Accent))
+            if (active) Box(Modifier.fillMaxWidth(rest.fraction).fillMaxHeight().background(KColors.Sage))
         }
         Box(Modifier.fillMaxWidth().padding(top = 6.dp), contentAlignment = Alignment.Center) {
             Box(Modifier.width(34.dp).height(4.dp).clip(RoundedCornerShape(2.dp)).background(KColors.Faint).clickable { onExpand() })

@@ -208,11 +208,11 @@ private fun CalendarGrid(month: YearMonth, records: List<WorkoutRecord>) {
                     Column(Modifier.weight(1f).height(44.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         if (day != null) {
                             val has = day in recorded
-                            val fill by animateColorAsState(if (has) KColors.Accent else Color.Transparent, Motion.ui(), label = "day")
+                            val fill by animateColorAsState(if (has) KColors.Bone else Color.Transparent, Motion.ui(), label = "day")
                             Box(Modifier.clip(CircleShape).background(fill).padding(horizontal = 9.dp, vertical = 4.dp)) {
                                 Text(day.toString(), color = if (has) KColors.OnAccent else KColors.Muted, fontSize = 15.sp, fontWeight = if (has) FontWeight.Medium else FontWeight.Normal)
                             }
-                            if (has) Text("•", color = KColors.Accent, fontSize = 13.sp)
+                            if (has) Text("•", color = KColors.Bone, fontSize = 13.sp)
                         }
                     }
                 }

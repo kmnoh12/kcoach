@@ -321,9 +321,9 @@ private fun ExercisePage(
             FlipText(exercise.targetReps.toString(), 14.sp, KColors.Accent)
             Text("회", color = KColors.Accent, fontSize = 14.sp, fontWeight = FontWeight.Medium)
             Spacer(Modifier.weight(1f))
-            Text("수행 ", color = if (exercise.performedReps > 0) KColors.Accent else KColors.Muted, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-            FlipText(exercise.performedReps.toString(), 14.sp, if (exercise.performedReps > 0) KColors.Accent else KColors.Muted)
-            Text("회", color = if (exercise.performedReps > 0) KColors.Accent else KColors.Muted, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            Text("수행 ", color = if (exercise.performedReps > 0) KColors.Sage else KColors.Muted, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            FlipText(exercise.performedReps.toString(), 14.sp, if (exercise.performedReps > 0) KColors.Sage else KColors.Muted)
+            Text("회", color = if (exercise.performedReps > 0) KColors.Sage else KColors.Muted, fontSize = 14.sp, fontWeight = FontWeight.Medium)
         }
         if (exercise.volumeTarget > 0) {
             Spacer(Modifier.height(10.dp))
@@ -382,7 +382,7 @@ private fun ExercisePage(
             if (model.isPreview) "운동 시작 전 · 총 ${exercise.sets.size}세트" else
                 if (restingSetIndex != null) "${exercise.sets.getOrNull(restingSetIndex)?.label ?: "-"}세트 후 휴식 · 완료 ${exercise.completedWorkSets}/${exercise.workSetCount}세트" else
                 "현재 ${exercise.sets.getOrNull(exercise.currentSetIndex)?.label ?: "-"}세트 · 완료 ${exercise.completedWorkSets}/${exercise.workSetCount}세트",
-            color = if (model.isPreview) KColors.Muted else KColors.Accent,
+            color = if (model.isPreview) KColors.Muted else KColors.Sage,
             fontSize = 13.sp,
             fontWeight = FontWeight.Medium,
             modifier = Modifier.padding(top = 8.dp),
@@ -426,7 +426,7 @@ private fun SetRow(
             Modifier.fillMaxSize().padding(vertical = 3.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Cell(set.label, Modifier.weight(SetWeights[0]), if (isCurrent) KColors.Accent else KColors.Muted, null, onLabel, sub = set.previous)
+            Cell(set.label, Modifier.weight(SetWeights[0]), if (isCurrent) KColors.Sage else KColors.Muted, null, onLabel, sub = set.previous)
             if (weighted) Cell(set.weightText, Modifier.weight(SetWeights[1]), KColors.White, editingField == SetField.WEIGHT, onWeight)
             Cell(set.reps?.toString() ?: "—", Modifier.weight(SetWeights[2]), KColors.White, editingField == SetField.REPS, onReps)
             CheckCell(set.completed, Modifier.weight(SetWeights[3]).padding(horizontal = 4.dp).height(40.dp).clickable { onCheck() }, highlighted = isCurrent)
@@ -434,7 +434,7 @@ private fun SetRow(
         }
         if (isCurrent) {
             Box(Modifier.align(Alignment.CenterStart).width(2.dp).height(20.dp)
-                .clip(RoundedCornerShape(1.dp)).background(KColors.Accent))
+                .clip(RoundedCornerShape(1.dp)).background(KColors.Sage))
         }
     }
 }

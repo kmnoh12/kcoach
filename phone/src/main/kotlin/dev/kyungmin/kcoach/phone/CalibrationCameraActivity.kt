@@ -551,7 +551,7 @@ class CalibrationCameraActivity : ComponentActivity() {
         /** Set while green is counting down to the automatic start; drawn as a ring around the check. */
         var ringSinceMs: Long? = null
         private val dp = resources.displayMetrics.density
-        private val accent = Color.rgb(143, 207, 186)
+        private val accent = Color.rgb(118, 219, 185)
         private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = accent; strokeWidth = 3 * dp; strokeCap = Paint.Cap.ROUND }
         private val dot = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
         private val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = accent; style = Paint.Style.STROKE; strokeWidth = 1.5f * dp }

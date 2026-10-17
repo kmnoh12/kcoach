@@ -79,8 +79,8 @@ fun FlipText(
 @Composable
 fun CheckCell(checked: Boolean, modifier: Modifier = Modifier, highlighted: Boolean = true) {
     val progress by animateFloatAsState(if (checked) 1f else 0f, tween(260, easing = Motion.UiEasing), label = "check")
-    val border by animateColorAsState(if (checked && highlighted) KColors.Accent else Color.Transparent, Motion.ui(), label = "checkBorder")
-    val checkColor by animateColorAsState(if (highlighted) KColors.Accent else KColors.Soft, Motion.ui(), label = "checkColor")
+    val border by animateColorAsState(if (checked && highlighted) KColors.Sage else Color.Transparent, Motion.ui(), label = "checkBorder")
+    val checkColor by animateColorAsState(if (highlighted) KColors.Sage else KColors.Soft, Motion.ui(), label = "checkColor")
     Box(
         modifier
             .clip(KShape.Control)
@@ -114,7 +114,7 @@ fun PageDots(count: Int, current: Int, modifier: Modifier = Modifier) {
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
         repeat(count) { i ->
             val width by animateDpAsState(if (i == current) 16.dp else 5.dp, tween(Motion.PAGE_MS, easing = Motion.UiEasing), label = "dot")
-            val color by animateColorAsState(if (i == current) KColors.Accent else KColors.Faint, Motion.ui(), label = "dotColor")
+            val color by animateColorAsState(if (i == current) KColors.Sage else KColors.Faint, Motion.ui(), label = "dotColor")
             Box(Modifier.width(width).height(5.dp).clip(RoundedCornerShape(3.dp)).background(color))
         }
     }
@@ -141,7 +141,7 @@ fun RestRing(fraction: Float, diameter: Dp, stroke: Dp, modifier: Modifier = Mod
         val sweep = 360f * fraction.coerceIn(0f, 1f) * intro.value
         rotate(-90f) {
             drawArc(
-                brush = SolidColor(KColors.Accent),
+                brush = SolidColor(KColors.Sage),
                 startAngle = 0f,
                 sweepAngle = sweep,
                 useCenter = false,
@@ -170,14 +170,14 @@ fun VolumeBar(done: Int, target: Int, unit: String, lastVolume: Int? = null, mod
                 Spacer(Modifier.weight(1f))
                 Text(
                     "지난번 %,d%s".format(lastVolume, unit),
-                    color = if (done > lastVolume) KColors.Accent else KColors.Muted,
+                    color = if (done > lastVolume) KColors.Sage else KColors.Muted,
                     fontSize = 12.sp,
                 )
             }
         }
         Spacer(Modifier.height(6.dp))
         Box(Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)).background(KColors.Hairline)) {
-            Box(Modifier.fillMaxWidth(fraction).height(3.dp).background(KColors.Accent))
+            Box(Modifier.fillMaxWidth(fraction).height(3.dp).background(KColors.Sage))
         }
     }
 }

@@ -225,7 +225,7 @@ fun HomeScreen(ui: HomeUi, running: RunningUi?, actions: HomeActions) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.Bottom) {
                 Text("홈", color = KColors.White, fontSize = 32.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
                 Text("이번 주 ", color = KColors.Muted, fontSize = 13.sp)
-                Text("${ui.weekCount}회", color = KColors.Sage, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                Text("${ui.weekCount}회", color = KColors.Bone, fontSize = 13.sp, fontWeight = FontWeight.Medium)
             }
             Spacer(Modifier.height(10.dp))
             WeekStrip(ui.week)
@@ -290,7 +290,7 @@ private fun WeekStrip(week: List<WeekDayUi>) {
                 }
                 val barHeight by animateDpAsState(if (entered) target else minBar, Motion.panel(), label = "bar")
                 val color = when {
-                    day.load != null -> KColors.Accent
+                    day.load != null -> KColors.Bone
                     day.isToday -> KColors.Sage
                     day.isFuture -> KColors.Surface
                     else -> KColors.SurfaceRaised
@@ -323,7 +323,7 @@ private fun RestHero(row: RoutineRowUi2, onClick: () -> Unit) {
         val entered = rememberEntered()
         val shownDays by animateIntAsState(if (entered) row.daysAgo ?: 0 else 0, tween(700, easing = LinearEasing), label = "heroDays")
         Text(
-            "$shownDays", color = KColors.Accent, fontSize = 64.sp, fontWeight = FontWeight.Medium,
+            "$shownDays", color = KColors.Bone, fontSize = 64.sp, fontWeight = FontWeight.Medium,
             letterSpacing = (-3).sp, lineHeight = 58.sp,
         )
         Spacer(Modifier.width(12.dp))

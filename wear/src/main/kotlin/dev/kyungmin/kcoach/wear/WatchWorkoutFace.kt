@@ -52,8 +52,8 @@ internal class WatchWorkoutFace(context: Context) : FrameLayout(context) {
     }
     val restNextLabel = label(9.5f, SOFT, 92, 300, 200, 346).apply { gravity = Gravity.START or Gravity.CENTER_VERTICAL; visibility = GONE }
     val restNextValue = label(12.5f, WHITE, 200, 300, 340, 346).apply { gravity = Gravity.END or Gravity.CENTER_VERTICAL; visibility = GONE }
-    val valueGhost = label(88f, BONE, 50, 140, 270, 320, false).apply { alpha = 0f; isClickable = false; importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO }
-    val value = label(88f, BONE, 50, 140, 270, 320, false)
+    val valueGhost = label(88f, SAGE, 50, 140, 270, 320, false).apply { alpha = 0f; isClickable = false; importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO }
+    val value = label(88f, SAGE, 50, 140, 270, 320, false)
     val target = label(15f, SOFT, 270, 232, 382, 292)
     /** The weight with its small "kg" on one line, as the design sets them. */
     val weight = label(17f, WHITE, 84, 336, 176, 378, false)
@@ -218,7 +218,7 @@ internal class WatchWorkoutFace(context: Context) : FrameLayout(context) {
     }
     companion object {
         val BONE = Color.rgb(237, 232, 220)
-        val SAGE = Color.rgb(143, 207, 186)
+        val SAGE = Color.rgb(118, 219, 185)
         /** Rest: a soft yellow. */
         val YELLOW = Color.rgb(255, 222, 112)
         /** Over the target: a light amber, kept distinct from the rest yellow. */
@@ -228,10 +228,10 @@ internal class WatchWorkoutFace(context: Context) : FrameLayout(context) {
         /** Heart-rate zone 4 stays the strong orange. */
         private val ZONE_ORANGE = Color.rgb(255, 160, 51)
         val RED = Color.rgb(229, 72, 59)
-        val WHITE = Color.rgb(241, 238, 231)
-        val MUTED = Color.rgb(148, 144, 138)
+        val WHITE = Color.rgb(237, 232, 220)
+        val MUTED = Color.rgb(143, 139, 130)
         val SOFT = Color.rgb(163, 159, 152)
-        val CARD = Color.rgb(42, 41, 39)
+        val CARD = Color.rgb(28, 27, 25)
         val TRACK = Color.rgb(27, 27, 26)
         /** Heart-rate zone colours, zone 1..5. The bands are a placeholder until a max heart rate is known. */
         private val ZONES = intArrayOf(Color.rgb(124, 142, 156), Color.rgb(77, 163, 255), Color.rgb(79, 209, 139), ZONE_ORANGE, RED)

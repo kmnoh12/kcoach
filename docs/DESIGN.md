@@ -22,10 +22,10 @@
 
 ## 토큰 (`ui/Motion.kt`의 `KColors`, `KShape`) — 2026-10-17 뼈색 팔레트로 교체
 
-- 배경 `Bg #151514`(순검정이 아니라 따뜻한 차콜), 면 `Surface #1D1C1A`, 올린 면 `SurfaceRaised #2A2927`, 구분선 `Hairline #262624`
-- 글자 `White #F1EEE7`, 보조 `Soft #A39F98`, 흐림 `Muted #94908A`, 아주 흐림 `Faint #5A5751`
-- 주인공 `Accent #EDE8DC`(뼈색: 큰 숫자, 주요 버튼. 그 위 글씨 `OnAccent #171612`)
-- 상태 `Sage #8FCFBA`(측정 중, 오늘 표시, 진행, 기록 갱신처럼 상태에만. 면 `AccentWash #1F2B27`)
+- 배경 `Bg #000000`(순검정), 면 `Surface #0E0E0D`, 올린 면 `SurfaceRaised #1C1B19`, 구분선 `Hairline #1E1D1A`
+- 글자·지난 기록 `Bone/White #EDE8DC`(본문 글자, 이미 한 날과 지난 기록), 보조 `Soft #A39F98`, 흐림 `Muted #8F8B82`, 아주 흐림 `Faint #5C5952`
+- 주인공 `Accent #76DBB9`(세이지: 주요 버튼, 오늘, 현재 세트, 진행 등 행동과 상태. 그 위 글씨 `OnAccent #04140E`)
+- `Sage`는 `Accent`의 별칭, 면 `AccentWash #0F2A22`. 규칙: 과거·완료 = 뼈색, 지금·행동 = 세이지
 - 이유: 검정 바탕 + 네온 민트가 플랜핏과 첫인상이 같아서 뼈색 + 톤을 죽인 세이지로 바꿨다.
 - 워치는 OLED라 순검정 `#000000`을 그대로 쓰고, 휴식 노랑 `#FFD233`, 목표 초과 주황 `#FFA033`, 심박 존 색은 워치 시안(`design/watch-ui-2026-10-17`)을 따른다.
 - 경고/삭제만 `Red #E5483B`. 의미 없는 색 추가 금지.
