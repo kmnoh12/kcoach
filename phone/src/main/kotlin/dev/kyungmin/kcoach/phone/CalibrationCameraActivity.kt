@@ -647,46 +647,27 @@ class CalibrationCameraActivity : ComponentActivity() {
 
         private fun drawGuide(canvas: Canvas, scale: Float) {
             val shown = figure ?: return
-            val color = if (matched) Color.rgb(90, 222, 132) else Color.rgb(205, 209, 207)
-            val alpha = ((if (matched) 0.95f else 0.90f) * 255).toInt()
+            // A plain skeleton: the joints joined by thick lines, translucent white, green once the pose matches.
+            val color = if (matched) Color.rgb(90, 222, 132) else Color.WHITE
+            val alpha = ((if (matched) 0.95f else 0.60f) * 255).toInt()
             fun mapped(p: GuidePoint) = floatArrayOf(p.x.toFloat(), p.y.toFloat()).also { frameToView?.mapPoints(it) }
             fun gx(p: GuidePoint) = mapped(p)[0]
             fun gy(p: GuidePoint) = mapped(p)[1]
-            fun limb(l: GuideLimb, extra: Float = 0f) {
-                shape.style = Paint.Style.STROKE; shape.strokeWidth = l.width.toFloat() * scale + extra
-                for (i in 0 until l.points.size - 1) canvas.drawLine(gx(l.points[i]), gy(l.points[i]), gx(l.points[i + 1]), gy(l.points[i + 1]), shape)
+            fun line(a: GuidePoint, b: GuidePoint, width: Double) {
+                shape.style = Paint.Style.STROKE; shape.strokeWidth = width.toFloat() * scale; shape.strokeCap = Paint.Cap.ROUND
+                canvas.drawLine(gx(a), gy(a), gx(b), gy(b), shape)
             }
             shape.color = color
-            canvas.saveLayerAlpha(null, alpha / 2)
-            shown.limbs.filter { !it.primary }.forEach { limb(it) }
-            canvas.restore()
+            // One layer alpha, so strokes that overlap at a joint do not turn brighter there.
             canvas.saveLayerAlpha(null, alpha)
-            if (shown.torso.size == 2) {
-                shape.style = Paint.Style.STROKE; shape.strokeWidth = shown.torsoWidth.toFloat() * scale
-                canvas.drawLine(gx(shown.torso[0]), gy(shown.torso[0]), gx(shown.torso[1]), gy(shown.torso[1]), shape)
-            } else {
-                val path = android.graphics.Path().apply {
-                    moveTo(gx(shown.torso[0]), gy(shown.torso[0])); shown.torso.drop(1).forEach { lineTo(gx(it), gy(it)) }; close()
-                }
-                shape.style = Paint.Style.FILL; shape.pathEffect = android.graphics.CornerPathEffect(6 * dp)
-                canvas.drawPath(path, shape); shape.pathEffect = null
-                shown.torsoSplit?.let { (top, bottom) ->
-                    // The side face, shaded darker so the body reads as turned toward the camera.
-                    val side = android.graphics.Path().apply {
-                        moveTo(gx(top), gy(top)); lineTo(gx(shown.torso[0]), gy(shown.torso[0]))
-                        lineTo(gx(shown.torso[3]), gy(shown.torso[3])); lineTo(gx(bottom), gy(bottom)); close()
-                    }
-                    shape.color = Color.argb(90, 0, 0, 0); shape.pathEffect = android.graphics.CornerPathEffect(6 * dp)
-                    canvas.drawPath(side, shape); shape.pathEffect = null; shape.color = color
-                }
+            if (shown.torso.size == 2) line(shown.torso[0], shown.torso[1], shown.torsoWidth)
+            else {
+                val width = shown.limbs.firstOrNull()?.width ?: shown.torsoWidth
+                for (i in shown.torso.indices) line(shown.torso[i], shown.torso[(i + 1) % shown.torso.size], width)
             }
-            shape.style = Paint.Style.FILL
+            shown.limbs.forEach { l -> for (i in 0 until l.points.size - 1) line(l.points[i], l.points[i + 1], l.width) }
+            shape.style = Paint.Style.STROKE; shape.strokeWidth = (shown.limbs.firstOrNull()?.width ?: shown.torsoWidth).toFloat() * scale
             canvas.drawCircle(gx(shown.head), gy(shown.head), shown.headRadius.toFloat() * scale, shape)
-            shown.limbs.filter { it.primary }.forEach { l ->
-                // A dark edge keeps a target arm readable where it crosses the torso in side views.
-                if (shown.torso.size == 2) { shape.color = Color.rgb(20, 24, 23); limb(l, 3 * dp); shape.color = color }
-                limb(l)
-            }
             canvas.restore()
             if (matched) {
                 val cx = width / 2f; val cy = 72 * dp; val r = 22 * dp

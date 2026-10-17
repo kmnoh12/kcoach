@@ -21,15 +21,15 @@ enum class CameraPoseFamily(
     val leg: Pair<Double, Double>? = null,
     /** Apparent shoulder width relative to a straight-on view; below 1 the user is turned toward a 45-degree oblique view. */
     val widthScale: Double = if (front) 1.0 else kotlin.math.cos(Math.toRadians(CameraOrientationPolicy.OBLIQUE)),
-    /** Both arms fold in toward the head: the far arm is the near arm mirrored, not swung the same way. */
-    val mirrorFarArm: Boolean = false,
+    /** Degrees each arm segment (upper arm, forearm) leans inward toward the midline; 0 keeps the arm in the sagittal plane. */
+    val armInward: Pair<Double, Double> = 0.0 to 0.0,
 ) {
     STAND_ARMS_DOWN_SIDE(false, 0.0, 0.0 to 4.0),
     STAND_ARMS_DOWN_FRONT(true, 0.0, 8.0 to 6.0),
     STAND_ELBOW_BENT_SIDE(false, 8.0, -6.0 to 100.0),
     OVERHEAD_EXTENSION_SIDE(false, 0.0, 170.0 to -70.0),
-    // Start pose: upper arms straight up beside the head, forearms folded down behind it (the wrist is hidden by the head).
-    CABLE_OVERHEAD_EXTENSION_SIDE(false, 2.0, 190.0 to -18.0, mirrorFarArm = true),
+    // Start pose: upper arms straight up beside the head, forearms folded down and back behind it (the wrist is hidden by the head).
+    CABLE_OVERHEAD_EXTENSION_SIDE(false, 2.0, 180.0 to -15.0, armInward = 8.0 to 40.0),
     // 45 degrees: a pure side view points the forearm along the camera axis, which hides the wrist and flattens its depth.
     EXTERNAL_ROTATION_OBLIQUE(true, 0.0, 0.0 to -90.0, widthScale = kotlin.math.cos(Math.toRadians(CameraOrientationPolicy.OBLIQUE))),
     PREACHER_SIDE(false, 10.0, 45.0 to 40.0),
@@ -60,15 +60,13 @@ data class GuideLimb(val points: List<GuidePoint>, val width: Double, val primar
 
 /** [torso] is a two-point capsule (side views) or a four-point outline (front views). */
 data class GuideFigure(val head: GuidePoint, val headRadius: Double, val torso: List<GuidePoint>, val torsoWidth: Double,
-    val limbs: List<GuideLimb>, val lowerBody: Boolean,
-    /** Turned views only: the edge between the chest face and the narrower side face, shoulder end first. */
-    val torsoSplit: Pair<GuidePoint, GuidePoint>? = null)
+    val limbs: List<GuideLimb>, val lowerBody: Boolean)
 
 object CameraPoseGuide {
     // Drillis-Contini segment lengths as a fraction of standing height.
     private const val UPPER_ARM = .186; private const val FOREARM = .146; private const val SHOULDER_WIDTH = .259
     private const val TORSO = .288; private const val HIP_WIDTH = .191; private const val THIGH = .245; private const val SHANK = .246
-    private const val CHEST_FACE_SHARE = .7; private const val HEAD_RADIUS = .065; private const val HEAD_OFFSET = .115
+    private const val HEAD_RADIUS = .065; private const val HEAD_OFFSET = .115
 
     fun familyFor(exerciseId: String): CameraPoseFamily? {
         val id = ExerciseMotionCatalog.normalizeExerciseId(exerciseId)
@@ -137,7 +135,7 @@ object CameraPoseGuide {
             val limbs = listOf(anchor.shoulder to anchor.other, anchor.other to anchor.shoulder).map { (s, opposite) ->
                 val out = sign(s.x - opposite.x)
                 val elbow = s + outward(upper, out) * (UPPER_ARM * h)
-                GuideLimb(listOf(s, elbow, elbow + outward(fore, out) * (FOREARM * h)), .055 * h, true)
+                GuideLimb(listOf(s, elbow, elbow + outward(fore, out) * (FOREARM * h)), .03 * h, true)
             }
             val inset = (SHOULDER_WIDTH - HIP_WIDTH) / 2 * h
             fun hipUnder(s: GuidePoint, toward: GuidePoint) = GuidePoint(s.x + sign(toward.x - s.x) * inset, s.y + TORSO * h)
@@ -146,35 +144,55 @@ object CameraPoseGuide {
                 listOf(anchor.shoulder, anchor.other, hipUnder(anchor.other, anchor.shoulder), hipUnder(anchor.shoulder, anchor.other)),
                 0.0, limbs, false)
         }
-        val f = anchor.facing.toDouble()
-        fun dir(degrees: Double) = Math.toRadians(degrees).let { GuidePoint(f * sin(it), cos(it)) }
-        val up = Math.toRadians(family.torsoLean).let { GuidePoint(f * sin(it), -cos(it)) }
-        val hip = anchor.shoulder + up * (-TORSO * h)
-        val far = anchor.shoulder + GuidePoint(-f * SHOULDER_WIDTH * family.widthScale * h, 0.0)
+        return buildTurned(family, anchor)
+    }
+
+    /**
+     * Side families as a small 3D skeleton (MediaPipe-style joints) in body axes: x = the person's right, y = up, z = forward.
+     * It is turned by the family's yaw and projected straight onto the image, so shoulder width, the head between the
+     * shoulders, the torso's two faces and arms folding behind the head all fall out of the rotation.
+     */
+    private fun buildTurned(family: CameraPoseFamily, anchor: GuideAnchor): GuideFigure {
+        val h = anchor.bodyHeight
+        val yaw = kotlin.math.acos(family.widthScale.coerceIn(0.0, 1.0))
+        val f = anchor.facing.toDouble(); val cy = cos(yaw); val sy = sin(yaw)
+        fun p(x: Double, y: Double, z: Double) = doubleArrayOf(x, y, z)
+        fun screen(v: DoubleArray) = GuidePoint(-v[0] * cy + v[2] * f * sy, -v[1])
+        val anchorIsLeft = anchor.other.x <= anchor.shoulder.x
+        val anchorSide = if (anchorIsLeft) -1.0 else 1.0
+        val origin = screen(p(anchorSide * SHOULDER_WIDTH / 2, 0.0, 0.0))
+        fun map(v: DoubleArray) = screen(v).let { GuidePoint(anchor.shoulder.x + (it.x - origin.x) * h, anchor.shoulder.y + (it.y - origin.y) * h) }
+        fun add(a: DoubleArray, b: DoubleArray, k: Double) = p(a[0] + b[0] * k, a[1] + b[1] * k, a[2] + b[2] * k)
+        val lean = Math.toRadians(family.torsoLean)
+        val hipCenter = p(0.0, -TORSO * cos(lean), -TORSO * sin(lean))
+        // Segment direction from a sagittal angle (degrees from straight down, positive forward) and an inward lean.
+        fun segment(sagittal: Double, inward: Double, inwardSign: Double): DoubleArray {
+            val a = Math.toRadians(sagittal); val b = Math.toRadians(inward)
+            return p(inwardSign * sin(b), -cos(a) * cos(b), sin(a) * cos(b))
+        }
         val limbs = mutableListOf<GuideLimb>()
-        for ((s, primary) in listOf(far to false, anchor.shoulder to true)) {
-            val mirror = if (family.mirrorFarArm && !primary) -1.0 else 1.0
-            fun armDir(degrees: Double) = dir(degrees).let { GuidePoint(it.x * mirror, it.y) }
-            val elbow = s + armDir(upper) * (UPPER_ARM * h)
-            limbs += GuideLimb(listOf(s, elbow, elbow + armDir(fore) * (FOREARM * h)), .055 * h, primary)
+        val (upper, fore) = family.arm; val (upperIn, foreIn) = family.armInward
+        for ((side, primary) in listOf(-anchorSide to false, anchorSide to true)) {
+            val shoulder = p(side * SHOULDER_WIDTH / 2, 0.0, 0.0)
+            val inwardSign = -sign(side)
+            val elbow = add(shoulder, segment(upper, upperIn, inwardSign), UPPER_ARM)
+            val wrist = add(elbow, segment(fore, foreIn, inwardSign), FOREARM)
+            limbs += GuideLimb(listOf(map(shoulder), map(elbow), map(wrist)), .03 * h, primary)
         }
         family.leg?.let { (thigh, shank) ->
-            for ((offset, primary) in listOf(-.03 to false, 0.0 to true)) {
-                val start = hip + GuidePoint(f * offset * h, 0.0)
-                val knee = start + dir(thigh) * (THIGH * h)
-                limbs += GuideLimb(listOf(start, knee, knee + dir(shank) * (SHANK * h)), .07 * h, primary)
+            for ((side, primary) in listOf(-anchorSide to false, anchorSide to true)) {
+                val hip = add(hipCenter, p(side * HIP_WIDTH / 2, 0.0, 0.0), 1.0)
+                val knee = add(hip, segment(thigh, 0.0, 0.0), THIGH)
+                limbs += GuideLimb(listOf(map(hip), map(knee), map(add(knee, segment(shank, 0.0, 0.0), SHANK))), .04 * h, primary)
             }
         }
-        // Turned 45 degrees, the head sits between the two shoulders, not over the near one.
-        val neck = GuidePoint((anchor.shoulder.x + far.x) / 2, anchor.shoulder.y)
-        val hipFar = hip + GuidePoint(-f * HIP_WIDTH * family.widthScale * h, 0.0)
-        // Turned toward the camera, the chest face is the wide part and the side face the narrow strip on the near side.
-        val split = if (family.widthScale < 1.0) {
-            fun along(a: GuidePoint, b: GuidePoint) = GuidePoint(a.x + (b.x - a.x) * CHEST_FACE_SHARE, a.y + (b.y - a.y) * CHEST_FACE_SHARE)
-            along(far, anchor.shoulder) to along(hipFar, hip)
-        } else null
-        return GuideFigure(neck + up * (HEAD_OFFSET * h), HEAD_RADIUS * h, listOf(anchor.shoulder, far, hipFar, hip), .12 * h,
-            limbs, family.lowerBody, split)
+        val shoulders = p(0.0, 0.0, 0.0)
+        fun joint(side: Double, level: DoubleArray, width: Double) = map(add(level, p(side * width / 2, 0.0, 0.0), 1.0))
+        // Near/far shoulder, then far/near hip: the torso is just these four joints joined.
+        val joints = listOf(joint(anchorSide, shoulders, SHOULDER_WIDTH), joint(-anchorSide, shoulders, SHOULDER_WIDTH),
+            joint(-anchorSide, hipCenter, HIP_WIDTH), joint(anchorSide, hipCenter, HIP_WIDTH))
+        val head = map(p(0.0, HEAD_OFFSET * cos(lean), HEAD_OFFSET * sin(lean)))
+        return GuideFigure(head, HEAD_RADIUS * h, joints, .03 * h, limbs, family.lowerBody)
     }
 
     private fun outward(degrees: Double, out: Double) = Math.toRadians(degrees).let { GuidePoint(out * sin(it), cos(it)) }
