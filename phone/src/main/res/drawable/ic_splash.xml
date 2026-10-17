@@ -1,0 +1,12 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- The launcher glyph on a transparent canvas, centred inside the splash icon safe circle. -->
+    <group android:translateX="18" android:translateY="18" android:scaleX="1.5" android:scaleY="1.5">
+        <path
+            android:fillColor="#72E6A0"
+            android:pathData="M10,12h6v9h4v-4h8v4h4v-9h6v24h-6v-9h-4v4h-8v-4h-4v9h-6z" />
+    </group>
+</vector>

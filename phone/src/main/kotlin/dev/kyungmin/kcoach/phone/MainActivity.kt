@@ -482,7 +482,16 @@ class MainActivity : ComponentActivity() {
     private var returnFromExerciseRecord: (() -> Unit)? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        val createdAtMs = android.os.SystemClock.elapsedRealtime()
         super.onCreate(savedInstanceState)
+        // Cold start only: keep the system splash (icon on the app background) up for a beat so the
+        // home screen never just pops in; the listener does not fire on a resume.
+        if (android.os.Build.VERSION.SDK_INT >= 31) {
+            splashScreen.setOnExitAnimationListener { splash ->
+                val wait = (SPLASH_MIN_MS - (android.os.SystemClock.elapsedRealtime() - createdAtMs)).coerceAtLeast(0L)
+                splash.postDelayed({ splash.remove() }, wait)
+            }
+        }
         val resetHome = WorkoutTermination(this).consumeHomeReset()
         val restorationState = savedInstanceState.takeUnless { resetHome }
         window.statusBarColor = bg
@@ -3152,6 +3161,7 @@ class MainActivity : ComponentActivity() {
     companion object {
         private const val EVENT_TAG = "KCoachEvent"
         private const val RECORD_BANNER_MODEL_MS = 6_000L
+        private const val SPLASH_MIN_MS = 300L
         private const val STATE_VISIBLE_RESULT = "visibleFinishedWorkoutResult"
         private const val STATE_ROOT_TAB = "visibleRootTab"
         private const val STATE_CALIBRATION_EXERCISE = "selectedCalibrationExercise"

@@ -4,7 +4,7 @@
         <item name="android:colorAccent">#FFB100</item>
         <item name="android:navigationBarColor">#0A0C0C</item>
         <item name="android:statusBarColor">#0A0C0C</item>
-        <item name="android:windowBackground">#0A0C0C</item>
+        <item name="android:windowBackground">@drawable/splash_window</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">false</item>
     </style>
