@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>워치짐 워치 UI 시안</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0B0C0C; --surface:#161A19; --raised:#1F2322; --hair:#232827;
+  --white:#F2F4F3; --soft:#98A3A0; --muted:#8A9390; --faint:#4F5654;
+  --mint:#2DD4BF; --on-mint:#04201C; --wash:#10312C;
+  --rest:#FFD233; --over:#FFA033; --red:#E5483B;
+  --font:Roboto,"Noto Sans KR","Apple SD Gothic Neo",sans-serif;
+}
+*{box-sizing:border-box;margin:0}
+body{background:var(--bg);color:var(--white);font-family:var(--font);padding:48px 24px 72px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto}
+h1{font-size:22px;font-weight:500;letter-spacing:-.2px}
+.lead{color:var(--soft);font-size:14px;line-height:1.7;margin-top:8px;max-width:680px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:56px 32px;margin-top:44px}
+@media(max-width:980px){.grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:640px){.grid{grid-template-columns:1fr}}
+.item{display:flex;flex-direction:column;align-items:center}
+.cap{margin-top:18px;text-align:left;width:min(100%,340px)}
+.cap b{display:block;font-size:14px;font-weight:500}
+.cap span{display:block;color:var(--soft);font-size:12.5px;line-height:1.65;margin-top:4px}
+.tag{display:inline-block;color:var(--mint);font-size:11px;letter-spacing:.3px;margin-bottom:6px}
+
+/* 워치: 432 격자를 --u 로 환산 */
+.watch{width:min(100%,340px);aspect-ratio:1;border-radius:50%;background:#000;position:relative;container-type:size;overflow:hidden;
+  box-shadow:0 0 0 2px #1b1d1d,0 0 0 9px #0f1010,0 0 0 10px #232626}
+.face{--u:calc(100cqw/432);position:absolute;inset:0}
+.abs{position:absolute;left:0;right:0;text-align:center;white-space:nowrap}
+.ring{position:absolute;inset:0;width:100%;height:100%}
+.clock{top:calc(var(--u)*28);font-size:calc(var(--u)*26);color:var(--white);font-weight:500;letter-spacing:.2px;line-height:1}
+.name{font-size:calc(var(--u)*34);font-weight:700;line-height:1;letter-spacing:-.3px}
+.sub{font-size:calc(var(--u)*22);color:var(--soft);line-height:1}
+.num{font-family:Roboto,sans-serif;font-weight:500;line-height:1;letter-spacing:calc(var(--u)*-4)}
+.dots{bottom:calc(var(--u)*20);display:flex;justify-content:center;gap:calc(var(--u)*9)}
+.dots i{width:calc(var(--u)*8);height:calc(var(--u)*8);border-radius:50%;background:var(--faint)}
+.dots i.on{background:var(--white)}
+.hair{position:absolute;height:calc(var(--u)*1.5);background:var(--hair)}
+svg.ic{width:1em;height:1em;stroke:currentColor;fill:none;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;vertical-align:-.12em}
+
+/* 1 · 측정 */
+.s1 .name{top:calc(var(--u)*72)}
+.s1 .sub{top:calc(var(--u)*116);display:flex;justify-content:center;align-items:center;gap:calc(var(--u)*10)}
+.s1 .sub .live{width:calc(var(--u)*9);height:calc(var(--u)*9);border-radius:50%;background:var(--mint)}
+.count{top:calc(var(--u)*148);height:calc(var(--u)*170);display:flex;justify-content:center;align-items:flex-end;gap:calc(var(--u)*14)}
+.count .num{font-size:calc(var(--u)*176);color:var(--mint)}
+.count .of{font-size:calc(var(--u)*30);color:var(--soft);padding-bottom:calc(var(--u)*30);font-weight:400;letter-spacing:0}
+.metrics{top:calc(var(--u)*338);display:flex;justify-content:center;align-items:center;gap:calc(var(--u)*44)}
+.metrics div{display:flex;align-items:baseline;gap:calc(var(--u)*6)}
+.metrics .v{font-size:calc(var(--u)*34);font-weight:500;color:var(--white);font-family:Roboto,sans-serif}
+.metrics .u{font-size:calc(var(--u)*20);color:var(--muted)}
+.metrics .h{color:var(--red);font-size:calc(var(--u)*24);align-self:center}
+.vsep{position:absolute;top:calc(var(--u)*336);left:50%;width:calc(var(--u)*1.5);height:calc(var(--u)*38);background:var(--hair)}
+
+/* 3 · 저장 */
+.s3 .check{top:calc(var(--u)*104);display:flex;justify-content:center}
+.s3 .check svg{width:calc(var(--u)*104);height:calc(var(--u)*104);stroke:var(--mint);stroke-width:2.2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.s3 .name2{top:calc(var(--u)*236);font-size:calc(var(--u)*36);font-weight:700;line-height:1}
+.s3 .sub{top:calc(var(--u)*284)}
+.s3 .sub b{color:var(--white);font-weight:500;font-family:Roboto,sans-serif;font-size:calc(var(--u)*28)}
+.s3 .rec{top:calc(var(--u)*336);font-size:calc(var(--u)*20);color:var(--mint);line-height:1}
+
+/* 4 · 휴식 */
+.s4 .lab{top:calc(var(--u)*68);font-size:calc(var(--u)*22);color:var(--rest);font-weight:500;line-height:1;letter-spacing:.3px}
+.s4 .big{top:calc(var(--u)*90);font-size:calc(var(--u)*126);color:var(--rest);}
+.s4 .goal{top:calc(var(--u)*216);font-size:calc(var(--u)*20);color:var(--muted);line-height:1}
+.panel{position:absolute;left:calc(var(--u)*72);right:calc(var(--u)*72);top:calc(var(--u)*252);height:calc(var(--u)*96);background:var(--surface);border-radius:calc(var(--u)*18);padding:0 calc(var(--u)*20)}
+.panel .row{height:50%;display:flex;align-items:center;justify-content:space-between}
+.panel .row+.row{border-top:calc(var(--u)*1.5) solid var(--hair)}
+.panel .k{font-size:calc(var(--u)*19);color:var(--muted)}
+.panel .v{font-size:calc(var(--u)*25);font-weight:500;font-family:Roboto,"Noto Sans KR",sans-serif;color:var(--white)}
+.panel .row.next .k{color:var(--soft)}
+.panel .row.next .v{color:var(--white)}
+.skip{top:calc(var(--u)*368);font-size:calc(var(--u)*21);color:var(--soft);line-height:1}
+
+/* 5 · 보조 */
+.s5 .hr{top:calc(var(--u)*72);display:flex;justify-content:center;align-items:baseline;gap:calc(var(--u)*10)}
+.s5 .hr .num{font-size:calc(var(--u)*112);color:var(--white);letter-spacing:calc(var(--u)*-3)}
+.s5 .hr .u{font-size:calc(var(--u)*22);color:var(--muted)}
+.zone{position:absolute;left:calc(var(--u)*84);right:calc(var(--u)*84);top:calc(var(--u)*204);height:calc(var(--u)*16);display:flex;gap:calc(var(--u)*5)}
+.zone i{flex:1;background:var(--raised);border-radius:calc(var(--u)*3)}
+.zone i.on{background:var(--mint)}
+.zlab{top:calc(var(--u)*230);font-size:calc(var(--u)*20);color:var(--soft);line-height:1}
+.pair{top:calc(var(--u)*290);display:flex;justify-content:center;gap:calc(var(--u)*48)}
+.pair div{display:flex;flex-direction:column;align-items:center;gap:calc(var(--u)*8)}
+.pair .v{font-size:calc(var(--u)*40);font-family:Roboto,sans-serif;font-weight:500;line-height:1}
+.pair .k{font-size:calc(var(--u)*18);color:var(--muted);line-height:1}
+
+/* 6 · 세트 메뉴 */
+.s6 .name{top:calc(var(--u)*64);font-size:calc(var(--u)*30)}
+.s6 .sub{top:calc(var(--u)*102)}
+.btn{position:absolute;left:calc(var(--u)*68);right:calc(var(--u)*68);height:calc(var(--u)*66);border-radius:calc(var(--u)*14);display:flex;align-items:center;justify-content:center;font-size:calc(var(--u)*25);font-weight:700}
+.btn.p{background:var(--mint);color:var(--on-mint);top:calc(var(--u)*140)}
+.btn.s{background:var(--surface);color:var(--white);font-weight:500}
+.btn.s.a{top:calc(var(--u)*218)}
+.btn.s.b{top:calc(var(--u)*296)}
+
+/* 2 · 목표 초과 */
+.over .num{color:var(--over)}
+.over .tagline{top:calc(var(--u)*116);color:var(--rest);font-size:calc(var(--u)*22);line-height:1;font-weight:500}
+
+.notes{margin-top:72px;display:grid;grid-template-columns:repeat(2,1fr);gap:28px 48px;border-top:1px solid var(--hair);padding-top:36px}
+@media(max-width:760px){.notes{grid-template-columns:1fr}}
+.notes h2{font-size:15px;font-weight:500;margin-bottom:10px}
+.notes p,.notes li{color:var(--soft);font-size:13px;line-height:1.75}
+.notes ul{padding-left:18px}
+.sw{display:inline-block;width:11px;height:11px;border-radius:2px;margin-right:7px;vertical-align:-1px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>워치짐 워치 화면 시안</h1>
+<p class="lead">원형 432 격자 기준 시안이에요. 화면을 셋으로 나눴어요. 운동 중에는 숫자 하나, 쉬는 동안에는 직전 세트와 다음 목표, 옆으로 밀면 심박과 시간이에요. 상태는 색과 짧은 글자를 함께 써서 구별해요. 숫자와 배치는 실제 앱의 샘플이고, 기기에서 확인한 값이 아니에요.</p>
+
+<div class="grid">
+
+<!-- 1 측정 -->
+<div class="item">
+  <div class="watch"><div class="face s1">
+    <svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#161A19" stroke-width="7"/><circle cx="216" cy="216" r="209" fill="none" stroke="#2DD4BF" stroke-width="7" stroke-linecap="round" stroke-dasharray="875 1313" transform="rotate(-90 216 216)"/></svg>
+    <div class="abs clock">02:02</div>
+    <div class="abs name">덤벨 컬</div>
+    <div class="abs sub"><span class="live"></span>1세트 · 자동 측정</div>
+    <div class="abs count"><span class="num">8</span><span class="of">/ 12회</span></div>
+    <div class="hair" style="left:calc(var(--u)*96);right:calc(var(--u)*96);top:calc(var(--u)*322)"></div>
+    <div class="abs metrics">
+      <div><span class="v">20</span><span class="u">kg</span></div>
+      <div><span class="h"><svg class="ic" viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg></span><span class="v">112</span></div>
+    </div>
+    <div class="vsep"></div>
+    <div class="abs dots"><i class="on"></i><i></i><i></i></div>
+  </div></div>
+  <div class="cap"><span class="tag">1 · 측정 중</span><b>숫자 하나가 주인공</b><span>림 전체가 목표 횟수까지 차오르는 진행 링이 돼요. 큰 횟수는 민트, 무게와 심박은 한 줄로 내렸고, 심박 빨강은 하트 아이콘에만 남겼어요. 단위는 작고 흐리게 둬서 읽는 순서가 생겨요.</span></div>
+</div>
+
+<!-- 2 목표 초과 -->
+<div class="item">
+  <div class="watch"><div class="face s1 over">
+    <svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#FFA033" stroke-width="7"/><circle cx="216" cy="216" r="209" fill="none" stroke="#C45800" stroke-width="7" stroke-linecap="round" stroke-dasharray="109.4 1313" transform="rotate(-90 216 216)"/></svg>
+    <div class="abs clock">02:03</div>
+    <div class="abs name">덤벨 컬</div>
+    <div class="abs sub" style="color:var(--over)">목표 초과</div>
+    <div class="abs count"><span class="num">13</span><span class="of">/ 12회</span></div>
+    <div class="hair" style="left:calc(var(--u)*96);right:calc(var(--u)*96);top:calc(var(--u)*322)"></div>
+    <div class="abs metrics">
+      <div><span class="v">20</span><span class="u">kg</span></div>
+      <div><span class="h"><svg class="ic" viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg></span><span class="v">118</span></div>
+    </div>
+    <div class="vsep"></div>
+    <div class="abs dots"><i class="on"></i><i></i><i></i></div>
+  </div></div>
+  <div class="cap"><span class="tag">2 · 목표 초과</span><b>링과 숫자가 같이 색을 바꿔요</b><span>목표를 넘으면 링이 한 바퀴 다 차고, 넘은 횟수만큼 12시부터 다시 한 겹 더 쌓여요. 겹친 구간은 더 진한 앰버로 보여요(13/12면 1시 방향까지). 숫자도 주황으로 바뀌어요. 글자 "목표 초과"도 같이 떠서 색을 못 보는 사람도 알 수 있어요. 빨강은 오류와 삭제용으로 아껴요.</span></div>
+</div>
+
+<!-- 3 저장 -->
+<div class="item">
+  <div class="watch"><div class="face s3">
+    <svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#2DD4BF" stroke-width="7"/></svg>
+    <div class="abs clock">02:04</div>
+    <div class="abs check"><svg viewBox="0 0 104 104"><circle cx="52" cy="52" r="46"/><path d="M32 54l14 14 27-30"/></svg></div>
+    <div class="abs name2">1세트 저장</div>
+    <div class="abs sub"><b>12회</b> · <b>20kg</b></div>
+    <div class="abs rec">최고 중량 갱신</div>
+  </div></div>
+  <div class="cap"><span class="tag">3 · 저장 완료 (0.8초)</span><b>멈춘 숫자와 저장된 기록을 구별</b><span>세트가 끝나면 체크와 "1세트 저장"이 잠깐 떠서 기록이 남았다는 걸 알려줘요. 기록 갱신이 있을 때만 맨 아래에 한 줄이 붙어요. 소리와 긴 애니메이션은 없고, 지나가면 휴식 화면으로 넘어가요.</span></div>
+</div>
+
+<!-- 4 휴식 -->
+<div class="item">
+  <div class="watch"><div class="face s4">
+    <svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#161A19" stroke-width="7"/><circle cx="216" cy="216" r="209" fill="none" stroke="#FFD233" stroke-width="7" stroke-linecap="round" stroke-dasharray="880 1313" transform="rotate(-90 216 216)"/></svg>
+    <div class="abs clock">02:05</div>
+    <div class="abs lab">휴식</div>
+    <div class="abs num big">0:45</div>
+    <div class="abs goal">목표 1:30</div>
+    <div class="panel">
+      <div class="row"><span class="k">직전 1세트</span><span class="v">12회 × 20kg</span></div>
+      <div class="row next"><span class="k">다음 2세트</span><span class="v">12회 × 20kg</span></div>
+    </div>
+    <div class="abs skip">휴식 건너뛰기</div>
+  </div></div>
+  <div class="cap"><span class="tag">4 · 휴식</span><b>쉬는 동안 필요한 건 이 둘</b><span>노랑은 휴식에만 써요. 링은 남은 시간만큼 줄어들어요. 아래 카드에 직전 세트와 다음 목표를 묶어서, 쉬면서 다음에 뭘 들지 바로 보여요. 회색 카드는 이 한 곳에만 써요.</span></div>
+</div>
+
+<!-- 5 보조 -->
+<div class="item">
+  <div class="watch"><div class="face s5">
+    <div class="abs clock">02:05</div>
+    <div class="abs hr"><span class="num">112</span><span class="u">bpm</span></div>
+    <div class="zone"><i></i><i class="on"></i><i></i><i></i><i></i></div>
+    <div class="abs zlab">구간 2 · 유산소</div>
+    <div class="abs pair">
+      <div><span class="v">32:10</span><span class="k">운동 시간</span></div>
+      <div><span class="v">9</span><span class="k">완료 세트</span></div>
+    </div>
+    <div class="abs dots"><i></i><i></i><i class="on"></i></div>
+  </div></div>
+  <div class="cap"><span class="tag">5 · 보조 화면</span><b>밀어서 보는 숫자들</b><span>운동 중에 보지 않아도 되는 정보는 한 화면으로 모았어요. 심박 구간은 다섯 칸 중 현재 칸만 민트예요. 기기가 주지 않는 값은 채우지 않아요(칼로리는 아직 넣지 않았어요).</span></div>
+</div>
+
+<!-- 6 세트 메뉴 -->
+<div class="item">
+  <div class="watch"><div class="face s6">
+    <div class="abs name">덤벨 컬</div>
+    <div class="abs sub">1세트 · 현재 8회</div>
+    <div class="btn p">8회로 세트 마치기</div>
+    <div class="btn s a">횟수 수정</div>
+    <div class="btn s b">템포 알림 끄기</div>
+    <div class="abs dots"><i></i><i class="on"></i><i></i></div>
+  </div></div>
+  <div class="cap"><span class="tag">6 · 세트 메뉴</span><b>한 줄 버튼, 채움은 하나</b><span>세트 마치기가 두 줄로 눌려 있던 걸 한 줄로 풀고, 아래 버튼이 잘려서 스크롤해야 하던 걸 한 화면에 모두 담았어요. 눌러야 하는 건 민트 하나뿐이에요. 버튼 높이는 33dp예요.</span></div>
+</div>
+
+</div>
+
+<div class="notes">
+  <div>
+    <h2>색의 역할</h2>
+    <ul>
+      <li><span class="sw" style="background:#2DD4BF"></span>민트 · 측정 중, 저장 완료, 선택된 것</li>
+      <li><span class="sw" style="background:#FFD233"></span>노랑 · 휴식</li>
+      <li><span class="sw" style="background:#FFA033"></span>주황 · 목표 초과</li>
+      <li><span class="sw" style="background:#E5483B"></span>빨강 · 심박 아이콘, 오류와 삭제</li>
+      <li><span class="sw" style="background:#F2F4F3"></span>흰색 · 값, <span class="sw" style="background:#98A3A0"></span>회색 · 설명과 단위</li>
+    </ul>
+    <p style="margin-top:10px">앱의 포인트색(#2DD4BF)과 맞췄어요. 지금 워치는 별도의 초록(#00E68C)을 써서 폰과 달라요.</p>
+  </div>
+  <div>
+    <h2>무엇이 달라지나</h2>
+    <ul>
+      <li>휴식 숫자를 민트에서 노랑으로 바꿔서 측정과 휴식이 한눈에 구분돼요.</li>
+      <li>휴식 화면의 여섯 줄을 "숫자 + 카드 하나 + 건너뛰기"로 줄였어요.</li>
+      <li>세트가 저장되는 순간 확인 화면을 새로 넣어요.</li>
+      <li>메뉴의 두 줄 버튼과 잘린 목록을 한 화면에 맞췄어요.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>지금 정해야 할 것</h2>
+    <ul>
+      <li>목표 초과 색: 시안은 주황이에요. 휴식이 노랑이라 주황이면 구별되고, 빨강은 오류와 같은 색이라 헷갈릴 수 있어요.</li>
+      <li>"휴식 건너뛰기"를 화면 안 글자 버튼으로 둘지, 길게 누르기로 뺄지.</li>
+      <li>보조 화면에 칼로리를 넣을지(기기에서 받을 수 있는지 먼저 확인이 필요해요).</li>
+    </ul>
+  </div>
+  <div>
+    <h2>확인하지 않은 것</h2>
+    <p>원형 화면 가장자리에서 글자가 실제로 잘리지 않는지, 한글 긴 운동명(예: 인클라인 덤벨 프레스)이 한 줄에 들어가는지, 땀난 손에서 건너뛰기 글자 버튼이 눌리는지는 실기기에서 봐야 해요. 이 파일은 HTML 시안이고 앱 코드는 바꾸지 않았어요.</p>
+  </div>
+</div>
+</div>
+</body>
+</html>
