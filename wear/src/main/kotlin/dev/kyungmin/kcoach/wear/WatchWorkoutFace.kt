@@ -18,35 +18,39 @@ import android.widget.TextView
 internal class WatchWorkoutFace(context: Context) : FrameLayout(context) {
     private val positions = mutableMapOf<View, android.graphics.Rect>()
     private val divider = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(38, 38, 36); strokeWidth = 1.5f }
-    private val chevron = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = SOFT; style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND
-    }
     val clock = label(13f, WHITE, 116, 42, 316, 72)
-    val title = label(17f, WHITE, 63, 74, 369, 110, true)
+    val title = label(17f, WHITE, 63, 74, 369, 110, true).apply {
+        // Long names such as "케이블 익스터널 로테이션" shrink to fit one line instead of being cut off.
+        maxLines = 1
+        androidx.core.widget.TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(this, 11, 17, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+    }
     val subtitle = label(11f, MUTED, 52, 114, 380, 142)
+    val jog = JogBar(context).also { positions[it] = android.graphics.Rect(80, 202, 352, 298); addView(it, LayoutParams(1, 1)); it.visibility = GONE }
+    val chevronUp = ChevronView(context, true).also { positions[it] = android.graphics.Rect(199, 14, 233, 31); addView(it, LayoutParams(1, 1)); it.visibility = GONE }
+    val chevronDown = ChevronView(context, false).also { positions[it] = android.graphics.Rect(199, 398, 233, 415); addView(it, LayoutParams(1, 1)); it.visibility = GONE }
     val valueGhost = label(88f, BONE, 50, 140, 270, 320, false).apply { alpha = 0f; isClickable = false; importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO }
     val value = label(88f, BONE, 50, 140, 270, 320, false)
     val target = label(15f, MUTED, 270, 232, 382, 292)
-    val weight = label(17f, WHITE, 84, 336, 176, 378, true)
+    val weight = label(17f, WHITE, 84, 336, 176, 378, false)
     val unit = label(10f, MUTED, 178, 346, 208, 378)
     val heart = HeartView(context).also { positions[it] = android.graphics.Rect(232, 340, 266, 374); addView(it, LayoutParams(1, 1)) }
-    val heartRate = label(17f, WHITE, 268, 336, 352, 378, true)
-    val hint = label(11f, MUTED, 60, 384, 372, 410)
+    val heartRate = label(17f, WHITE, 268, 336, 352, 378, false)
+    val hint = label(11f, MUTED, 60, 384, 372, 410).apply { isClickable = true }
     val down = label(12f, MUTED, 180, 391, 252, 419)
-    val restCard = label(12.5f, WHITE, 76, 296, 356, 350, true).apply {
+    val restCard = label(12.5f, WHITE, 72, 296, 360, 350, false).apply {
         background = android.graphics.drawable.GradientDrawable().apply { setColor(CARD); cornerRadius = 10f * resources.displayMetrics.density }
         visibility = GONE
     }
-    val restGo = label(10.5f, SOFT, 96, 360, 336, 392, true).apply { visibility = GONE; isClickable = true; isFocusable = true }
+    val restGo = label(10.5f, SOFT, 96, 366, 336, 394, false).apply { visibility = GONE; isClickable = true; isFocusable = true }
     val action = label(16f, Color.rgb(23, 22, 18), 76, 280, 356, 376, true).apply {
         tag = "phone-result"; isClickable = true; isFocusable = true
         background = android.graphics.drawable.GradientDrawable().apply {
             setColor(BONE); cornerRadius = 6f * resources.displayMetrics.density
         }
     }
+    init { listOf(weight, heartRate, clock).forEach { it.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL) } }
     init { listOf(value, valueGhost).forEach { it.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL) } }
     var showDivider = true
-    var showDownChevron = false
     init { setBackgroundColor(Color.BLACK); setWillNotDraw(false) }
     private fun label(sp: Float, color: Int, left: Int, top: Int, right: Int, bottom: Int, bold: Boolean = false) =
         TextView(context).apply {
@@ -76,10 +80,34 @@ internal class WatchWorkoutFace(context: Context) : FrameLayout(context) {
         }
     }
     /** The counter sits left of its "/ 12회" while measuring and is centred (and wider) for the rest timer and home. */
-    fun primary(centered: Boolean) {
-        val rect = if (centered) android.graphics.Rect(44, 120, 388, 300) else android.graphics.Rect(50, 140, 270, 320)
+    fun primary(mode: Int) {
+        val rect = when (mode) {
+            2 -> android.graphics.Rect(44, 96, 388, 224)       // rest timer
+            1 -> android.graphics.Rect(44, 120, 388, 300)      // home and summary
+            else -> android.graphics.Rect(50, 140, 270, 320)   // measuring
+        }
         if (positions[value] != rect) { positions[value] = rect; positions[valueGhost] = rect; requestLayout() }
+        val sub = if (mode == 2) android.graphics.Rect(52, 72, 380, 104) else android.graphics.Rect(52, 114, 380, 142)
+        if (positions[subtitle] != sub) { positions[subtitle] = sub; requestLayout() }
     }
+
+    /** The status line under the exercise name; a small coloured dot in front of it marks a live measurement. */
+    fun setSubtitle(text: String, color: Int, dot: Int? = null, sizeSp: Float = 11f, bold: Boolean = false) {
+        subtitle.setTextColor(color); subtitle.textSize = sizeSp
+        subtitle.typeface = if (bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+        subtitle.setCompoundDrawablesRelative(null, null, null, null)
+        if (dot == null) subtitle.text = text
+        else {
+            val scale = minOf(width, height).coerceAtLeast(1) / 432f
+            // A zero-width placeholder carries the dot so it stays next to the text however long the text is.
+            subtitle.text = android.text.SpannableString("\u200B$text").apply {
+                setSpan(DotSpan(dot, (9f * scale).toInt().coerceAtLeast(6), (10f * scale).toInt().coerceAtLeast(6)), 0, 1, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+        }
+    }
+
+    /** A tappable notice (retained counts, an update waiting for approval) shown in the hint line. */
+    var noticeAction: (() -> Unit)? = null
     fun homeLayout(home: Boolean) {
         val rect = if (home) android.graphics.Rect(60, 290, 372, 377) else android.graphics.Rect(60, 384, 372, 410)
         if (positions[hint] != rect) { positions[hint] = rect; hint.maxLines = if (home) 2 else 1; requestLayout() }
@@ -91,12 +119,6 @@ internal class WatchWorkoutFace(context: Context) : FrameLayout(context) {
         if (showDivider) {
             canvas.drawLine(x + 96 * scale, y + 324 * scale, x + 336 * scale, y + 324 * scale, divider)
             canvas.drawLine(x + 216 * scale, y + 338 * scale, x + 216 * scale, y + 374 * scale, divider)
-        }
-        if (showDownChevron) {
-            chevron.strokeWidth = 2.4f * scale
-            val cx = x + 216 * scale; val cy = y + 404 * scale
-            val path = Path().apply { moveTo(cx - 17 * scale, cy - 4 * scale); lineTo(cx, cy + 6 * scale); lineTo(cx + 17 * scale, cy - 4 * scale) }
-            canvas.drawPath(path, chevron)
         }
     }
     companion object {
@@ -181,5 +203,14 @@ internal class HeartView(context: Context) : View(context) {
         path.cubicTo(px(22f), py(12.28f), px(18.6f), py(15.36f), px(13.45f), py(20.04f))
         path.close()
         canvas.drawPath(path, paint)
+    }
+}
+
+/** A small filled circle drawn in front of a line of text, vertically centred on the text. */
+private class DotSpan(private val color: Int, private val diameter: Int, private val gap: Int) : android.text.style.ReplacementSpan() {
+    override fun getSize(paint: Paint, text: CharSequence?, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int = diameter + gap
+    override fun draw(canvas: Canvas, text: CharSequence?, start: Int, end: Int, x: Float, top: Int, y: Int, bottom: Int, paint: Paint) {
+        val dot = Paint(paint).apply { this.color = this@DotSpan.color; style = Paint.Style.FILL }
+        canvas.drawCircle(x + diameter / 2f, y + (paint.ascent() + paint.descent()) / 2f, diameter / 2f, dot)
     }
 }

@@ -50,7 +50,7 @@ class WatchWorkoutUiTest {
             .putExtra("exerciseId", "leg_press").putExtra("exerciseName", "레그 프레스")
             .putExtra("running", false).putExtra("resting", true).putExtra("phase", "RESTING"))
         shadowOf(Looper.getMainLooper()).idle()
-        val button = texts(activity.window.decorView).single { it.text == "휴식 끝내고 다음 세트" }
+        val button = texts(activity.window.decorView).single { it.text == "다음 세트 시작" }
         button.performClick()
         val command = WatchWorkoutControl.decode(dispatched().getStringExtra("payload")!!)
         assertEquals(WatchWorkoutAction.NEXT_SET, command.action)

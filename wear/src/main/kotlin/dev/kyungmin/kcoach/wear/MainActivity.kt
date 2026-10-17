@@ -78,10 +78,18 @@ class MainActivity : Activity() {
     private var shadowEmissionNs = -1L
     private var frameCommitPending = ""
     private lateinit var face: WatchWorkoutFace
-    private lateinit var pages: WorkoutPagesView
-    private lateinit var detailsTitle: TextView
-    private lateinit var detailsSubtitle: TextView
-    private lateinit var editCountButton: TextView
+    private lateinit var pager: WatchPager
+    private lateinit var editPage: EditPageView
+    private lateinit var auxPage: AuxPageView
+    private lateinit var pullGlow: PullGlowView
+    private var restEditSegment = 0
+    private var lastWorkingReps = 0
+    private var lastWorkingWeight: Double? = null
+    private var wasResting = false
+    private var restFlashText = ""
+    private var restFlashUntilMs = 0L
+    private var countingPausedForEdit = false
+    private var rotaryRemainder = 0f
     private val homeStore by lazy { WatchHomeStore(this) }
     private var phoneResultStatus = ""
     private var phoneResultPending = false
@@ -110,18 +118,9 @@ class MainActivity : Activity() {
         }
     }
 
-    private lateinit var connectionText: TextView
-    private lateinit var phaseText: TextView
-    private lateinit var restText: TextView
     private lateinit var restRing: RestProgressRing
-    private lateinit var manualButton: TextView
-    private lateinit var pendingManualButton: TextView
     private val manualOutbox by lazy { ManualSetOutbox(this) }
     private val workoutControls by lazy { WatchWorkoutOutbox(this) }
-    private lateinit var workoutControlButton: TextView
-    private lateinit var directionBypassButton: TextView
-    private lateinit var tempoText: TextView
-    private lateinit var tempoMuteButton: TextView
     private var tempoEnabled = false
     private var tempoHint = ""
     private val restUiTicker = object : Runnable {
@@ -260,51 +259,164 @@ class MainActivity : Activity() {
         face = WatchWorkoutFace(this)
         face.action.setOnClickListener { openFinishedWorkout() }
         face.restGo.setOnClickListener { requestWorkoutControl() }
-        val details = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(38), dp(28), dp(38), dp(30)); setBackgroundColor(Color.BLACK)
+        face.jog.onStep = { delta -> adjustRest(delta) }
+        face.hint.setOnClickListener { if (runtimePhase == "START_DIRECTION_WAITING") bypassStartDirection() else if (face.noticeAction != null) face.noticeAction?.invoke() }
+        editPage = EditPageView(this).apply {
+            onDelta = { field, delta -> editValue(field, delta) }
+            onKeypad = { field -> keypadFor(field) }
+            onFinish = { finishCurrentSet() }
+            onSegment = { restEditSegment = it; updateUi() }
         }
-        fun add(view: TextView, action: Boolean = false) {
-            details.addView(view, LinearLayout.LayoutParams(-1, if (action) dp(48) else -2).apply { bottomMargin = dp(6) })
-        }
-        fun button(text: String, primary: Boolean = false, click: () -> Unit) = label(text, 15f,
-            if (primary) Color.rgb(23, 22, 18) else WatchWorkoutFace.WHITE, true).apply {
-            gravity = Gravity.CENTER; minHeight = dp(48); isFocusable = true
-            background = rounded(if (primary) WatchWorkoutFace.BONE else WatchWorkoutFace.CARD, 6)
-            setOnClickListener { click() }
-        }
-        detailsTitle = label("", 16f, Color.WHITE, true).apply { gravity = Gravity.CENTER }; add(detailsTitle)
-        detailsSubtitle = label("", 12f, WatchWorkoutFace.MUTED).apply { gravity = Gravity.CENTER }; add(detailsSubtitle)
-        manualButton = button("세트 마치기", true) { finishCurrentSet() }; add(manualButton, true)
-        editCountButton = button("횟수 수정") { showManualCount(editOnly = true) }; add(editCountButton, true)
-        workoutControlButton = button("휴식 끝내고 다음 세트", true) { requestWorkoutControl() }; add(workoutControlButton, true)
-        directionBypassButton = button("직접 시작") {
-            startService(Intent(this, WearWorkoutService::class.java).putExtra(WearWorkoutService.EXTRA_COMMAND, "START_DIRECTION_BYPASS")
-                .putExtra("session", sessionId).putExtra("setId", setId).putExtra("attemptId", attemptId))
-        }; add(directionBypassButton, true)
-        phaseText = label("", 12f, WatchWorkoutFace.ORANGE).apply { gravity = Gravity.CENTER }; add(phaseText)
-        connectionText = label("", 12f, WatchWorkoutFace.ORANGE).apply { gravity = Gravity.CENTER }; add(connectionText)
-        shadowText = label("", 11f, WatchWorkoutFace.MUTED).apply { gravity = Gravity.CENTER }; add(shadowText)
-        tempoText = label("", 12f, WatchWorkoutFace.MUTED).apply { gravity = Gravity.CENTER }; add(tempoText)
-        tempoMuteButton = button("템포 알림 끄기") {
-            startService(Intent(this, WearWorkoutService::class.java).putExtra(WearWorkoutService.EXTRA_COMMAND, "TEMPO_MUTE")
-                .putExtra("session", sessionId).putExtra("setId", setId).putExtra("attemptId", attemptId))
-        }; add(tempoMuteButton, true)
-        restText = label("", 12f, WatchWorkoutFace.MUTED).apply { gravity = Gravity.CENTER }; add(restText)
-        pendingManualButton = button("보관 중인 횟수") {
-            AlertDialog.Builder(this).setTitle("보관 중인 횟수").setMessage(manualOutbox.unresolved().joinToString("\n") {
-                "${it.command.setIndex + 1}세트 · ${it.command.performedReps}회 · " +
-                    if (it.ack?.status == ManualSetStatus.CONFLICT) "폰 기록과 달라요" else "폰에서 확인해 주세요"
-            }).setPositiveButton("닫기", null).show()
-        }; add(pendingManualButton, true)
-        updateStateText = button("폰이 요청한 업데이트 계속") { otaCoordinator.confirmInstall(this) }
-            .apply { visibility = View.GONE }; add(requireNotNull(updateStateText), true)
-        add(label("⌃ 위로 · 횟수 화면", 11f, WatchWorkoutFace.MUTED).apply { gravity = Gravity.CENTER })
+        auxPage = AuxPageView(this)
         val frame = FrameLayout(this).apply { setBackgroundColor(Color.BLACK); addView(face, FrameLayout.LayoutParams(-1, -1)) }
         restRing = RestProgressRing().apply { visibility = View.GONE; isClickable = false }
         frame.addView(restRing, FrameLayout.LayoutParams(-1, -1))
-        pages = WorkoutPagesView(this, frame, details)
-        return pages
+        pullGlow = PullGlowView(this).apply { visibility = View.GONE; isClickable = false }
+        frame.addView(pullGlow, FrameLayout.LayoutParams(-1, -1))
+        shadowText = label("", 11f, WatchWorkoutFace.MUTED).apply { gravity = Gravity.CENTER; visibility = View.GONE }
+        frame.addView(shadowText, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM).apply { bottomMargin = dp(30) })
+        pager = WatchPager(this, frame, editPage, auxPage).apply {
+            pullTarget = face
+            onPullArmed = { armed -> pullGlow.armed = armed; face.restGo.alpha = if (armed) 0f else 1f }
+            onPullCommit = { requestWorkoutControl() }
+            onPage = { page -> onPageChanged(page) }
+        }
+        return pager
+    }
+
+    /** Entering the editor stops counting so lifting the wrist to look at the watch is not counted as a rep. */
+    private fun onPageChanged(page: Int) {
+        val editing = page == -1 && running && !resting && !paused
+        if (editing != countingPausedForEdit) {
+            countingPausedForEdit = editing
+            sendWorkoutCommand(if (editing) "COUNTING_PAUSE" else "COUNTING_RESUME")
+        }
+        updateUi()
+    }
+
+    private fun sendWorkoutCommand(command: String, configure: Intent.() -> Unit = {}) {
+        if (sessionId.isBlank()) return
+        startService(Intent(this, WearWorkoutService::class.java).putExtra(WearWorkoutService.EXTRA_COMMAND, command)
+            .putExtra("session", sessionId).putExtra("setId", setId).putExtra("attemptId", attemptId).apply(configure))
+    }
+
+    private fun bypassStartDirection() {
+        startService(Intent(this, WearWorkoutService::class.java).putExtra(WearWorkoutService.EXTRA_COMMAND, "START_DIRECTION_BYPASS")
+            .putExtra("session", sessionId).putExtra("setId", setId).putExtra("attemptId", attemptId))
+    }
+
+    /** Rest time in ten second steps, from the bar, its ends, or the bezel. */
+    private fun adjustRest(delta: Int) {
+        if (!resting || paused) return
+        val now = System.currentTimeMillis()
+        val newEnd = (restEndAtMs + delta * 1_000L).coerceAtLeast(now)
+        val applied = ((newEnd - restEndAtMs) / 1_000L).toInt()
+        if (applied == 0) return
+        restEndAtMs = newEnd
+        restSeconds = (restSeconds + applied).coerceIn(1, 1_800)
+        restFlashText = if (applied > 0) "+${applied}초" else "${applied}초".replace("-", "−")
+        restFlashUntilMs = now + 900
+        sendWorkoutCommand("REST_ADJUST") { putExtra("deltaSeconds", applied) }
+        updateUi()
+    }
+
+    override fun onGenericMotionEvent(event: android.view.MotionEvent): Boolean {
+        if (event.action == android.view.MotionEvent.ACTION_SCROLL && event.isFromSource(android.view.InputDevice.SOURCE_ROTARY_ENCODER)) {
+            // Clockwise reports a negative scroll; one detent is one ten-second step on the rest screen, nothing elsewhere.
+            rotaryRemainder += -event.getAxisValue(android.view.MotionEvent.AXIS_SCROLL)
+            val steps = rotaryRemainder.toInt()
+            if (steps != 0) {
+                rotaryRemainder -= steps
+                if (resting && pager.page == 0) {
+                    window.decorView.performHapticFeedback(if (Build.VERSION.SDK_INT >= 34) 18 /* ROTARY_SCROLL_TICK */ else android.view.HapticFeedbackConstants.CLOCK_TICK)
+                    adjustRest(steps * 10)
+                }
+            }
+            return true
+        }
+        return super.onGenericMotionEvent(event)
+    }
+
+    private fun editValue(field: EditPageView.Field, delta: Int) {
+        if (resting) {
+            val which = if (restEditSegment == 0) "PREVIOUS" else "NEXT"
+            if (field == EditPageView.Field.REPS) {
+                val current = if (restEditSegment == 0) lastWorkingReps else targetReps
+                val next = (current + delta).coerceIn(0, 9_999)
+                if (restEditSegment == 0) lastWorkingReps = next else targetReps = next
+                sendWorkoutCommand("EDIT_SET") { putExtra("which", which); putExtra("reps", next); putExtra("weightKg", Double.NaN) }
+            } else {
+                val current = (if (restEditSegment == 0) lastWorkingWeight else weightKg) ?: 0.0
+                val next = (current + delta).coerceIn(0.0, 999.0)
+                if (restEditSegment == 0) lastWorkingWeight = next else weightKg = next
+                sendWorkoutCommand("EDIT_SET") { putExtra("which", which); putExtra("reps", -1); putExtra("weightKg", next) }
+            }
+        } else if (field == EditPageView.Field.REPS) {
+            val next = ((displayedCount() ?: reps) + delta).coerceIn(0, 9_999)
+            getSharedPreferences("manual-count-drafts", MODE_PRIVATE).edit().putString(draftKey(), next.toString()).apply()
+        } else {
+            val next = ((weightKg ?: 0.0) + delta).coerceIn(0.0, 999.0)
+            weightKg = next
+            sendWorkoutCommand("EDIT_SET") { putExtra("which", "CURRENT"); putExtra("reps", -1); putExtra("weightKg", next) }
+        }
+        updateUi()
+    }
+
+    /** Tapping a value opens the watch's own number keypad for anyone the plus and minus steps do not suit. */
+    private fun keypadFor(field: EditPageView.Field) {
+        if (field == EditPageView.Field.REPS && !resting) { showManualCount(editOnly = true); return }
+        val reps = field == EditPageView.Field.REPS
+        val initial = when {
+            reps && resting -> (if (restEditSegment == 0) lastWorkingReps else targetReps).toString()
+            reps -> (displayedCount() ?: this.reps).toString()
+            else -> (if (resting && restEditSegment == 0) lastWorkingWeight else weightKg)?.let { if (it % 1.0 == 0.0) it.toInt().toString() else it.toString() }.orEmpty()
+        }
+        val input = EditText(this).apply {
+            inputType = if (reps) InputType.TYPE_CLASS_NUMBER else InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+            filters = arrayOf(InputFilter.LengthFilter(5)); setText(initial); setSelection(initial.length)
+        }
+        AlertDialog.Builder(this).setTitle(if (reps) "횟수" else "무게 (kg)").setView(input).setNegativeButton("취소", null)
+            .setPositiveButton("적용") { _, _ ->
+                val value = input.text.toString().toDoubleOrNull() ?: return@setPositiveButton
+                val delta = if (reps) (value.toInt() - (initial.toIntOrNull() ?: 0)) else 0
+                if (reps) editValue(field, delta)
+                else {
+                    val current = (if (resting && restEditSegment == 0) lastWorkingWeight else weightKg) ?: 0.0
+                    // The step helper works in whole kilograms; the keypad can set any value, so apply the difference.
+                    val difference = value - current
+                    if (resting) {
+                        val which = if (restEditSegment == 0) "PREVIOUS" else "NEXT"
+                        if (restEditSegment == 0) lastWorkingWeight = value else weightKg = value
+                        sendWorkoutCommand("EDIT_SET") { putExtra("which", which); putExtra("reps", -1); putExtra("weightKg", value) }
+                    } else {
+                        weightKg = value
+                        sendWorkoutCommand("EDIT_SET") { putExtra("which", "CURRENT"); putExtra("reps", -1); putExtra("weightKg", value) }
+                    }
+                    if (difference != 0.0) updateUi()
+                }
+            }.show()
+    }
+
+    /** A red glow rises from the bottom once the pull passes the threshold; the label turns red and grows. */
+    private inner class PullGlowView(context: android.content.Context) : View(context) {
+        private val glow = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val label = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(255, 106, 92); textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD }
+        var armed = false
+            set(value) {
+                if (field == value) return
+                field = value
+                if (value) { alpha = 0f; visibility = View.VISIBLE; animate().alpha(1f).setDuration(120).start() }
+                else animate().alpha(0f).setDuration(120).withEndAction { if (!armed) visibility = View.GONE }.start()
+            }
+        override fun onDraw(canvas: Canvas) {
+            val side = minOf(width, height).toFloat(); val k = side / 432f
+            val top = height - 190 * k
+            glow.shader = android.graphics.LinearGradient(0f, height.toFloat(), 0f, top,
+                intArrayOf(Color.argb(158, 229, 72, 59), Color.argb(56, 229, 72, 59), Color.argb(0, 229, 72, 59)), floatArrayOf(0f, .58f, 1f), android.graphics.Shader.TileMode.CLAMP)
+            canvas.drawRect(0f, top, width.toFloat(), height.toFloat(), glow)
+            label.textSize = 15f * resources.displayMetrics.scaledDensity
+            canvas.drawText("다음 세트 시작", width / 2f, height - 62 * k, label)
+        }
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
@@ -334,7 +446,9 @@ class MainActivity : Activity() {
     private fun updateUi() {
         if (!::face.isInitialized) return
         updateScreenPolicy()
-        face.clock.text = java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
+        val now = System.currentTimeMillis()
+        val clockText = java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
+        face.clock.text = clockText
         val active = running || resting || paused || sessionId.isNotBlank() && setId.isNotBlank()
         val complete = !active && homeStore.showsCompletion()
         if (complete && displayedCompletionSession != homeStore.completion()?.sessionId) {
@@ -342,53 +456,62 @@ class MainActivity : Activity() {
             resultGeneration += 1; phoneResultPending = false; phoneResultStatus = ""
         }
         val count = displayedCount()
-        face.primary(!active || resting)
+        val measuring = active && !resting
+        if (measuring) { lastWorkingReps = count ?: reps; lastWorkingWeight = weightKg }
+        if (resting && !wasResting) restEditSegment = 0
+        wasResting = resting
+        face.primary(if (resting) 2 else if (active) 0 else 1)
         face.homeLayout(!active && !complete)
         face.value.maxLines = if (complete) 2 else 1
-        face.showDivider = active && !resting
+        face.showDivider = measuring
         face.invalidate()
-        listOf(face.target, face.weight, face.unit, face.heartRate).forEach { it.visibility = if (active && !resting) View.VISIBLE else View.GONE }
+        listOf(face.target, face.weight, face.unit, face.heartRate).forEach { it.visibility = if (measuring) View.VISIBLE else View.GONE }
+        face.title.visibility = if (resting) View.GONE else View.VISIBLE
         face.down.visibility = View.GONE
-        face.showDownChevron = active || manualOutbox.unresolved().isNotEmpty()
         face.action.visibility = if (complete) View.VISIBLE else View.GONE
         face.action.text = "폰에서 보기"; face.action.isEnabled = !phoneResultPending
         face.action.alpha = if (phoneResultPending) 0.5f else 1f
-        face.hint.text = ""
+        face.hint.text = ""; face.hint.setTextColor(WatchWorkoutFace.MUTED); face.noticeAction = null
         face.value.textSize = if (active) 88f else 24f
         face.value.setTextColor(WatchWorkoutFace.BONE)
-        face.restCard.visibility = View.GONE; face.restGo.visibility = View.GONE
+        face.restCard.visibility = View.GONE; face.restGo.visibility = View.GONE; face.jog.visibility = View.GONE
+        val controlsReady = resting && !paused && workoutControls.supportsControls() && setId.isNotBlank() && attemptId.isNotBlank()
         if (active) {
             face.title.text = exerciseName
-            face.subtitle.text = when { resting -> "휴식 · 목표 ${restSeconds / 60}:${"%02d".format(restSeconds % 60)}"; paused -> "일시정지"; manualRequired -> "${setIndex + 1}세트 · 직접 기록"; else -> "${setIndex + 1}세트 · 자동 측정" }
-            face.subtitle.setTextColor(if (resting) WatchWorkoutFace.YELLOW else WatchWorkoutFace.MUTED)
+            face.setSubtitle(
+                when { paused -> "일시정지"; manualRequired -> "${setIndex + 1}세트 · 직접 기록"; else -> "${setIndex + 1}세트 · 자동 측정" },
+                WatchWorkoutFace.MUTED, dot = if (!paused && !manualRequired && running) WatchWorkoutFace.SAGE else null)
             face.target.text = "/ ${targetReps}회"
             face.value.text = count?.toString() ?: "—"
             face.value.setTextColor(if (count != null && count > targetReps) WatchWorkoutFace.ORANGE else WatchWorkoutFace.BONE)
             face.weight.text = weightKg?.let { if (it % 1.0 == 0.0) it.toInt().toString() else "%.1f".format(it) } ?: "—"
             face.unit.text = "kg"; face.heart.show(if (resting) 0 else heartRate); face.heartRate.text = heartRate.takeIf { it > 0 }?.toString() ?: "—"
-            face.hint.text = if (manualRequired && count == null) "아래로 · 횟수 기록" else ""
+            if (manualRequired && count == null) face.hint.text = "위로 · 횟수 기록"
             if (running && runtimePhase in setOf("POSITIONING", "PREPARING", "BASELINE", "START_DIRECTION_WAITING")) {
                 face.value.text = "준비"; face.value.textSize = 40f
-                face.hint.text = if (runtimePhase == "START_DIRECTION_WAITING") "손목 방향을 맞춰 주세요" else "손목을 잠시 멈춰 주세요"
+                face.hint.text = if (runtimePhase == "START_DIRECTION_WAITING") "손목 방향을 맞춰 주세요 · 눌러서 직접 시작" else "손목을 잠시 멈춰 주세요"
             }
             if (resting) {
-                val left = RestCountdownCalculator.calculate(System.currentTimeMillis(), restEndAtMs, restSeconds).remainingSeconds
+                val left = RestCountdownCalculator.calculate(now, restEndAtMs, restSeconds).remainingSeconds
                 face.value.text = String.format("%d:%02d", left / 60, left % 60)
                 face.value.textSize = 63f; face.value.setTextColor(WatchWorkoutFace.YELLOW)
                 face.target.visibility = View.GONE
-                face.hint.text = ""
+                if (now < restFlashUntilMs) face.setSubtitle(restFlashText, WatchWorkoutFace.YELLOW, sizeSp = 15f, bold = true)
+                else face.setSubtitle("휴식 · 목표 ${restSeconds / 60}:${"%02d".format(restSeconds % 60)}", WatchWorkoutFace.YELLOW, bold = true)
                 face.restCard.text = "다음 세트   ${targetReps}회" + (weightKg?.let { " × ${if (it % 1.0 == 0.0) it.toInt().toString() else "%.1f".format(it)}kg" } ?: "")
                 face.restCard.visibility = View.VISIBLE
+                face.jog.visibility = View.VISIBLE
                 face.restGo.text = "다음 세트 시작"
-                face.restGo.visibility = if (workoutControls.supportsControls() && setId.isNotBlank() && attemptId.isNotBlank()) View.VISIBLE else View.GONE
+                face.restGo.visibility = if (controlsReady) View.VISIBLE else View.GONE
             }
             if (paused) face.hint.text = "폰에서 계속할 수 있어요"
         } else if (complete) {
-            face.title.text = "운동 완료"; face.subtitle.text = "수고했어요"
+            face.title.text = "운동 완료"; face.setSubtitle("수고했어요", WatchWorkoutFace.MUTED)
             face.value.text = if (phoneResultStatus.isBlank()) "기록을 확인해 보세요" else phoneResultStatus
             face.value.textSize = 14f; face.value.setTextColor(WatchWorkoutFace.WHITE)
+            face.heart.show(0)
         } else {
-            face.title.text = "이번 주 운동"; face.subtitle.text = ""
+            face.title.text = "이번 주 운동"; face.setSubtitle("", WatchWorkoutFace.MUTED)
             face.value.text = homeStore.weekCount()?.let { "${it}회" } ?: "—"
             face.value.textSize = 40f
             val recent = homeStore.overview()?.optJSONObject("recent")
@@ -398,54 +521,90 @@ class MainActivity : Activity() {
             } ?: "최근 기록이 아직 없어요"
             // A missing overview is unknown, not an empty workout history.
             if (homeStore.overview() == null) face.hint.text = "폰에서 기록을 확인하세요"
+            face.heart.show(0)
         }
-        detailsTitle.text = if (active) exerciseName else if (complete) "운동 완료" else "운동 기록"
-        detailsSubtitle.text = if (active) "${setIndex + 1}세트 · 현재 ${count?.let { "${it}회" } ?: "미입력"}" else ""
-        connectionText.text = "폰 연결이 끊겼어요 · 기록은 보관돼요"
-        connectionText.visibility = if (active && !paired) View.VISIBLE else View.GONE
-        phaseText.text = when (runtimePhase) {
+        // One status line under the numbers, most urgent first; every message here used to be its own control.
+        val unresolved = manualOutbox.unresolved()
+        val updateWaiting = otaCoordinator.store.local()?.phase == dev.kyungmin.kcoach.updates.OtaPhase.USER_ACTION_REQUIRED
+        val phaseMessage = when (runtimePhase) {
             "CAPTURE_RECOVERY_REQUIRED" -> "센서 기록 복구가 필요해요"
             "MANUAL_PENDING" -> "폰에 기록 전달 중"
             "MANUAL_CONFLICT" -> "폰과 워치의 횟수를 확인해 주세요"
             else -> ""
         }
-        phaseText.visibility = if (phaseText.text.isEmpty()) View.GONE else View.VISIBLE
-        val editable = active && !resting && !sessionId.startsWith("calibration-") && setId.isNotBlank() && attemptId.isNotBlank() && runtimePhase != "CAPTURE_RECOVERY_REQUIRED"
-        manualButton.visibility = if (editable) View.VISIBLE else View.GONE
-        editCountButton.visibility = if (editable) View.VISIBLE else View.GONE
-        val pending = manualStatus in setOf("PENDING", "STALE", "NO_SESSION", "REJECTED")
-        manualButton.isEnabled = !pending && !paused; editCountButton.isEnabled = !pending && !paused
-        manualButton.text = when (manualStatus) {
-            "PENDING" -> "폰에 기록 전달 중"
-            "CONFLICT" -> "횟수 확인"
-            "STALE", "NO_SESSION", "REJECTED" -> "폰에서 세트를 확인하세요"
-            "APPLIED", "DUPLICATE" -> "기록 수정"
-            else -> if (count == null) "횟수 입력" else "세트 마치기\n${count}회로 기록"
+        if (active && !resting && phaseMessage.isNotEmpty()) { face.hint.text = phaseMessage; face.hint.setTextColor(WatchWorkoutFace.ORANGE) }
+        else if (active && !paired) { face.hint.text = "폰 연결이 끊겼어요 · 기록은 보관돼요"; face.hint.setTextColor(WatchWorkoutFace.ORANGE) }
+        else if (updateWaiting) { face.hint.text = "폰이 요청한 업데이트 계속"; face.hint.setTextColor(WatchWorkoutFace.SAGE); face.noticeAction = { otaCoordinator.confirmInstall(this) } }
+        else if (unresolved.isNotEmpty()) {
+            face.hint.text = "보관 중인 횟수 ${unresolved.size}건"; face.hint.setTextColor(WatchWorkoutFace.SAGE)
+            face.noticeAction = {
+                AlertDialog.Builder(this).setTitle("보관 중인 횟수").setMessage(manualOutbox.unresolved().joinToString("\n") {
+                    "${it.command.setIndex + 1}세트 · ${it.command.performedReps}회 · " +
+                        if (it.ack?.status == ManualSetStatus.CONFLICT) "폰 기록과 달라요" else "폰에서 확인해 주세요"
+                }).setPositiveButton("닫기", null).show()
+            }
         }
-        workoutControlButton.visibility = if (resting && workoutControls.supportsControls() && setId.isNotBlank() && attemptId.isNotBlank()) View.VISIBLE else View.GONE
-        workoutControlButton.isEnabled = workoutControls.pending().isEmpty() && !paused
-        workoutControlButton.text = if (workoutControls.pending().isEmpty()) "휴식 끝내고 다음 세트" else "폰에 요청 전달 중"
-        directionBypassButton.visibility = if (running && runtimePhase == "START_DIRECTION_WAITING") View.VISIBLE else View.GONE
-        // Tempo and diagnostics stay in secondary controls, never below the main counter.
-        tempoText.visibility = View.GONE
-        tempoMuteButton.visibility = if (active && !resting && tempoEnabled) View.VISIBLE else View.GONE
+        face.hint.isClickable = face.noticeAction != null || runtimePhase == "START_DIRECTION_WAITING"
         shadowText.visibility = if (running && shadowCommandId.isNotBlank()) View.VISIBLE else View.GONE
         shadowText.text = "보정 비교 · ${shadowCount}회"; recordShadowFrameCommit()
-        pendingManualButton.visibility = if (manualOutbox.unresolved().isEmpty()) View.GONE else View.VISIBLE
-        pendingManualButton.text = "보관 중인 횟수 ${manualOutbox.unresolved().size}건"
-        restText.visibility = View.GONE
+
+        // Pages: the editor above, the heart-rate page below while measuring, and the pull-to-start gesture while resting.
+        val editable = active && !paused && !sessionId.startsWith("calibration-") && setId.isNotBlank() && attemptId.isNotBlank() && runtimePhase != "CAPTURE_RECOVERY_REQUIRED"
+        pager.topEnabled = editable
+        pager.bottomEnabled = measuring && !paused && !sessionId.startsWith("calibration-")
+        pager.pullEnabled = controlsReady
+        face.chevronUp.visibility = if (pager.topEnabled) View.VISIBLE else View.GONE
+        face.chevronDown.visibility = if (pager.bottomEnabled || pager.pullEnabled) View.VISIBLE else View.GONE
+        if (pager.page == -1 && !pager.topEnabled || pager.page == 1 && !pager.bottomEnabled) pager.show(0)
+        if (active) {
+            val pending = manualStatus in setOf("PENDING", "STALE", "NO_SESSION", "REJECTED")
+            if (resting) {
+                editPage.applyMode(EditPageView.Mode.REST)
+                val previous = restEditSegment == 0
+                val repsShown = if (previous) lastWorkingReps else targetReps
+                val weightShown = if (previous) lastWorkingWeight else weightKg
+                val left = RestCountdownCalculator.calculate(now, restEndAtMs, restSeconds).remainingSeconds
+                editPage.bindRest("휴식 ${left / 60}:${"%02d".format(left % 60)}", clockText, "방금 세트", "다음 세트", restEditSegment,
+                    repsShown.toString(), weightShown?.let { if (it % 1.0 == 0.0) it.toInt().toString() else "%.1f".format(it) } ?: "—")
+            } else {
+                editPage.applyMode(EditPageView.Mode.MEASURE)
+                val finishText = when (manualStatus) {
+                    "PENDING" -> "폰에 기록 전달 중"
+                    "CONFLICT" -> "횟수 확인"
+                    "STALE", "NO_SESSION", "REJECTED" -> "폰에서 세트를 확인하세요"
+                    "APPLIED", "DUPLICATE" -> "기록 수정"
+                    else -> if (count == null) "횟수 입력" else "${count}회로 세트 마치기"
+                }
+                editPage.bindMeasure(exerciseName, setIndex + 1, (count ?: reps).toString(),
+                    weightKg?.let { if (it % 1.0 == 0.0) it.toInt().toString() else "%.1f".format(it) } ?: "—", finishText, !pending && !paused)
+            }
+            val started = sessionStartedAt()
+            val elapsed = ((now - started) / 1_000L).coerceAtLeast(0L)
+            auxPage.bind(heartRate, if (elapsed >= 3600) "%d:%02d:%02d".format(elapsed / 3600, elapsed % 3600 / 60, elapsed % 60) else "%d:%02d".format(elapsed / 60, elapsed % 60), setIndex, clockText)
+        }
         if (!active) face.heart.show(0)
-        if (resting && restEndAtMs > System.currentTimeMillis()) {
+        if (resting && restEndAtMs > now) {
             restRing.setWindow(restEndAtMs - restSeconds.coerceAtLeast(1) * 1_000L, restEndAtMs); restRing.visibility = View.VISIBLE
         } else if (active && !resting && !paused && count != null && targetReps > 0) {
             restRing.setProgress(count.toFloat() / targetReps); restRing.visibility = View.VISIBLE
         } else restRing.visibility = View.GONE
-        rollCountIfChanged(active && !resting)
+        rollCountIfChanged(measuring)
         val presentation = if (active) "active" else if (complete) "complete" else "home"
         if (lastPresentation != presentation) {
             lastPresentation = presentation
-            pages.scrollTo(0, 0)
+            pager.show(0)
         }
+    }
+
+    /** When this session was first seen on the watch, kept across restarts so the workout clock does not reset. */
+    private fun sessionStartedAt(): Long {
+        val prefs = getSharedPreferences("session-clock", MODE_PRIVATE)
+        val key = "start:$sessionId"
+        val saved = prefs.getLong(key, 0L)
+        if (saved > 0L) return saved
+        val now = System.currentTimeMillis()
+        prefs.edit().clear().putLong(key, now).apply()
+        return now
     }
 
     private var lastPresentation = ""
