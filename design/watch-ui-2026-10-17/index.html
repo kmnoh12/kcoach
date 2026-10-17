@@ -84,7 +84,7 @@ svg.ic{width:1em;height:1em;stroke:currentColor;fill:none;stroke-width:1.75;stro
 
 /* 3 · 저장 */
 .s3 .check{top:calc(var(--u)*104);display:flex;justify-content:center}
-.s3 .check svg{width:calc(var(--u)*104);height:calc(var(--u)*104);stroke:var(--mint);stroke-width:2.2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+
 .s3 .name2{top:calc(var(--u)*236);font-size:calc(var(--u)*36);font-weight:700;line-height:1}
 .s3 .sub{top:calc(var(--u)*284)}
 .s3 .sub b{color:var(--white);font-weight:500;font-family:Roboto,sans-serif;font-size:calc(var(--u)*28)}
@@ -235,11 +235,10 @@ svg.ic{width:1em;height:1em;stroke:currentColor;fill:none;stroke-width:1.75;stro
 .rE .big{top:calc(var(--u)*148);display:flex;justify-content:center;align-items:baseline;gap:calc(var(--u)*8);font-size:calc(var(--u)*112);color:var(--white)}
 .rE .big i{font-style:normal;font-family:var(--font);font-size:calc(var(--u)*34);color:var(--soft);font-weight:400}
 .dotrow{position:absolute;left:0;right:0;top:calc(var(--u)*296);height:calc(var(--u)*14)}
-.dotrow i{position:absolute;top:0;width:calc(var(--u)*14);height:calc(var(--u)*14);border-radius:50%;background:#403E3A}.dotrow i.on{background:var(--mint)}
+.dotrow i{position:absolute;top:0;width:calc(var(--u)*14);height:calc(var(--u)*14);border-radius:50%;background:#EDE8DC}.dotrow i.on{background:var(--mint)}
 .rE .pv2{top:calc(var(--u)*322);font-size:calc(var(--u)*22);color:var(--soft);line-height:1}
 .cal2 .lab3,.cal3 .lab3{top:calc(var(--u)*76);font-size:calc(var(--u)*22);font-weight:700;color:var(--white);line-height:1;letter-spacing:calc(var(--u)*.5)}
 .cal2 .orb{position:absolute;left:calc(var(--u)*106);top:calc(var(--u)*106);width:calc(var(--u)*220);height:calc(var(--u)*220)}
-.cal2 .orbn{top:calc(var(--u)*140);font-size:calc(var(--u)*130);color:var(--mint);display:flex;justify-content:center}
 .cal2 .msg2,.cal3 .msg2{top:calc(var(--u)*334);font-size:calc(var(--u)*23);color:var(--soft);line-height:1}
 .cal2 .foot,.cal3 .foot{top:calc(var(--u)*372);font-size:calc(var(--u)*19);color:var(--muted);line-height:1;display:flex;justify-content:center;align-items:center;gap:calc(var(--u)*8)}
 .cal3 .count{top:calc(var(--u)*112);height:calc(var(--u)*170);display:flex;justify-content:center;align-items:flex-end;gap:calc(var(--u)*14)}
@@ -265,6 +264,20 @@ svg.ic{width:1em;height:1em;stroke:currentColor;fill:none;stroke-width:1.75;stro
 .m3 i{width:calc(var(--u)*1.5);height:calc(var(--u)*42);background:#2E2D2A}
 .res2 .rc{top:calc(var(--u)*304);font-size:calc(var(--u)*21);color:var(--mint);font-weight:500;line-height:1;display:flex;justify-content:center;align-items:center;gap:calc(var(--u)*6)}
 .res2 .more2{position:absolute;left:calc(var(--u)*110);right:calc(var(--u)*110);top:calc(var(--u)*338);height:calc(var(--u)*42);background:var(--bone,#EDE8DC);color:#171612;border-radius:calc(var(--u)*12);display:flex;align-items:center;justify-content:center;font-size:calc(var(--u)*19);font-weight:700}
+
+.cal2 .orbwrap{position:absolute;left:calc(var(--u)*106);top:calc(var(--u)*106);width:calc(var(--u)*220);height:calc(var(--u)*220);display:flex;align-items:center;justify-content:center}
+.cal2 .orbwrap .orb{position:absolute;inset:0;width:100%;height:100%}
+.cal2 .orbwrap .orbn{position:relative;font-family:Roboto,sans-serif;font-weight:500;font-size:calc(var(--u)*128);line-height:1;color:var(--mint);transform:translateY(calc(var(--u)*-3));letter-spacing:0}
+/* 원과 체크가 그려지는 완료 표시 */
+.pay{width:100%;height:100%;fill:none;stroke:var(--mint);stroke-width:5.5;stroke-linecap:round;stroke-linejoin:round;transform-origin:50% 50%;animation:payPop 3.4s ease-in-out infinite}
+.pay .pc{stroke-dasharray:1;stroke-dashoffset:1;animation:payCircle 3.4s cubic-bezier(.5,0,.2,1) infinite}
+.pay .pk{stroke-dasharray:1;stroke-dashoffset:1;animation:payCheck 3.4s cubic-bezier(.5,0,.2,1) infinite}
+@keyframes payCircle{0%{stroke-dashoffset:1}22%{stroke-dashoffset:0}88%{stroke-dashoffset:0}96%,100%{stroke-dashoffset:1}}
+@keyframes payCheck{0%,18%{stroke-dashoffset:1}34%{stroke-dashoffset:0}88%{stroke-dashoffset:0}96%,100%{stroke-dashoffset:1}}
+@keyframes payPop{0%,30%{transform:scale(1)}38%{transform:scale(1.07)}46%,100%{transform:scale(1)}}
+.s3 .check svg,.cal4 .ck svg{width:calc(var(--u)*104);height:calc(var(--u)*104);stroke-width:5.5}
+.cal4 .ck{font-size:inherit}
+@media(prefers-reduced-motion:reduce){.pay,.pay .pc,.pay .pk{animation:none;stroke-dashoffset:0}}
 </style>
 </head>
 <body>
@@ -317,7 +330,7 @@ svg.ic{width:1em;height:1em;stroke:currentColor;fill:none;stroke-width:1.75;stro
   <div class="watch"><div class="face s3">
     <svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#8FCFBA" stroke-width="7"/></svg>
     <div class="abs clock">02:04</div>
-    <div class="abs check"><svg viewBox="0 0 104 104"><circle cx="52" cy="52" r="46"/><path d="M32 54l14 14 27-30"/></svg></div>
+    <div class="abs check"><svg class="pay" viewBox="0 0 104 104"><circle class="pc" cx="52" cy="52" r="46" pathLength="1"/><path class="pk" d="M31 54.5l14.5 14.5L74 38" pathLength="1"/></svg></div>
     <div class="abs name2">1세트 완료</div>
     <div class="abs sub"><b>12회</b> · <b>20kg</b></div>
     <div class="abs rec">최고 중량 갱신</div>
@@ -420,32 +433,17 @@ svg.ic{width:1em;height:1em;stroke:currentColor;fill:none;stroke-width:1.75;stro
 </div>
 
 <div class="item">
-  <div class="watch"><div class="face rA"><svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#1B1B1A" stroke-width="7"/><circle cx="216" cy="216" r="209" fill="none" stroke="#8FCFBA" stroke-width="7" stroke-linecap="round" stroke-dasharray="1313 1313" transform="rotate(-90 216 216)"/></svg><div class="abs clock">02:04</div><div class="abs lab"><svg viewBox="0 0 24 24" class="upi"><path d="M12 19V6M6 11.5l6-6 6 6"/></svg>최고 중량 갱신</div><div class="abs num big"><span>62.5</span><i>kg</i></div><div class="abs dl">+2.5kg</div><div class="abs pv">이전 60kg</div><div class="abs ex">벤치 프레스 · 1세트 완료</div></div></div>
-  <div class="cap"><span class="tag">7A · 최고 중량 · 숫자 하나</span><b>면도 상자도 없이 숫자만</b><span>최고 중량을 깬 세트가 끝나면 저장 화면 자리에 이 화면이 떠요. 큰 숫자 하나와 올라간 만큼만 보여주고 나머지는 모두 뺐어요. 단위는 숫자 옆에 작게 붙고, 아래 줄이 이전 값과 차이예요.</span></div>
-</div>
-
-<div class="item">
   <div class="watch"><div class="face rB"><svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#1B1B1A" stroke-width="7"/><circle cx="216" cy="216" r="209" fill="none" stroke="#8FCFBA" stroke-width="7" stroke-linecap="round" stroke-dasharray="1313 1313" transform="rotate(-90 216 216)"/></svg><div class="abs clock">02:04</div><div class="abs lab">최고 중량 갱신</div><div class="bar b0"></div><div class="bar b1"></div><div class="abs bv0">60</div><div class="abs bv1">62.5<small>kg</small></div><div class="abs bl0">이전</div><div class="abs bl1">오늘</div><div class="abs dl2"><svg viewBox="0 0 24 24" class="upi"><path d="M12 19V6M6 11.5l6-6 6 6"/></svg>+2.5kg</div><div class="abs ex2">벤치 프레스 · 1세트 완료</div></div></div>
-  <div class="cap"><span class="tag">7B · 최고 중량 · 막대 둘</span><b>이전과 지금을 막대로 비교</b><span>이전 최고와 오늘 값을 막대 두 개로 나란히 놓아서 올라간 것이 눈으로 바로 보여요. 오늘 막대만 세이지, 이전 막대는 흐려요. 가운데 아래에 차이를 적어요.</span></div>
-</div>
-
-<div class="item">
-  <div class="watch"><div class="face rC"><svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#1B1B1A" stroke-width="7"/><circle cx="216" cy="216" r="209" fill="none" stroke="#8FCFBA" stroke-width="7" stroke-linecap="round" stroke-dasharray="1313 1313" transform="rotate(-90 216 216)"/></svg><div class="abs clock">02:04</div><div class="abs lab2">최고 중량 갱신</div><div class="abs arrow"><svg viewBox="0 0 24 24" class="upi"><path d="M12 19V6M6 11.5l6-6 6 6"/></svg></div><div class="abs num big"><span>62.5</span><i>kg</i></div><div class="abs dl3">이전 60kg에서 <b>+2.5kg</b></div><div class="abs ex">벤치 프레스 · 1세트 완료</div></div></div>
-  <div class="cap"><span class="tag">7C · 최고 중량 · 위 화살표</span><b>올라갔다는 모양부터</b><span>위쪽 화살표가 먼저 눈에 들어오고 그 아래 숫자가 이어져요. 숫자 아래에 한 줄로 이전 값과 차이를 적어요. 운동 중 곁눈으로도 방향이 읽히는 안이에요.</span></div>
-</div>
-
-<div class="item">
-  <div class="watch"><div class="face rD"><svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#1B1B1A" stroke-width="7"/><circle cx="216" cy="216" r="209" fill="none" stroke="#8FCFBA" stroke-width="7" stroke-linecap="round" stroke-dasharray="1313 1313" transform="rotate(-90 216 216)"/></svg><div class="abs clock">02:04</div><div class="abs lab"><svg viewBox="0 0 24 24" class="upi"><path d="M12 19V6M6 11.5l6-6 6 6"/></svg>횟수 갱신</div><div class="abs wt">62.5kg</div><div class="abs num big"><span>11</span><i>회</i></div><div class="abs dl">+1회</div><div class="abs pv">이전 10회</div><div class="abs ex">벤치 프레스 · 1세트 완료</div></div></div>
-  <div class="cap"><span class="tag">8A · 횟수 · 숫자 하나</span><b>횟수가 주인공</b><span>같은 무게에서 횟수가 늘면 횟수를 가장 크게 보여줘요. 무게는 위에 한 줄, 아래에 이전 횟수와 차이가 와요. 최고 중량 갱신보다 한 단계 조용해요(화살표와 큰 숫자가 작고 색이 옅어요).</span></div>
+  <div class="cap"><span class="tag">7 · 세트 직후 · 최고 중량 갱신</span><b>이전과 지금을 막대로 비교</b><span>이전 최고와 오늘 값을 막대 두 개로 나란히 놓아서 올라간 것이 눈으로 바로 보여요. 오늘 막대만 세이지, 이전 막대는 흐려요. 가운데 아래에 차이를 적어요.</span></div>
 </div>
 
 <div class="item">
   <div class="watch"><div class="face rE"><svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#1B1B1A" stroke-width="7"/><circle cx="216" cy="216" r="209" fill="none" stroke="#8FCFBA" stroke-width="7" stroke-linecap="round" stroke-dasharray="1313 1313" transform="rotate(-90 216 216)"/></svg><div class="abs clock">02:04</div><div class="abs lab">횟수 갱신</div><div class="abs wt">62.5kg</div><div class="abs num big"><span>11</span><i>회</i></div><div class="dotrow"><i class="was" style="left:calc(var(--u)*87.5)"></i><i class="was" style="left:calc(var(--u)*111.5)"></i><i class="was" style="left:calc(var(--u)*135.5)"></i><i class="was" style="left:calc(var(--u)*159.5)"></i><i class="was" style="left:calc(var(--u)*183.5)"></i><i class="was" style="left:calc(var(--u)*207.5)"></i><i class="was" style="left:calc(var(--u)*231.5)"></i><i class="was" style="left:calc(var(--u)*255.5)"></i><i class="was" style="left:calc(var(--u)*279.5)"></i><i class="was" style="left:calc(var(--u)*303.5)"></i><i class="on" style="left:calc(var(--u)*327.5)"></i></div><div class="abs pv2">이전 10회 · +1회</div><div class="abs ex">벤치 프레스 · 1세트 완료</div></div></div>
-  <div class="cap"><span class="tag">8B · 횟수 · 점으로 보기</span><b>지난번 10칸에 한 칸 더</b><span>점 열한 개가 횟수예요. 지난번까지의 열 개는 흐리고 오늘 늘어난 한 개만 세이지로 켜져요. 숫자는 그 위에 크게 보여요.</span></div>
+  <div class="cap"><span class="tag">8 · 세트 직후 · 같은 무게 횟수 갱신</span><b>지난번 10칸에 한 칸 더</b><span>점 열한 개가 횟수예요. 지난번까지의 열 개는 흐리고 오늘 늘어난 한 개만 세이지로 켜져요. 숫자는 그 위에 크게 보여요.</span></div>
 </div>
 
 <div class="item">
-  <div class="watch"><div class="face cal2"><svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#1B1B1A" stroke-width="7"/></svg><svg class="orb" viewBox="0 0 220 220"><circle cx="110" cy="110" r="100" fill="none" stroke="#1F1F1D" stroke-width="6"/><circle cx="110" cy="110" r="100" fill="none" stroke="#8FCFBA" stroke-width="6" stroke-linecap="round" stroke-dasharray="415 628" transform="rotate(-90 110 110)"/></svg><div class="abs clock">02:10</div><div class="abs lab3">보정</div><div class="abs num orbn">3</div><div class="abs msg2">시작 자세로 가만히 있어요</div><div class="abs foot"><svg viewBox="0 0 24 24" class="cam"><rect x="3" y="7" width="14" height="10" rx="2"/><path d="M17 11l4-2.5v7L17 13"/></svg>폰 카메라 촬영 중</div></div></div>
+  <div class="watch"><div class="face cal2"><svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#1B1B1A" stroke-width="7"/></svg><div class="orbwrap"><svg class="orb" viewBox="0 0 220 220"><circle cx="110" cy="110" r="100" fill="none" stroke="#1F1F1D" stroke-width="6"/><circle cx="110" cy="110" r="100" fill="none" stroke="#8FCFBA" stroke-width="6" stroke-linecap="round" stroke-dasharray="415 628" transform="rotate(-90 110 110)"/></svg><span class="orbn">3</span></div><div class="abs clock">02:10</div><div class="abs lab3">보정</div><div class="abs msg2">시작 자세로 가만히 있어요</div><div class="abs foot"><svg viewBox="0 0 24 24" class="cam"><rect x="3" y="7" width="14" height="10" rx="2"/><path d="M17 11l4-2.5v7L17 13"/></svg>폰 카메라 촬영 중</div></div></div>
   <div class="cap"><span class="tag">9 · 보정 · 준비</span><b>숫자가 줄어드는 원</b><span>가운데 원이 3, 2, 1을 세며 줄어요. 위에 "보정", 아래에 한 줄 안내, 맨 아래에 폰이 촬영 중이라는 표시(카메라 아이콘)가 있어요.</span></div>
 </div>
 
@@ -455,7 +453,7 @@ svg.ic{width:1em;height:1em;stroke:currentColor;fill:none;stroke-width:1.75;stro
 </div>
 
 <div class="item">
-  <div class="watch"><div class="face cal4"><svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#1B1B1A" stroke-width="7"/><circle cx="216" cy="216" r="209" fill="none" stroke="#8FCFBA" stroke-width="7" stroke-linecap="round" stroke-dasharray="1313 1313" transform="rotate(-90 216 216)"/></svg><div class="abs clock">02:12</div><div class="abs ck"><svg viewBox="0 0 24 24" class="chk"><circle cx="12" cy="12" r="10"/><path d="M7.5 12.5l3 3 6-7"/></svg></div><div class="abs h1">보정 완료</div><div class="cmp2"><div><span class="v">5회</span><span class="k">센서</span></div><i></i><div><span class="v">5회</span><span class="k">확인</span></div></div><div class="abs ok">일치</div><div class="abs hint2">폰에서 결과를 확인해요</div></div></div>
+  <div class="watch"><div class="face cal4"><svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#1B1B1A" stroke-width="7"/><circle cx="216" cy="216" r="209" fill="none" stroke="#8FCFBA" stroke-width="7" stroke-linecap="round" stroke-dasharray="1313 1313" transform="rotate(-90 216 216)"/></svg><div class="abs clock">02:12</div><div class="abs ck"><svg class="pay" viewBox="0 0 104 104"><circle class="pc" cx="52" cy="52" r="46" pathLength="1"/><path class="pk" d="M31 54.5l14.5 14.5L74 38" pathLength="1"/></svg></div><div class="abs h1">보정 완료</div><div class="cmp2"><div><span class="v">5회</span><span class="k">센서</span></div><i></i><div><span class="v">5회</span><span class="k">확인</span></div></div><div class="abs ok">일치</div><div class="abs hint2">폰에서 결과를 확인해요</div></div></div>
   <div class="cap"><span class="tag">11 · 보정 · 완료</span><b>센서와 확인이 맞았는지</b><span>체크와 "보정 완료", 센서가 센 횟수와 폰에서 확인한 횟수를 나란히 놓아요. 두 값이 같으면 "일치"가 붙어요. 결과는 폰에서 봐요.</span></div>
 </div>
 
