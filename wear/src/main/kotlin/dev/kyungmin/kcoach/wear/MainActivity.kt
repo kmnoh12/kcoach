@@ -981,25 +981,38 @@ class MainActivity : Activity() {
             val wasOver = (progress ?: 0f) > 1f
             progress = fraction
             val nowOver = fraction > 1f
+            lapTo(if (nowOver) (fraction - 1f).coerceIn(0f, 1f) else 0f)
             if (wasOver != nowOver) sweepTo(if (nowOver) 1f else 0f)
             else if (!nowOver && sweep != 0f) { sweepAnimator?.cancel(); sweep = 0f }
             else if (nowOver && sweep != 1f && sweepAnimator?.isRunning != true) sweep = 1f
             invalidate()
         }
 
-        /** 0 is a plain sage ring, 1 is the ring painted amber all the way round, from 12 o'clock and clockwise. */
+        /** 0 is a plain sage ring, 1 is the whole ring amber; it changes in the same 0.18 s as the number rolls. */
         private var sweep = 0f
+        private var lapShown = 0f
+        private var lapAnimator: android.animation.ValueAnimator? = null
+        private fun lapTo(target: Float) {
+            if (target == lapShown) return
+            lapAnimator?.cancel()
+            if (Moment.reducedMotion(context) || !isAttachedToWindow) { lapShown = target; return }
+            lapAnimator = android.animation.ValueAnimator.ofFloat(lapShown, target).apply {
+                duration = 180; interpolator = android.view.animation.PathInterpolator(.4f, 0f, .2f, 1f)
+                addUpdateListener { lapShown = it.animatedValue as Float; invalidate() }
+                start()
+            }
+        }
         private var sweepAnimator: android.animation.ValueAnimator? = null
         private fun sweepTo(target: Float) {
             sweepAnimator?.cancel()
             if (Moment.reducedMotion(context) || !isAttachedToWindow) { sweep = target; return }
             sweepAnimator = android.animation.ValueAnimator.ofFloat(sweep, target).apply {
-                duration = 420; interpolator = android.view.animation.PathInterpolator(.4f, 0f, .2f, 1f)
+                duration = 180; interpolator = android.view.animation.PathInterpolator(.4f, 0f, .2f, 1f)
                 addUpdateListener { sweep = it.animatedValue as Float; invalidate() }
                 start()
             }
         }
-        override fun onDetachedFromWindow() { sweepAnimator?.cancel(); super.onDetachedFromWindow() }
+        override fun onDetachedFromWindow() { sweepAnimator?.cancel(); lapAnimator?.cancel(); super.onDetachedFromWindow() }
 
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
@@ -1036,13 +1049,15 @@ class MainActivity : Activity() {
             val oval = RectF(left, top, right, bottom)
             if (measured != null) {
                 paint.color = WatchWorkoutFace.TRACK; canvas.drawArc(oval, -90f, 360f, false, paint)
-                // Sage fills up to a full ring at the target. Past it, amber paints over that ring from 12 o'clock
-                // (no colour mixing), and a deeper amber lap then builds on top.
+                // Sage fills up to a full ring at the target. Past it the whole ring turns amber, quickly and
+                // smoothly, together with the number, and a deeper amber lap grows from 12 o'clock at the same time.
                 paint.color = WatchWorkoutFace.SAGE
                 if (fraction > 0.003f) canvas.drawArc(oval, -90f, 360f * fraction, false, paint)
-                if (sweep > 0.003f) { paint.color = WatchWorkoutFace.ORANGE; canvas.drawArc(oval, -90f, 360f * sweep, false, paint) }
-                val lap = (measured - 1f).coerceIn(0f, 1f) * ((sweep - .65f) / .35f).coerceIn(0f, 1f)
-                if (lap > 0.003f) { paint.color = WatchWorkoutFace.DEEP_AMBER; canvas.drawArc(oval, -90f, 360f * lap, false, paint) }
+                if (sweep > 0.003f) {
+                    paint.color = WatchWorkoutFace.ORANGE; paint.alpha = (255 * sweep).toInt()
+                    canvas.drawArc(oval, -90f, 360f, false, paint); paint.alpha = 255
+                }
+                if (lapShown > 0.003f) { paint.color = WatchWorkoutFace.DEEP_AMBER; canvas.drawArc(oval, -90f, 360f * lapShown, false, paint) }
                 paint.color = WatchWorkoutFace.YELLOW
                 return
             }
