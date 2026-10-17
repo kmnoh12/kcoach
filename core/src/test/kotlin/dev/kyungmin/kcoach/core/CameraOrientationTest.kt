@@ -27,6 +27,13 @@ internal object CalibrationPoseFixture {
 }
 
 class CameraOrientationTest {
+    @Test fun visibleObliqueSetupAllowsModerateModelYawError() {
+        for (yaw in listOf(-28.0, -62.0)) {
+            val f = CalibrationPoseFixture.frame(1000, yaw)
+            assertTrue(CameraCaptureGuide.forExercise("dumbbell_curl", true)
+                .diagnose(f.imageLandmarks.single(), f.worldLandmarks.single(), true).ready)
+        }
+    }
     private val guide = CameraCaptureGuide.forExercise("dumbbell_curl", true)
     private fun diagnosis(yaw: Double): StartDiagnosis {
         val f = CalibrationPoseFixture.frame(1000, yaw)
@@ -69,12 +76,30 @@ class CameraOrientationTest {
         }
         repeat(4) { assertFalse(observe(-45.0).accepted) }
         assertTrue(observe(-45.0).accepted)
-        repeat(12) { assertTrue(observe(-58.0).accepted) }
-        assertFalse(observe(-70.0).accepted)
-        tracker.reset(); repeat(9) { assertFalse(observe(-58.0).accepted) }
+        repeat(12) { assertTrue(observe(-66.0).accepted) }
+        assertTrue(observe(-70.0).accepted) // One yaw spike does not reset a stable hold.
+        repeat(9) { observe(-70.0) }; assertFalse(observe(-70.0).accepted)
+        repeat(9) { observe(-45.0) }; assertTrue(observe(-45.0).accepted)
+        assertFalse(observe(-90.0).accepted)
+        tracker.reset(); repeat(9) { assertFalse(observe(-66.0).accepted) }
         repeat(9) { observe(-45.0) }; assertTrue(observe(-45.0).accepted)
         ms += 1000; assertFalse(observe(-45.0).accepted)
         assertFalse(tracker.observe(ms * 1_000_000, null, null, true, guide.viewTarget!!).accepted)
+    }
+    @Test fun stableGreenNeverSurvivesAnOccludedArmOrTorso() {
+        for (joint in listOf(11, 15, 23)) {
+            val tracker = CameraOrientationTracker()
+            repeat(9) { i ->
+                val f = CalibrationPoseFixture.frame(1000L + i * 50)
+                tracker.observe(f.cameraTimestampNs, f.imageLandmarks.single(), f.worldLandmarks.single(), true, guide.viewTarget!!)
+            }
+            val f = CalibrationPoseFixture.frame(1500, -62.0)
+            val hidden = f.imageLandmarks.single().toMutableList()
+            hidden[joint] = hidden[joint].copy(visibility = .3)
+            assertFalse(tracker.observe(f.cameraTimestampNs, hidden, f.worldLandmarks.single(), true, guide.viewTarget!!).accepted)
+            val next = CalibrationPoseFixture.frame(1550)
+            assertFalse(tracker.observe(next.cameraTimestampNs, next.imageLandmarks.single(), next.worldLandmarks.single(), true, guide.viewTarget!!).accepted)
+        }
     }
     @Test fun sharedTargetsKeepFrontAndRearIntentAndRejectTwistedTorso() {
         assertEquals(CameraOrientationPolicy.FRONT, CameraOrientationPolicy.target("hip_adduction").degrees)

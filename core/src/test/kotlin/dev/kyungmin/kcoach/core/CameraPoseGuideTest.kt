@@ -5,6 +5,14 @@ import kotlin.math.hypot
 import kotlin.test.*
 
 class CameraPoseGuideTest {
+    @Test fun defaultGuideKeepsUpWithBodyTranslationAtLowFrameRates() {
+        val smoother = CameraPoseGuideSmoother()
+        val a = GuideAnchor(GuidePoint(100.0, 100.0), GuidePoint(80.0, 100.0), 600.0, 1)
+        smoother.update(a, 0)
+        val b = a.copy(shoulder = GuidePoint(300.0, 100.0), other = GuidePoint(280.0, 100.0))
+        assertTrue(smoother.update(b, 125)!!.shoulder.x >= 260.0)
+        assertNull(smoother.update(null, 350), "A lost body must not leave a ghost guide behind")
+    }
     private val w = 480.0; private val h = 640.0
 
     /** Pixel-space fixture converted to normalized landmarks; unlisted joints are invisible. */

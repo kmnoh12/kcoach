@@ -169,7 +169,7 @@ object CameraPoseGuide {
 }
 
 /** Light exponential smoothing so the pictogram does not jitter; it lingers briefly when tracking drops. */
-class CameraPoseGuideSmoother(private val alpha: Double = .35, private val holdMs: Long = 400) {
+class CameraPoseGuideSmoother(private val alpha: Double = .85, private val holdMs: Long = 180) {
     private var last: GuideAnchor? = null
     private var seenAtMs = 0L
 

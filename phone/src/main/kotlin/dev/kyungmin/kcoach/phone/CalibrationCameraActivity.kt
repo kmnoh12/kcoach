@@ -26,10 +26,13 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.camera2.interop.Camera2CameraInfo
 import androidx.camera.camera2.interop.ExperimentalCamera2Interop
 import androidx.camera.core.*
+import androidx.camera.core.resolutionselector.AspectRatioStrategy
 import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.camera.view.transform.ImageProxyTransformFactory
+import androidx.camera.view.transform.CoordinateTransform
 import androidx.core.content.ContextCompat
 import com.google.android.gms.wearable.Wearable
 import com.google.mediapipe.tasks.core.BaseOptions
@@ -81,7 +84,7 @@ class CalibrationCameraActivity : ComponentActivity() {
     private var frameIndex = 0L
     private var timestampSource = CameraTimestampSource.UNKNOWN
     private var counter: UpperBodyPoseCounter? = null
-    private var captureEnd = CameraCaptureEnd()
+    private var targetCompletion = CameraTargetCompletion()
     private val orientationTracker = CameraOrientationTracker()
     private var orientationFrames = 0
     private var orientationRejected = 0
@@ -121,7 +124,7 @@ class CalibrationCameraActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         // FIT_CENTER inside a 3:4 box: the whole analyzed frame is visible, nothing MediaPipe sees is cropped away.
-        preview = PreviewView(this).apply { scaleType = PreviewView.ScaleType.FIT_CENTER }
+        preview = PreviewView(this).apply { scaleType = PreviewView.ScaleType.FIT_CENTER; implementationMode = PreviewView.ImplementationMode.COMPATIBLE }
         overlay = PoseOverlay()
         loadWearing()
         setContent {
@@ -215,12 +218,19 @@ class CalibrationCameraActivity : ComponentActivity() {
         future.addListener({
             runCatching {
                 provider = future.get()
-                val cameraPreview = Preview.Builder().build().also { it.setSurfaceProvider(preview.surfaceProvider) }
+                val resolution = ResolutionSelector.Builder()
+                    .setAspectRatioStrategy(AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY)
+                    .setResolutionStrategy(ResolutionStrategy(android.util.Size(640, 480),
+                        ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER)).build()
+                val cameraPreview = Preview.Builder().setResolutionSelector(resolution).build().also { it.setSurfaceProvider(preview.surfaceProvider) }
                 val imageAnalysis = ImageAnalysis.Builder().setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                    .setResolutionSelector(ResolutionSelector.Builder().setResolutionStrategy(ResolutionStrategy(android.util.Size(640, 480),
-                        ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER)).build()).build()
+                    .setResolutionSelector(resolution)
+                    .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888).build()
                 analysis = imageAnalysis
-                val camera = provider!!.bindToLifecycle(this, CameraSelector.DEFAULT_FRONT_CAMERA, cameraPreview, imageAnalysis)
+                val camera = provider!!.bindToLifecycle(this, CameraSelector.DEFAULT_FRONT_CAMERA,
+                    UseCaseGroup.Builder().setViewPort(ViewPort.Builder(android.util.Rational(3, 4),
+                        preview.display?.rotation ?: android.view.Surface.ROTATION_0).setScaleType(ViewPort.FIT).build())
+                        .addUseCase(cameraPreview).addUseCase(imageAnalysis).build())
                 val source = Camera2CameraInfo.from(camera.cameraInfo).getCameraCharacteristic(CameraCharacteristics.SENSOR_INFO_TIMESTAMP_SOURCE)
                 timestampSource = if (source == CameraCharacteristics.SENSOR_INFO_TIMESTAMP_SOURCE_REALTIME)
                     CameraTimestampSource.PHONE_ELAPSED_REALTIME else CameraTimestampSource.UNKNOWN
@@ -286,7 +296,7 @@ class CalibrationCameraActivity : ComponentActivity() {
                     }
                     val next = store.begin(exerciseId, exerciseName, onLeft, epoch.id, wearing, declared).getOrThrow()
                     frameIndex = 0; firstCameraNs = null; stopping = false; watchStartScheduled = false; encoder = null
-                    captureEnd = CameraCaptureEnd()
+                    targetCompletion = CameraTargetCompletion()
                     orientationFrames = 0; orientationRejected = 0
                     val motion = CameraCaptureGuide.forExercise(exerciseId, onLeft).metric
                     counter = motion?.let(::UpperBodyPoseCounter)
@@ -366,8 +376,14 @@ class CalibrationCameraActivity : ComponentActivity() {
             lastModelMs = modelMs
             val original = image.toBitmap()
             val rotation = image.imageInfo.rotationDegrees
-            bitmap = if (rotation == 0) original else Bitmap.createBitmap(original, 0, 0, original.width, original.height,
+            val crop = image.cropRect
+            bitmap = if (rotation == 0 && crop == android.graphics.Rect(0, 0, original.width, original.height)) original
+            else Bitmap.createBitmap(original, crop.left, crop.top, crop.width(), crop.height(),
                 Matrix().apply { postRotate(rotation.toFloat()) }, true).also { original.recycle() }
+            val sourceTransform = ImageProxyTransformFactory().apply {
+                isUsingRotationDegrees = true
+                isUsingCropRect = true // Detector, saved video and preview share the viewport crop.
+            }.getOutputTransform(image)
             val convertedNs = SystemClock.elapsedRealtimeNanos()
             val result = bitmap.withDetectorImage { mp -> requireNotNull(pose).detectForVideo(mp, modelMs) }
             val completedNs = SystemClock.elapsedRealtimeNanos()
@@ -404,6 +420,21 @@ class CalibrationCameraActivity : ComponentActivity() {
             if ((starting || preparedCapture != null) && !ready) main.post {
                 ui = ui.copy(ready = false, status = diagnosis?.status(false) ?: orientation.message ?: "시작 자세를 다시 맞춰 주세요")
             }
+            val frameWidth = bitmap.width; val frameHeight = bitmap.height
+            // Start-pose pictogram follows the user's own shoulder and size; readiness stays the angle check above.
+            val figure = guideFamily?.takeIf { capture == null && !starting }?.let { family ->
+                val anchor = normalized.singleOrNull()?.let { CameraPoseGuide.measure(it, frameWidth.toDouble(), frameHeight.toDouble(), family, previewLeft) }
+                guideSmoother.update(anchor, modelMs)?.let { CameraPoseGuide.build(family, it) }
+            }
+            // Without wearing info capture cannot start, so the figure must not look ready (pose geometry itself is unchanged).
+            val matched = poseReady && wearing != null && !ui.blocked && !stopping && !ui.saving
+            main.post {
+                overlay.frameToView = preview.outputTransform?.let { target ->
+                    Matrix().also { CoordinateTransform(sourceTransform, target).transform(it) }
+                }
+                overlay.points = normalized.singleOrNull().orEmpty(); overlay.frameWidth = frameWidth; overlay.frameHeight = frameHeight; overlay.diagnosis = diagnosis
+                overlay.update(figure, matched && !ui.blocked && !ui.saving); overlay.invalidate()
+            }
             var encodeNs = 0L; var storeNs = 0L; var storeDoneNs = 0L
             val active = capture
             if (active != null) {
@@ -423,40 +454,31 @@ class CalibrationCameraActivity : ComponentActivity() {
                 if (now - lastClockWindowAtMs >= 20_000) { lastClockWindowAtMs = now; probe(active.id, "MIDDLE") }
                 orientationFrames++
                 if (!orientation.accepted || orientation.rawYaw?.let { kotlin.math.abs(kotlin.math.abs(it) - guide.viewTarget!!.degrees) > CameraOrientationPolicy.TOLERANCE } != false) orientationRejected++
-                val metric = if (watchMeasurementReady && orientation.accepted && world.size == 1 && normalized.size == 1)
+                val metric = if (written && watchMeasurementReady && orientation.accepted && world.size == 1 && normalized.size == 1)
                     CameraCaptureGuide.forExercise(exerciseId, active.watchOnLeft).observedMetric(normalized.single(), world.single(), active.watchOnLeft)
                 else null
                 counter?.observe(modelMs, metric)
+                val end = targetCompletion.observe(cameraNs, counter?.reps ?: 0,
+                    eligible = written && metric != null)
+                val remaining = targetCompletion.remainingSeconds(cameraNs)
                 val message = when {
+                    remaining != null -> "10회 확인 · ${remaining}초 후 자동 저장해요"
                     normalized.size > 1 -> "여러 사람이 보여요. 혼자 화면에 들어와 주세요."
                     !orientation.accepted -> orientation.message ?: "몸 방향을 다시 맞춰 주세요"
                     !watchMeasurementReady -> "워치 준비 중이에요. 시작 자세를 유지해 주세요"
                     normalized.isEmpty() || counter != null && metric == null -> "팔과 몸통이 가려지지 않게 해 주세요."
                     orientationFrames >= 30 && orientationRejected.toDouble() / orientationFrames > 1 - CalibrationSafety.MIN_ORIENTATION_RATIO -> "몸 방향이 맞지 않는 구간이 많아요. 이 촬영은 보정에서 제외될 수 있어요"
                     guide.metric == null -> "이 운동은 카메라 횟수 검증을 지원하지 않아요. 촬영 후 직접 종료해 주세요"
-                    else -> "10회 후 시작 자세에서 3초 멈춰 주세요"
+                    else -> "${counter?.reps ?: 0}/10회 · 10회를 확인하면 3초 뒤 저장해요"
                 }
                 main.post { ui = ui.copy(status = message) }
-                val end = captureEnd.observe(cameraNs, pose.takeIf { written && orientation.accepted }, worldPose.takeIf { written && orientation.accepted }, guide, active.watchOnLeft,
-                    allowEnd = (counter?.reps ?: 0) >= CalibrationSafety.MIN_REPS)
                 if (end != null) stopCapture(null, end)
                 else if (videoUs >= 120_000_000L) stopCapture(null)
             }
-            val frameWidth = bitmap.width; val frameHeight = bitmap.height
             val perfLine = perf.add(SystemClock.elapsedRealtimeNanos(), cameraNs, convertedNs - receivedNs, completedNs - convertedNs,
                 encodeNs, storeNs, SystemClock.elapsedRealtimeNanos() - receivedNs)
-            perfLine?.let { Log.i("KCoachPerf", "$exerciseId recording=${active != null} $it") }
-            // Start-pose pictogram follows the user's own shoulder and size; readiness stays the angle check above.
-            val figure = guideFamily?.takeIf { capture == null && !starting }?.let { family ->
-                val anchor = normalized.singleOrNull()?.let { CameraPoseGuide.measure(it, frameWidth.toDouble(), frameHeight.toDouble(), family, previewLeft) }
-                guideSmoother.update(anchor, modelMs)?.let { CameraPoseGuide.build(family, it) }
-            }
-            // Without wearing info capture cannot start, so the figure must not look ready (pose geometry itself is unchanged).
-            val matched = poseReady && wearing != null && !ui.blocked && !stopping && !ui.saving
-            main.post {
-                overlay.points = normalized.singleOrNull().orEmpty(); overlay.frameWidth = frameWidth; overlay.frameHeight = frameHeight; overlay.diagnosis = diagnosis; overlay.perfText = perfLine ?: overlay.perfText
-                overlay.update(figure, matched && !ui.blocked && !ui.saving); overlay.invalidate()
-            }
+            perfLine?.let { Log.i("KCoachPerf", "$exerciseId recording=${active != null} $it"); main.post { overlay.perfText = it } }
+
         } catch (error: Throwable) {
             val storageFull = captureStorageFull(error)
             val hadCapture = capture != null || preparedCapture != null
@@ -506,7 +528,7 @@ class CalibrationCameraActivity : ComponentActivity() {
         worker.execute {
             val videoFinished = runCatching { encoder?.finish() == true }.getOrDefault(false)
             encoder = null
-            finalizer.prepare(active, videoFinished, reason, motionEndCameraNs, perf.recordedLines())
+            finalizer.prepare(active, videoFinished, reason, motionEndCameraNs ?: targetCompletion.motionEndCameraNs, perf.recordedLines())
             saveStoppedCapture()
         }
     }
@@ -543,6 +565,7 @@ class CalibrationCameraActivity : ComponentActivity() {
     }
 
     private inner class PoseOverlay : View(this@CalibrationCameraActivity) {
+        var frameToView: Matrix? = null
         var points: List<CameraLandmark> = emptyList()
         var frameWidth = 1
         var frameHeight = 1
@@ -585,9 +608,10 @@ class CalibrationCameraActivity : ComponentActivity() {
 
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
-            val scale = minOf(width.toFloat() / frameWidth, height.toFloat() / frameHeight)
-            val dx = (width - frameWidth * scale) / 2; val dy = (height - frameHeight * scale) / 2
-            drawGuide(canvas, scale, dx, dy)
+            val mapping = frameToView ?: return
+            val values = FloatArray(9).also(mapping::getValues)
+            val scale = kotlin.math.hypot(values[0], values[3])
+            drawGuide(canvas, scale)
             if (showDiagnosis) {
                 drawDiagnosis(canvas)
                 if (perfText.isNotEmpty()) {
@@ -596,17 +620,17 @@ class CalibrationCameraActivity : ComponentActivity() {
                     debugText.textSize = 12 * dp
                 }
             }
-            // Mirrored selfie preview: landmarks are in the unmirrored frame.
-            fun vx(x: Double) = dx + (1 - x).toFloat() * frameWidth * scale
-            fun vy(y: Double) = dy + y.toFloat() * frameHeight * scale
+            // CameraX supplies the real crop, rotation and front-camera mirroring transform.
+            fun position(p: CameraLandmark) = floatArrayOf((p.x * frameWidth).toFloat(), (p.y * frameHeight).toFloat()).also(mapping::mapPoints)
             fun confidence(p: CameraLandmark) = minOf(p.visibility ?: 0.0, p.presence ?: 0.0)
             val edges = listOf(11 to 12, 11 to 13, 13 to 15, 12 to 14, 14 to 16, 11 to 23, 12 to 24, 23 to 24, 23 to 25, 25 to 27, 24 to 26, 26 to 28)
             edges.forEach { (a, b) ->
                 val first = points.getOrNull(a) ?: return@forEach; val second = points.getOrNull(b) ?: return@forEach
                 val c = minOf(confidence(first), confidence(second))
                 if (c < 0.2) return@forEach
-                line.alpha = if (c < 0.6) 60 else 166
-                canvas.drawLine(vx(first.x), vy(first.y), vx(second.x), vy(second.y), line)
+                line.alpha = if (c < 0.6) 60 else 235
+                val aPoint = position(first); val bPoint = position(second)
+                canvas.drawLine(aPoint[0], aPoint[1], bPoint[0], bPoint[1], line)
             }
             edges.flatMap { listOf(it.first, it.second) }.toSet().forEach { index ->
                 val p = points.getOrNull(index) ?: return@forEach
@@ -616,16 +640,18 @@ class CalibrationCameraActivity : ComponentActivity() {
                 val strong = c >= 0.6
                 dot.alpha = if (strong) 245 else 110; ring.alpha = if (strong) 255 else 110
                 val r = (if (strong) 4.5f else 3f) * dp
-                canvas.drawCircle(vx(p.x), vy(p.y), r, dot); canvas.drawCircle(vx(p.x), vy(p.y), r, ring)
+                val point = position(p)
+                canvas.drawCircle(point[0], point[1], r, dot); canvas.drawCircle(point[0], point[1], r, ring)
             }
         }
 
-        private fun drawGuide(canvas: Canvas, scale: Float, dx: Float, dy: Float) {
+        private fun drawGuide(canvas: Canvas, scale: Float) {
             val shown = figure ?: return
             val color = if (matched) Color.rgb(90, 222, 132) else Color.rgb(205, 209, 207)
-            val alpha = ((if (matched) 0.42f else 0.36f) * 255).toInt()
-            fun gx(p: GuidePoint) = dx + (frameWidth - p.x).toFloat() * scale
-            fun gy(p: GuidePoint) = dy + p.y.toFloat() * scale
+            val alpha = ((if (matched) 0.95f else 0.90f) * 255).toInt()
+            fun mapped(p: GuidePoint) = floatArrayOf(p.x.toFloat(), p.y.toFloat()).also { frameToView?.mapPoints(it) }
+            fun gx(p: GuidePoint) = mapped(p)[0]
+            fun gy(p: GuidePoint) = mapped(p)[1]
             fun limb(l: GuideLimb, extra: Float = 0f) {
                 shape.style = Paint.Style.STROKE; shape.strokeWidth = l.width.toFloat() * scale + extra
                 for (i in 0 until l.points.size - 1) canvas.drawLine(gx(l.points[i]), gy(l.points[i]), gx(l.points[i + 1]), gy(l.points[i + 1]), shape)

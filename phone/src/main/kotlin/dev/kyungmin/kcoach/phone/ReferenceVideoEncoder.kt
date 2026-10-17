@@ -49,9 +49,13 @@ internal class ReferenceVideoEncoder(private val output: File, private val width
         val image = codec.getInputImage(index) ?: error("Encoder does not expose writable YUV input")
         require(image.planes.size == 3)
         bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+        // Cache JNI-backed plane accessors once per frame, rather than for every pixel.
+        val planes = image.planes
+        val buffers = planes.map { it.buffer }
+        val rowStrides = planes.map { it.rowStride }
+        val pixelStrides = planes.map { it.pixelStride }
         fun put(plane: Int, x: Int, y: Int, value: Int) {
-            val target = image.planes[plane]
-            target.buffer.put(y * target.rowStride + x * target.pixelStride, value.coerceIn(0, 255).toByte())
+            buffers[plane].put(y * rowStrides[plane] + x * pixelStrides[plane], value.coerceIn(0, 255).toByte())
         }
         for (y in 0 until height) for (x in 0 until width) {
             val color = pixels[y * width + x]

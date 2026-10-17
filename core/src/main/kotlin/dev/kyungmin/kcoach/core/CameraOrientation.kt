@@ -19,9 +19,9 @@ object CameraOrientationPolicy {
     const val FRONT = 0.0
     const val OBLIQUE = 45.0
     const val REAR_OBLIQUE = 135.0
-    // ±12 admits a modest setup error but excludes front/side by 33 degrees.
+    // ±20 allows noisy monocular yaw estimates while still excluding front and pure side views.
     // A 3-degree release margin suppresses flicker; field accuracy remains unverified.
-    const val TOLERANCE = 12.0
+    const val TOLERANCE = 20.0
     const val HYSTERESIS = 3.0
     const val WINDOW = 9
     const val MIN_FRAMES = 5
@@ -106,8 +106,10 @@ class CameraOrientationTracker {
         val median = recent.sorted()[recent.size / 2]
         val judged = CameraTorsoOrientation.judge(median, target, CameraOrientationPolicy.TOLERANCE +
             if (accepted) CameraOrientationPolicy.HYSTERESIS else 0.0)
-        // A clearly invalid current frame cannot borrow old green from the median.
-        accepted = judged.accepted && abs(abs(raw.yaw) - target.degrees) <= CameraOrientationPolicy.TOLERANCE + CameraOrientationPolicy.HYSTERESIS
+        // A small isolated yaw spike can use the stable median; a clearly wrong view cannot.
+        // Joint visibility and near-arm occlusion have already rejected the frame above.
+        val currentTolerance = CameraOrientationPolicy.TOLERANCE + CameraOrientationPolicy.HYSTERESIS + if (accepted) 5.0 else 0.0
+        accepted = judged.accepted && abs(abs(raw.yaw) - target.degrees) <= currentTolerance
         return judged.copy(accepted = accepted, rawYaw = raw.yaw,
             message = if (accepted) null else judged.message ?: raw.message ?: "몸 방향을 다시 맞춰 주세요")
     }
