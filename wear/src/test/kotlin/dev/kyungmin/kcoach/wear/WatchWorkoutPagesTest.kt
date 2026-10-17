@@ -138,7 +138,8 @@ class WatchWorkoutPagesTest {
         val layout = title.layout
         assertEquals("The long name must stay on one line", 1, layout.lineCount)
         assertEquals("No part of the name may be cut with an ellipsis", 0, layout.getEllipsisCount(0))
-        assertTrue("The shrunk name still has to be readable", title.textSize >= 11f * activity.resources.displayMetrics.scaledDensity - 0.5f)
+        assertTrue("The shrunk name still has to be readable", title.textSize >= 22f * (432f / 432f) * 0.9f)
+        assertTrue("The title box must be tall enough for a full line", title.height >= title.textSize * 1.3f)
         activity.finish()
     }
 }

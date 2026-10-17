@@ -472,7 +472,7 @@ class MainActivity : Activity() {
         face.action.text = "폰에서 보기"; face.action.isEnabled = !phoneResultPending
         face.action.alpha = if (phoneResultPending) 0.5f else 1f
         face.hint.text = ""; face.hint.setTextColor(WatchWorkoutFace.MUTED); face.noticeAction = null
-        face.value.textSize = if (active) 88f else 24f
+        face.size(face.value, if (active) 88f else 24f)
         face.value.setTextColor(WatchWorkoutFace.BONE)
         face.restCard.visibility = View.GONE; face.restGo.visibility = View.GONE; face.jog.visibility = View.GONE
         val controlsReady = resting && !paused && workoutControls.supportsControls() && setId.isNotBlank() && attemptId.isNotBlank()
@@ -488,13 +488,13 @@ class MainActivity : Activity() {
             face.unit.text = "kg"; face.heart.show(if (resting) 0 else heartRate); face.heartRate.text = heartRate.takeIf { it > 0 }?.toString() ?: "—"
             if (manualRequired && count == null) face.hint.text = "위로 · 횟수 기록"
             if (running && runtimePhase in setOf("POSITIONING", "PREPARING", "BASELINE", "START_DIRECTION_WAITING")) {
-                face.value.text = "준비"; face.value.textSize = 40f
+                face.value.text = "준비"; face.size(face.value, 40f)
                 face.hint.text = if (runtimePhase == "START_DIRECTION_WAITING") "손목 방향을 맞춰 주세요 · 눌러서 직접 시작" else "손목을 잠시 멈춰 주세요"
             }
             if (resting) {
                 val left = RestCountdownCalculator.calculate(now, restEndAtMs, restSeconds).remainingSeconds
                 face.value.text = String.format("%d:%02d", left / 60, left % 60)
-                face.value.textSize = 63f; face.value.setTextColor(WatchWorkoutFace.YELLOW)
+                face.size(face.value, 63f); face.value.setTextColor(WatchWorkoutFace.YELLOW)
                 face.target.visibility = View.GONE
                 if (now < restFlashUntilMs) face.setSubtitle(restFlashText, WatchWorkoutFace.YELLOW, sizeSp = 15f, bold = true)
                 else face.setSubtitle("휴식 · 목표 ${restSeconds / 60}:${"%02d".format(restSeconds % 60)}", WatchWorkoutFace.YELLOW, bold = true)
@@ -508,12 +508,12 @@ class MainActivity : Activity() {
         } else if (complete) {
             face.title.text = "운동 완료"; face.setSubtitle("수고했어요", WatchWorkoutFace.MUTED)
             face.value.text = if (phoneResultStatus.isBlank()) "기록을 확인해 보세요" else phoneResultStatus
-            face.value.textSize = 14f; face.value.setTextColor(WatchWorkoutFace.WHITE)
+            face.size(face.value, 14f); face.value.setTextColor(WatchWorkoutFace.WHITE)
             face.heart.show(0)
         } else {
             face.title.text = "이번 주 운동"; face.setSubtitle("", WatchWorkoutFace.MUTED)
             face.value.text = homeStore.weekCount()?.let { "${it}회" } ?: "—"
-            face.value.textSize = 40f
+            face.size(face.value, 40f)
             val recent = homeStore.overview()?.optJSONObject("recent")
             face.hint.text = recent?.let {
                 val date = java.time.Instant.ofEpochMilli(it.getLong("endedAtMs")).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
@@ -620,7 +620,7 @@ class MainActivity : Activity() {
         val travel = dp(60).toFloat()
         val interpolator = android.view.animation.PathInterpolator(.4f, 0f, .2f, 1f)
         face.valueGhost.apply {
-            text = old; setTextColor(face.value.currentTextColor); textSize = face.value.textSize / resources.displayMetrics.scaledDensity
+            text = old; setTextColor(face.value.currentTextColor); setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, face.value.textSize)
             animate().cancel(); translationY = 0f; alpha = 1f
             animate().translationY(-travel).alpha(0f).setDuration(180).setInterpolator(interpolator).start()
         }

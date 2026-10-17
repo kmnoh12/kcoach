@@ -17,13 +17,17 @@ import android.widget.TextView
 /** The workout face in real accessible Android views; coordinates follow the 432-unit round design grid. */
 internal class WatchWorkoutFace(context: Context) : FrameLayout(context) {
     private val positions = mutableMapOf<View, android.graphics.Rect>()
+    /** Text sizes live on the 432-unit design grid (in the old sp numbers) and scale with the screen, not the user's density. */
+    private val designSp = HashMap<TextView, Float>()
+    fun size(view: TextView, sp: Float) { designSp[view] = sp; applyTextSize(view) }
+    private fun applyTextSize(view: TextView) {
+        val sp = designSp[view] ?: return
+        val scale = minOf(width, height) / 432f
+        if (scale > 0f) view.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, sp * 2f * scale) else view.textSize = sp
+    }
     private val divider = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(38, 38, 36); strokeWidth = 1.5f }
     val clock = label(13f, WHITE, 116, 42, 316, 72)
-    val title = label(17f, WHITE, 63, 74, 369, 110, true).apply {
-        // Long names such as "케이블 익스터널 로테이션" shrink to fit one line instead of being cut off.
-        maxLines = 1
-        androidx.core.widget.TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(this, 11, 17, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
-    }
+    val title = label(17f, WHITE, 63, 74, 369, 110, true).apply { maxLines = 1 }
     val subtitle = label(11f, MUTED, 52, 114, 380, 142)
     val jog = JogBar(context).also { positions[it] = android.graphics.Rect(80, 202, 352, 298); addView(it, LayoutParams(1, 1)); it.visibility = GONE }
     val chevronUp = ChevronView(context, true).also { positions[it] = android.graphics.Rect(199, 14, 233, 31); addView(it, LayoutParams(1, 1)); it.visibility = GONE }
@@ -58,14 +62,20 @@ internal class WatchWorkoutFace(context: Context) : FrameLayout(context) {
             typeface = if (bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
             maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
             addView(this, LayoutParams(1, 1)); positions[this] = android.graphics.Rect(left, top, right, bottom)
+            designSp[this] = sp
         }
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec)
         val scale = minOf(measuredWidth, measuredHeight) / 432f
+        designSp.keys.forEach { applyTextSize(it) }
+        // Long exercise names shrink to fit one line, between 11 and 17 design sp.
+        androidx.core.widget.TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(title, (22f * scale).toInt().coerceAtLeast(8), (34f * scale).toInt().coerceAtLeast(10), 1, android.util.TypedValue.COMPLEX_UNIT_PX)
         positions.forEach { (view, rect) ->
-            val height = (rect.height() * scale).toInt().let {
-                if (view === action) maxOf(it, (48 * resources.displayMetrics.density).toInt()) else it
-            }
+            var height = (rect.height() * scale).toInt()
+            if (view === action) height = maxOf(height, (48 * resources.displayMetrics.density).toInt())
+            // A line of text needs about 1.4 times its size; a tighter box would cut the bottom of Korean glyphs.
+            if (view is TextView && view !== title) height = maxOf(height, (view.textSize * 1.4f).toInt())
+            if (view === title) height = maxOf(height, (34f * scale * 1.4f).toInt())
             view.measure(MeasureSpec.makeMeasureSpec((rect.width() * scale).toInt(), MeasureSpec.EXACTLY),
                 MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY))
         }
@@ -74,9 +84,16 @@ internal class WatchWorkoutFace(context: Context) : FrameLayout(context) {
         val side = minOf(width, height); val scale = side / 432f
         val offsetX = (width - side) / 2; val offsetY = (height - side) / 2
         positions.forEach { (view, rect) ->
-            val bottomPx = offsetY + (rect.bottom * scale).toInt()
-            val topPx = if (view === action) bottomPx - view.measuredHeight else offsetY + (rect.top * scale).toInt()
-            view.layout(offsetX + (rect.left * scale).toInt(), topPx, offsetX + (rect.right * scale).toInt(), bottomPx)
+            val l = offsetX + (rect.left * scale).toInt(); val r = offsetX + (rect.right * scale).toInt()
+            val centreY = offsetY + (rect.centerY() * scale)
+            if (view === action) {
+                val bottomPx = offsetY + (rect.bottom * scale).toInt()
+                view.layout(l, bottomPx - view.measuredHeight, r, bottomPx)
+            } else if (view is TextView) {
+                // Keep the text where the design puts it even when the box grew to avoid clipping.
+                val half = view.measuredHeight / 2f
+                view.layout(l, (centreY - half).toInt(), r, (centreY + half).toInt())
+            } else view.layout(l, offsetY + (rect.top * scale).toInt(), r, offsetY + (rect.bottom * scale).toInt())
         }
     }
     /** The counter sits left of its "/ 12회" while measuring and is centred (and wider) for the rest timer and home. */
@@ -93,7 +110,7 @@ internal class WatchWorkoutFace(context: Context) : FrameLayout(context) {
 
     /** The status line under the exercise name; a small coloured dot in front of it marks a live measurement. */
     fun setSubtitle(text: String, color: Int, dot: Int? = null, sizeSp: Float = 11f, bold: Boolean = false) {
-        subtitle.setTextColor(color); subtitle.textSize = sizeSp
+        subtitle.setTextColor(color); size(subtitle, sizeSp)
         subtitle.typeface = if (bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
         subtitle.setCompoundDrawablesRelative(null, null, null, null)
         if (dot == null) subtitle.text = text

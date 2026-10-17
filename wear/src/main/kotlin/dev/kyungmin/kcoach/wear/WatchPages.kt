@@ -12,7 +12,7 @@ import android.os.Handler
 import android.os.Looper
 import android.text.SpannableStringBuilder
 import android.text.Spanned
-import android.text.style.AbsoluteSizeSpan
+import android.text.style.RelativeSizeSpan
 import android.text.style.ForegroundColorSpan
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
@@ -28,6 +28,7 @@ import kotlin.math.roundToInt
 /** A page laid out on the 432-unit round design grid, so every position matches the design sheet. */
 internal open class Grid432(context: Context) : FrameLayout(context) {
     protected val positions = LinkedHashMap<View, android.graphics.Rect>()
+    private val designSp = HashMap<TextView, Float>()
     protected val density get() = resources.displayMetrics.density
 
     fun <T : View> place(view: T, l: Int, t: Int, r: Int, b: Int): T {
@@ -38,7 +39,7 @@ internal open class Grid432(context: Context) : FrameLayout(context) {
     }
 
     fun text(sp: Float, color: Int, bold: Boolean = false, medium: Boolean = false, gravity: Int = Gravity.CENTER) = TextView(context).apply {
-        textSize = sp; setTextColor(color); this.gravity = gravity; includeFontPadding = false
+        textSize = sp; designSp[this] = sp; setTextColor(color); this.gravity = gravity; includeFontPadding = false
         typeface = when { medium -> Typeface.create("sans-serif-medium", Typeface.NORMAL); bold -> Typeface.DEFAULT_BOLD; else -> Typeface.DEFAULT }
         maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
     }
@@ -46,9 +47,13 @@ internal open class Grid432(context: Context) : FrameLayout(context) {
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec)
         val scale = minOf(measuredWidth, measuredHeight) / 432f
+        designSp.forEach { (view, sp) -> view.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, sp * 2f * scale) }
         positions.forEach { (view, rect) ->
+            var height = (rect.height() * scale).toInt()
+            // A line of text needs about 1.4 times its size; a tighter box would cut the bottom of Korean glyphs.
+            if (view is TextView) height = maxOf(height, (view.textSize * 1.4f).toInt())
             view.measure(MeasureSpec.makeMeasureSpec((rect.width() * scale).toInt(), MeasureSpec.EXACTLY),
-                MeasureSpec.makeMeasureSpec((rect.height() * scale).toInt(), MeasureSpec.EXACTLY))
+                MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY))
         }
     }
 
@@ -56,8 +61,12 @@ internal open class Grid432(context: Context) : FrameLayout(context) {
         val side = minOf(width, height); val scale = side / 432f
         val offsetX = (width - side) / 2; val offsetY = (height - side) / 2
         positions.forEach { (view, rect) ->
-            view.layout(offsetX + (rect.left * scale).toInt(), offsetY + (rect.top * scale).toInt(),
-                offsetX + (rect.right * scale).toInt(), offsetY + (rect.bottom * scale).toInt())
+            val l = offsetX + (rect.left * scale).toInt(); val r = offsetX + (rect.right * scale).toInt()
+            if (view is TextView) {
+                val centreY = offsetY + rect.centerY() * scale
+                val half = view.measuredHeight / 2f
+                view.layout(l, (centreY - half).toInt(), r, (centreY + half).toInt())
+            } else view.layout(l, offsetY + (rect.top * scale).toInt(), r, offsetY + (rect.bottom * scale).toInt())
         }
     }
 }
@@ -276,7 +285,7 @@ internal class EditPageView(context: Context) : Grid432(context) {
         view.text = SpannableStringBuilder(number).apply {
             val start = length
             append(unit)
-            setSpan(AbsoluteSizeSpan((8f * density).roundToInt()), start, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            setSpan(RelativeSizeSpan(0.52f), start, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             setSpan(ForegroundColorSpan(WatchWorkoutFace.MUTED), start, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
     }
