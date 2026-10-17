@@ -67,4 +67,17 @@ class SetEndGateTest {
         assertEquals(12, replay(CurlCycleRegressionTest.curlSamples(12, 1.0, 3.0)))
         assertEquals(12, replay(CurlCycleRegressionTest.curlSamples(12, 1.0, 3.0, topHoldSeconds = 2.5)))
     }
+
+    @Test fun aPauseBeforeTheTargetWaitsSevenSecondsAndAfterItThreeAsBefore() {
+        val base = 3_000_000_000L
+        assertEquals(7_000_000_000L, SetEndGate.waitNs(reps = 7, targetReps = 20, baseWaitNs = base))
+        assertEquals(base, SetEndGate.waitNs(reps = 20, targetReps = 20, baseWaitNs = base))
+        assertEquals(base, SetEndGate.waitNs(reps = 5, targetReps = 0, baseWaitNs = base))
+        // A learned wait longer than seven seconds is never shortened.
+        assertEquals(9_000_000_000L, SetEndGate.waitNs(reps = 3, targetReps = 20, baseWaitNs = 9_000_000_000L))
+        val gate = SetEndGate()
+        gate.rep(ns(1000))
+        assertFalse(gate.shouldEnd(ns(1000) + 6_900_000_000L, null, 4_000_000_000L, SetEndGate.waitNs(7, 20, base)))
+        assertTrue(gate.shouldEnd(ns(1000) + 7_000_000_000L, null, 4_000_000_000L, SetEndGate.waitNs(7, 20, base)))
+    }
 }

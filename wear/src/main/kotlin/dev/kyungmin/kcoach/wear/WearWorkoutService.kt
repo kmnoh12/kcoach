@@ -96,6 +96,9 @@ class WearWorkoutService : Service(), SensorEventListener {
     private val dataCleanupInFlight = java.util.concurrent.atomic.AtomicBoolean(false)
     private val setEndGate = dev.kyungmin.kcoach.core.SetEndGate()
     private var learnedRepWaitNs = 3_000_000_000L
+    /** Silence that ends a set: 7 s while reps are still owed (a heavy set pausing mid-way), the usual 3 s once the target is met. */
+    private fun setEndWaitNs() = dev.kyungmin.kcoach.core.SetEndGate.waitNs(reps, targetReps,
+        if (activeDetector != null) learnedRepWaitNs else 3_000_000_000L)
     private val setEndTicker = object : Runnable {
         override fun run() {
             if (running && measurementReady && calibrationStage == null &&
@@ -104,7 +107,7 @@ class WearWorkoutService : Service(), SensorEventListener {
                 val candidate = forearmRotationDetector?.candidateStartNs ?: profiledMotionDetector?.candidateStartNs
                 if (setEndGate.shouldEnd(android.os.SystemClock.elapsedRealtimeNanos(), candidate,
                         profiledMotionDetector?.maximumCycleNs ?: (trackingProfile.maximumRepMs * 1_000_000L),
-                        if (activeDetector != null) learnedRepWaitNs else 3_000_000_000L)) completeSet()
+                        setEndWaitNs())) completeSet()
             }
             if (!serviceDestroyed && (running || paused) && trackingProfile.mode != TrackingMode.MANUAL_REQUIRED)
                 handler.postDelayed(this, if (paused) 1_000L else 100L)
@@ -1444,7 +1447,7 @@ class WearWorkoutService : Service(), SensorEventListener {
                         if (calibrationStage == null && dev.kyungmin.kcoach.core.CapturePurpose.forSession(sessionId) == dev.kyungmin.kcoach.core.CapturePurpose.WORKOUT &&
                             setEndGate.shouldEnd(sensorSample.timestampNs, candidate,
                                 profiledMotionDetector?.maximumCycleNs ?: (trackingProfile.maximumRepMs * 1_000_000L),
-                                if (activeDetector != null) learnedRepWaitNs else 3_000_000_000L)) {
+                                setEndWaitNs())) {
                             completeSet()
                             return
                         }

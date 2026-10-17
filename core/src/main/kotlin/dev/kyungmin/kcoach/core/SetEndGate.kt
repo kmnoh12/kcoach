@@ -22,4 +22,13 @@ class SetEndGate(private val silenceNs: Long = 3_000_000_000L) {
         closed = true
         return true
     }
+
+    companion object {
+        /** Before the target is reached a pause is usually a hard set catching its breath, so the set stays open this long. */
+        const val PAUSE_BEFORE_TARGET_NS = 7_000_000_000L
+
+        /** How long without a rep ends the set: the longer mid-set pause until [targetReps] is reached, then [baseWaitNs] as before. */
+        fun waitNs(reps: Int, targetReps: Int, baseWaitNs: Long): Long =
+            if (reps < targetReps) maxOf(baseWaitNs, PAUSE_BEFORE_TARGET_NS) else baseWaitNs
+    }
 }
