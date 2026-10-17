@@ -12,6 +12,25 @@ import java.time.Duration
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class IdleServiceTest {
+    @Test fun foregroundRetryPromotesAnExistingInstanceAfterIdleStopBeforeDestroy() {
+        val app = org.robolectric.RuntimeEnvironment.getApplication()
+        val controller = Robolectric.buildService(PhoneWorkoutService::class.java).create()
+        val service = controller.get()
+        shadowOf(android.os.Looper.getMainLooper()).idleFor(Duration.ofMinutes(1))
+        assertTrue(shadowOf(service).isForegroundStopped)
+        // Android can deliver a new foreground-start request to this instance before destruction.
+        PhoneWorkoutService.send(app, dev.kyungmin.kcoach.core.WearSync.PATH_COMMAND,
+            dev.kyungmin.kcoach.core.WearSync.command("STOP", "ended", "", 0, 0))
+        val intent = shadowOf(app).nextStartedService
+        service.onStartCommand(intent, 0, 2)
+        assertFalse("Every foreground-start request must re-promote even when onCreate is not called again",
+            shadowOf(service).isForegroundStopped)
+        assertNotNull(PhoneCommandOutbox(app).pending())
+        shadowOf(android.os.Looper.getMainLooper()).idleFor(Duration.ofMinutes(1))
+        assertTrue("The re-promoted idle retry must still stop after bounded delivery", shadowOf(service).isForegroundStopped)
+        controller.destroy()
+    }
+
     @Test fun idlePhoneServiceStopsItsForegroundLoop() {
         val controller = Robolectric.buildService(PhoneWorkoutService::class.java).create()
         val service = controller.get()

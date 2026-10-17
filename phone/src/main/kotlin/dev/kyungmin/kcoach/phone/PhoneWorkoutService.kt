@@ -32,12 +32,13 @@ class PhoneWorkoutService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        // Meet the foreground-start deadline before recovery can touch capture files or locks.
+        createNotificationChannel()
+        startForeground(NOTIFICATION_ID, buildNotification())
         CalibrationCaptureStore(this).recoverAfterProcessRestart().onSuccess { previous ->
             if (previous != null && sessionStore.loadActive().getOrNull() == null)
                 PhoneCommandOutbox(this).enqueue(WearSync.command("STOP", previous.id, "", 0, 0))
         }.onFailure { Log.w("KCoachEvent", "interrupted camera owner recovery retained", it) }
-        createNotificationChannel()
-        startForeground(NOTIFICATION_ID, buildNotification())
         wearBridge.sendHello()
         startHeartbeat()
         startRestTicker()
@@ -47,6 +48,12 @@ class PhoneWorkoutService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // A foreground request can reach this same instance after stopForeground/stopSelf
+        // but before onDestroy. onCreate alone cannot acknowledge that new request.
+        startForeground(NOTIFICATION_ID, buildNotification())
+        idleSinceMs = -1L
+        startHeartbeat()
+        startRestTicker()
         if (intent?.getStringExtra(EXTRA_ACTION) == ACTION_PING) {
             wearBridge.sendHeartbeat()
         }
