@@ -109,6 +109,11 @@ class WatchWorkoutPagesTest {
         assertTrue(pause.getGlobalVisibleRect(android.graphics.Rect())); assertTrue(skip.getGlobalVisibleRect(android.graphics.Rect()))
         assertTrue("Dragging up no longer skips the rest", descendants(root).filterIsInstance<TextView>().none { it.text == "다음 세트 시작" })
         pager.show(-1); measure(root); shot(root, "rest-edit")
+        // Dragging up during a rest opens the same heart-rate page as during a set.
+        pager.show(1); measure(root); shot(root, "rest-aux")
+        assertEquals(1, pager.page)
+        assertTrue(descendants(root).filterIsInstance<TextView>().any { it.text.toString() == "112" })
+        assertTrue("The heart page stays available during a rest", pager.bottomEnabled)
         activity.finish()
     }
 
