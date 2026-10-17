@@ -32,11 +32,15 @@ object WorkoutSessionReducer {
     }
 
     fun advanceAfterRest(snapshot: WorkoutSnapshot, nowMs: Long, skip: Boolean = false): WorkoutSnapshot? {
-        if (snapshot.paused || snapshot.phase != WorkoutPhase.RESTING || (!skip && nowMs < snapshot.restEndAtMs)) return null
+        // A rest that was paused can still be skipped; skipping also ends the pause.
+        val pausedRest = snapshot.paused && snapshot.pausedRestRemainingMs > 0
+        if (snapshot.paused && !(skip && pausedRest) || snapshot.phase != WorkoutPhase.RESTING && !pausedRest ||
+            (!skip && nowMs < snapshot.restEndAtMs)) return null
         val pending = nextPendingSet(snapshot)
         val finishedIndex = (snapshot.plannedSets.maxOfOrNull { it.exerciseIndex } ?: snapshot.exerciseIndex) + 1
         return snapshot.copy(exerciseIndex = pending?.exerciseIndex ?: finishedIndex, setIndex = pending?.setIndex ?: 0,
-            phase = WorkoutPhase.WORKING, restEndAtMs = 0, pausedRestRemainingMs = 0)
+            phase = WorkoutPhase.WORKING, restEndAtMs = 0, pausedRestRemainingMs = 0, paused = false, pausedSinceMs = 0,
+            totalPausedMs = snapshot.totalPausedMs + if (snapshot.paused) (nowMs - snapshot.pausedSinceMs).coerceAtLeast(0) else 0)
     }
 
     fun completeSet(

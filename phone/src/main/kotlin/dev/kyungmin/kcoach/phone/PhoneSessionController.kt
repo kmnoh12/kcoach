@@ -78,10 +78,10 @@ class PhoneSessionController(private val store: SessionStore, private val send: 
         fun command(snapshot: WorkoutSnapshot, type: String, restSeconds: Int? = null): String {
             val target = WorkoutSessionReducer.nextPendingSet(snapshot)
             if (target == null && type == "SET") return WearSync.command("COMPLETE", snapshot.sessionId, "", 0, 0)
-            return WearSync.richCommand(type, snapshot.sessionId, target?.exerciseId.orEmpty(),
+            return WearSync.withRestVersion(WearSync.richCommand(type, snapshot.sessionId, target?.exerciseId.orEmpty(),
                 target?.exerciseName?.ifBlank { target.exerciseId } ?: "운동 완료", target?.setIndex ?: 0,
                 target?.targetReps ?: 1, target?.weightKg, restSeconds ?: target?.restSeconds ?: 0,
-                snapshot.restEndAtMs, target?.setId.orEmpty(), target?.attemptId.orEmpty())
+                snapshot.restEndAtMs, target?.setId.orEmpty(), target?.attemptId.orEmpty()), snapshot.restRev, snapshot.watchRestSeq)
         }
     }
 }

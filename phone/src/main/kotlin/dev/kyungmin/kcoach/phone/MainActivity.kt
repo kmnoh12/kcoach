@@ -1382,21 +1382,17 @@ class MainActivity : ComponentActivity() {
         routineExercise: RoutineExercise,
         deltaSeconds: Int,
     ) {
-        routineExercise.restSeconds = (routineExercise.restSeconds + deltaSeconds).coerceAtLeast(0)
-        if (activeRestEndAtMs > 0L) {
-            val now = System.currentTimeMillis()
-            activeRestEndAtMs = (activeRestEndAtMs + deltaSeconds * 1_000L).coerceAtLeast(now)
-            workout.phase = WorkoutPhase.RESTING
-            if (!persistActiveWorkout(workout)) return
-            sendWear(
-                WearSync.PATH_COMMAND,
-                PhoneSessionController.command(workoutSnapshot(workout), "REST", routineExercise.restSeconds),
-            )
-            bumpWorkoutUi()
+        if (activeWorkout === workout) {
+            val index = workout.routine.exercises.indexOf(routineExercise)
+            val snapshot = sessionStore.adjustRestDuration(workout.sessionId, index, deltaSeconds, System.currentTimeMillis())
+                .getOrNull() ?: return
+            applySnapshotToWorkout(workout, snapshot)
+            resyncActiveWorkoutToWatch(workout)
         } else {
+            routineExercise.restSeconds = (routineExercise.restSeconds + deltaSeconds).coerceIn(0, 1800)
             persistActiveWorkout(workout)
-            bumpWorkoutUi()
         }
+        bumpWorkoutUi()
     }
 
     private fun resyncActiveWorkoutToWatch(workout: ActiveWorkout) {
@@ -2075,34 +2071,11 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun toggleWorkoutPause(workout: ActiveWorkout) {
-        val now = System.currentTimeMillis()
-        if (workout.paused) {
-            workout.totalPausedMs += now - workout.pausedSinceMs
-            workout.pausedSinceMs = 0L
-            workout.paused = false
-            if (pausedRestRemainingMs > 0L) {
-                activeRestEndAtMs = now + pausedRestRemainingMs
-                activeRestStartAtMs = now
-                pausedRestRemainingMs = 0L
-                workout.phase = WorkoutPhase.RESTING
-            } else {
-                workout.phase = WorkoutPhase.WORKING
-            }
-            if (!persistActiveWorkout(workout)) return
-            sendWear(WearSync.PATH_COMMAND, WearSync.command("RESUME", workout.sessionId, "", 0, 0))
-            syncWorkingSet(workout)
-        } else {
-            if (activeRestEndAtMs > 0L) {
-                pausedRestRemainingMs = (activeRestEndAtMs - now).coerceAtLeast(0L)
-                activeRestEndAtMs = 0L
-                activeRestStartAtMs = 0L
-            }
-            workout.pausedSinceMs = now
-            workout.paused = true
-            workout.phase = WorkoutPhase.PAUSED
-            if (!persistActiveWorkout(workout)) return
-            sendWear(WearSync.PATH_COMMAND, WearSync.command("PAUSE", workout.sessionId, "", 0, 0))
-        }
+        val snapshot = sessionStore.setPaused(workout.sessionId, !workout.paused, System.currentTimeMillis())
+            .getOrNull() ?: return
+        applySnapshotToWorkout(workout, snapshot)
+        if (!snapshot.paused && snapshot.phase == WorkoutPhase.WORKING) syncWorkingSet(workout)
+        else resyncActiveWorkoutToWatch(workout)
         showActiveWorkout(forceRebuild = true)
     }
 
@@ -3039,6 +3012,8 @@ class MainActivity : ComponentActivity() {
         lastSequence = workout.lastSequence,
         lastCompletedSetKey = workout.lastCompletedSetKey,
         captureStates = workout.captureStates.toMap(),
+        restRev = SessionStore(this).loadActive().getOrNull()?.takeIf { it.sessionId == workout.sessionId }?.restRev ?: 0,
+        watchRestSeq = SessionStore(this).loadActive().getOrNull()?.takeIf { it.sessionId == workout.sessionId }?.watchRestSeq ?: 0,
     )
 
     private fun persistActiveWorkout(workout: ActiveWorkout): Boolean {

@@ -27,7 +27,12 @@ class WatchWorkoutOutbox(context: Context) {
     fun enqueue(command: WatchWorkoutControl): Boolean = synchronized(lock) {
         val rows = read().toMutableList()
         rows.firstOrNull { it.command.commandId == command.commandId }?.let { return@synchronized it.command == command }
-        val edits = setOf(WatchWorkoutAction.REST_ADJUST, WatchWorkoutAction.EDIT_SET)
+        val restActions = setOf(WatchWorkoutAction.REST_ADJUST, WatchWorkoutAction.REST_PAUSE, WatchWorkoutAction.REST_RESUME)
+        val edits = restActions + WatchWorkoutAction.EDIT_SET
+        if (command.action in restActions) {
+            if (rows.any { it.command.sessionId == command.sessionId && it.command.action in restActions && it.command.seq >= command.seq }) return@synchronized false
+            rows.removeAll { it.ack == null && it.command.sessionId == command.sessionId && it.command.action in restActions }
+        }
         if (rows.any { it.ack == null && (command.action !in edits || it.command.action !in edits) }) return@synchronized false
         if (rows.size >= 256) {
             val finished = rows.indexOfFirst { it.ack != null }

@@ -1,6 +1,6 @@
 package dev.kyungmin.kcoach.core
 
-enum class WatchWorkoutAction { START_PREPARED, NEXT_SET, REST_ADJUST, EDIT_SET }
+enum class WatchWorkoutAction { START_PREPARED, NEXT_SET, REST_ADJUST, REST_PAUSE, REST_RESUME, EDIT_SET }
 enum class WatchWorkoutControlStatus { APPLIED, DUPLICATE, STALE, BUSY, NO_PLAN, REJECTED }
 
 data class WatchWorkoutOffer(val sessionId: String, val routineName: String, val exerciseName: String,
@@ -28,16 +28,20 @@ data class WatchWorkoutOffer(val sessionId: String, val routineName: String, val
 data class WatchWorkoutControl(val commandId: String, val action: WatchWorkoutAction, val sessionId: String,
     val setId: String, val attemptId: String, val planHash: String? = null, val side: String? = null, val placement: String? = null,
     val deltaSeconds: Int? = null, val restSeconds: Int? = null, val restEndAtMs: Long? = null,
-    val which: String? = null, val reps: Int = -1, val weightKg: Double? = null) {
+    val which: String? = null, val reps: Int = -1, val weightKg: Double? = null, val seq: Long = 0, val pausedRestRemainingMs: Long? = null) {
     init {
+        require(seq >= 0 && (pausedRestRemainingMs == null || pausedRestRemainingMs >= 0))
         require(listOf(commandId, sessionId).all { it.matches(CONTROL_ID) })
         require((setId.matches(CONTROL_ID) && attemptId.matches(CONTROL_ID)) ||
-            (action in setOf(WatchWorkoutAction.REST_ADJUST, WatchWorkoutAction.EDIT_SET) && setId.isEmpty() && attemptId.isEmpty()))
+            (action in setOf(WatchWorkoutAction.REST_ADJUST, WatchWorkoutAction.REST_PAUSE, WatchWorkoutAction.REST_RESUME, WatchWorkoutAction.EDIT_SET) && setId.isEmpty() && attemptId.isEmpty()))
         require(CapturePurpose.forSession(sessionId) == CapturePurpose.WORKOUT)
         require((action == WatchWorkoutAction.START_PREPARED) == (planHash != null))
-        require(if (action == WatchWorkoutAction.REST_ADJUST)
+        require(if (action in setOf(WatchWorkoutAction.REST_ADJUST, WatchWorkoutAction.REST_PAUSE, WatchWorkoutAction.REST_RESUME))
             deltaSeconds != null && restSeconds != null && restSeconds in 0..1800 && restEndAtMs != null && restEndAtMs >= 0
             else deltaSeconds == null && restSeconds == null && restEndAtMs == null)
+        require(action != WatchWorkoutAction.REST_PAUSE || pausedRestRemainingMs != null)
+        require(action != WatchWorkoutAction.REST_RESUME || pausedRestRemainingMs == null)
+        require(pausedRestRemainingMs == null || action in setOf(WatchWorkoutAction.REST_ADJUST, WatchWorkoutAction.REST_PAUSE))
         require(if (action == WatchWorkoutAction.EDIT_SET)
             which in setOf("PREVIOUS", "NEXT", "CURRENT") && reps in -1..9999 && (weightKg == null || weightKg.isFinite() && weightKg >= 0) &&
                 (reps >= 0 || weightKg != null) && (which != "CURRENT" || (reps == -1 && weightKg != null))
@@ -49,7 +53,9 @@ data class WatchWorkoutControl(val commandId: String, val action: WatchWorkoutAc
     fun encode(): String = WireCodec.encode(WireEnvelope(messageId = commandId, messageType = WireMessageType.HEARTBEAT,
         sessionId = sessionId, setId = setId, source = WireSource.WATCH, sentAtElapsedMs = 0, sentAtWallMs = 0,
         payload = mapOf("kind" to "WORKOUT_CONTROL_V1", "action" to action.name, "attemptId" to attemptId,
-            "planHash" to planHash.orEmpty(), "side" to side.orEmpty(), "placement" to placement.orEmpty()) + (if (action in setOf(WatchWorkoutAction.REST_ADJUST, WatchWorkoutAction.EDIT_SET)) mapOf(
+            "planHash" to planHash.orEmpty(), "side" to side.orEmpty(), "placement" to placement.orEmpty()) +
+            (if (seq > 0 || pausedRestRemainingMs != null) mapOf("seq" to seq.toString(),
+                "pausedRestRemainingMs" to (pausedRestRemainingMs?.toString() ?: "")) else emptyMap()) + (if (action in setOf(WatchWorkoutAction.REST_ADJUST, WatchWorkoutAction.REST_PAUSE, WatchWorkoutAction.REST_RESUME, WatchWorkoutAction.EDIT_SET)) mapOf(
             "deltaSeconds" to (deltaSeconds?.toString() ?: ""), "restSeconds" to (restSeconds?.toString() ?: ""),
             "restEndAtMs" to (restEndAtMs?.toString() ?: ""), "which" to which.orEmpty(), "reps" to reps.toString(),
             "weightKg" to (weightKg?.toString() ?: "")) else emptyMap())))
@@ -65,7 +71,8 @@ data class WatchWorkoutControl(val commandId: String, val action: WatchWorkoutAc
                 e.payload["restSeconds"]?.takeIf { it.isNotEmpty() }?.toInt(),
                 e.payload["restEndAtMs"]?.takeIf { it.isNotEmpty() }?.toLong(),
                 e.payload["which"]?.takeIf { it.isNotEmpty() }, e.payload["reps"]?.toInt() ?: -1,
-                e.payload["weightKg"]?.takeIf { it.isNotEmpty() }?.toDouble())
+                e.payload["weightKg"]?.takeIf { it.isNotEmpty() }?.toDouble(),
+                e.payload["seq"]?.toLong() ?: 0, e.payload["pausedRestRemainingMs"]?.takeIf { it.isNotEmpty() }?.toLong())
         }
     }
 }

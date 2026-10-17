@@ -119,6 +119,8 @@ class WearWorkoutService : Service(), SensorEventListener {
     private var profiledMotionDetector: ProfiledMotionRepDetector? = null
     private var weightKg: Double? = null
     private var restSeconds = 60
+    private var phoneRev = 0L
+    private var mySeq = 0L
     private var restEndAtMs = 0L
     private var reps = 0
     private var heartRate = 0
@@ -251,6 +253,18 @@ class WearWorkoutService : Service(), SensorEventListener {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val type = intent?.getStringExtra(EXTRA_COMMAND)
+        if (intent != null && type in setOf("REST", "SYNC") && (intent.hasExtra("restRev") || phoneRev > 0)) {
+            val sameSession = intent.getStringExtra("session") == sessionId
+            val rev = intent.getLongExtra("restRev", 0)
+            if (sameSession && rev <= phoneRev) {
+                markPhoneAlive(); acknowledgeCommand(intent, "DUPLICATE"); return restartMode()
+            }
+            if (sameSession && intent.getLongExtra("watchRestSeq", 0) < mySeq) {
+                phoneRev = rev
+                check(checkpoint())
+                markPhoneAlive(); acknowledgeCommand(intent, "APPLIED"); return restartMode()
+            }
+        }
         if (type in MUTATING_COMMANDS && intent != null) {
             val rejected = commandStatus(intent)
             if (rejected != null) {
@@ -289,6 +303,13 @@ class WearWorkoutService : Service(), SensorEventListener {
             }
         }
         val applied = runCatching {
+        if (type in MUTATING_COMMANDS && intent != null) {
+            if (intent.getStringExtra("session") != sessionId) { phoneRev = 0; mySeq = 0 }
+            if (intent.hasExtra("restRev")) {
+                phoneRev = maxOf(phoneRev, intent.getLongExtra("restRev", 0))
+                mySeq = maxOf(mySeq, intent.getLongExtra("watchRestSeq", 0))
+            }
+        }
         when (type) {
             "SET_RECORD" -> {
                 recordState.receive(intent?.getStringExtra("payload").orEmpty())?.let {
@@ -325,7 +346,7 @@ class WearWorkoutService : Service(), SensorEventListener {
                     }
                 }
             }
-            "COUNTING_PAUSE", "COUNTING_RESUME", "REST_ADJUST", "EDIT_SET" -> handleEditorCommand(intent!!)
+            "COUNTING_PAUSE", "COUNTING_RESUME", "REST_ADJUST", "REST_PAUSE", "REST_RESUME", "EDIT_SET" -> handleEditorCommand(intent!!)
             "SYNC" -> applySync(intent!!)
             "SET_ACK" -> acknowledgeCompletion(intent?.getStringExtra("payload").orEmpty())
             "MANUAL_SUBMIT" -> submitManualSet(intent?.getStringExtra("payload").orEmpty())
@@ -426,7 +447,9 @@ class WearWorkoutService : Service(), SensorEventListener {
 
     private fun commandStatus(intent: Intent): String? {
         val revision = intent.getLongExtra("commandRevision", 0)
-        if (revision > 0 && revision <= lastCommandRevision) {
+        val newerRest = intent.hasExtra("restRev") && intent.getStringExtra(EXTRA_COMMAND) in setOf("REST", "SYNC") &&
+            intent.getLongExtra("restRev", 0) > phoneRev
+        if (!newerRest && revision > 0 && revision <= lastCommandRevision) {
             return if (revision == lastCommandRevision && lastAppliedCommand.isNotBlank() && lastAppliedCommand == commandFingerprint(intent)) "DUPLICATE" else "STALE"
         }
         val incoming = intent.getStringExtra("session").orEmpty()
@@ -512,6 +535,8 @@ class WearWorkoutService : Service(), SensorEventListener {
         intent.getStringExtra("startWristContext")?.takeIf { it.isNotEmpty() }?.let { boundFields = boundFields + it }
         intent.getStringExtra("startDirectionSnapshot")?.takeIf { it.isNotEmpty() }?.let { boundFields = boundFields + it }
         intent.getStringExtra("tempoSettings")?.takeIf { it.isNotEmpty() }?.let { boundFields = boundFields + it }
+        if (intent.hasExtra("restRev")) boundFields = boundFields + intent.getLongExtra("restRev", 0).toString() +
+            intent.getLongExtra("watchRestSeq", 0).toString()
         return SensorCaptureFormat.sha256(JSONArray(boundFields).toString().toByteArray(Charsets.UTF_8))
     }
 
@@ -539,7 +564,9 @@ class WearWorkoutService : Service(), SensorEventListener {
                 if (remaining > 0) {
                     startRest(Intent(intent).putExtra("restEndAtMs", System.currentTimeMillis() + remaining))
                     pauseSession()
+                    restEndAtMs = intent.getLongExtra("restEndAtMs", 0)
                     pausedRestRemainingMs = remaining
+                    broadcastState(force = true)
                 } else {
                     if (!same || (!running && !paused)) startSession(intent)
                     pauseSession()
@@ -591,6 +618,23 @@ class WearWorkoutService : Service(), SensorEventListener {
                     check(checkpoint())
                 }
             }
+            "REST_PAUSE", "REST_RESUME" -> {
+                val pause = intent.getStringExtra(EXTRA_COMMAND) == "REST_PAUSE"
+                if (pause && !resting || !pause && (!paused || pausedRestRemainingMs <= 0)) return
+                val now = System.currentTimeMillis()
+                val remaining = if (pause) (restEndAtMs - now).coerceAtLeast(0) else pausedRestRemainingMs
+                val nextSeq = mySeq + 1
+                val request = dev.kyungmin.kcoach.core.WatchWorkoutControl(java.util.UUID.randomUUID().toString(),
+                    if (pause) dev.kyungmin.kcoach.core.WatchWorkoutAction.REST_PAUSE else dev.kyungmin.kcoach.core.WatchWorkoutAction.REST_RESUME,
+                    sessionId, setId, attemptId, deltaSeconds = 0, restSeconds = restSeconds,
+                    restEndAtMs = if (pause) 0 else now + remaining, seq = nextSeq,
+                    pausedRestRemainingMs = if (pause) remaining else null)
+                check(workoutControls.enqueue(request))
+                mySeq = nextSeq
+                if (pause) { pauseSession(); pausedRestRemainingMs = remaining; restEndAtMs = 0 }
+                else resumeSession(request.restEndAtMs)
+                check(checkpoint()); replayWorkoutControls()
+            }
             "REST_ADJUST", "EDIT_SET" -> {
                 val adjusting = intent.getStringExtra(EXTRA_COMMAND) == "REST_ADJUST"
                 val editingCurrent = !adjusting && intent.getStringExtra("which") == "CURRENT"
@@ -598,18 +642,21 @@ class WearWorkoutService : Service(), SensorEventListener {
                     val weight = intent.getDoubleExtra("weightKg", Double.NaN)
                     if (!running || resting || paused || calibrationStage != null ||
                         intent.getIntExtra("reps", -1) != -1 || !weight.isFinite() || weight < 0) return
-                } else if (!resting) return
+                } else if (!resting && !(adjusting && paused && pausedRestRemainingMs > 0)) return
                 if (!adjusting && intent.getIntExtra("reps", -1) == -1 && intent.getDoubleExtra("weightKg", Double.NaN).isNaN()) return
                 val delta = intent.getIntExtra("deltaSeconds", 0)
                 val now = System.currentTimeMillis()
                 val seconds = (restSeconds.toLong() + delta).coerceIn(0L, 1800L).toInt()
-                val end = (restEndAtMs + delta.toLong() * 1000L).coerceIn(now, now + 1_800_000L)
+                val remaining = (pausedRestRemainingMs + delta.toLong() * 1000L).coerceIn(0, 1_800_000L)
+                val end = if (paused) 0 else (restEndAtMs + delta.toLong() * 1000L).coerceIn(now, now + 1_800_000L)
                 val request = dev.kyungmin.kcoach.core.WatchWorkoutControl(
                     java.util.UUID.randomUUID().toString(),
                     if (adjusting) dev.kyungmin.kcoach.core.WatchWorkoutAction.REST_ADJUST else dev.kyungmin.kcoach.core.WatchWorkoutAction.EDIT_SET,
                     sessionId, setId, attemptId,
                     deltaSeconds = if (adjusting) delta else null, restSeconds = if (adjusting) seconds else null,
                     restEndAtMs = if (adjusting) end else null,
+                    seq = if (adjusting) mySeq + 1 else 0,
+                    pausedRestRemainingMs = if (adjusting && paused) remaining else null,
                     which = if (adjusting) null else intent.getStringExtra("which"),
                     reps = if (adjusting) -1 else intent.getIntExtra("reps", -1),
                     weightKg = if (adjusting) null else intent.getDoubleExtra("weightKg", Double.NaN).takeUnless { it.isNaN() })
@@ -618,7 +665,7 @@ class WearWorkoutService : Service(), SensorEventListener {
                     editStatus = "BUSY"; broadcastState(force = true); return
                 }
                 editStatus = ""
-                if (adjusting) { restSeconds = seconds; restEndAtMs = end }
+                if (adjusting) { mySeq = request.seq; restSeconds = seconds; restEndAtMs = end; if (paused) pausedRestRemainingMs = remaining }
                 if (editingCurrent) weightKg = request.weightKg
                 check(checkpoint())
                 replayWorkoutControls()
@@ -681,6 +728,7 @@ class WearWorkoutService : Service(), SensorEventListener {
     private fun persistRuntime(): Boolean = runCatching {
         val state = JSONObject().put("session", sessionId).put("exerciseId", exerciseId).put("exerciseName", exerciseName)
             .put("setIndex", setIndex).put("setId", setId).put("attemptId", attemptId).put("targetReps", targetReps).put("weightKg", weightKg ?: JSONObject.NULL)
+            .put("phoneRev", phoneRev).put("mySeq", mySeq)
             .put("restSeconds", restSeconds).put("restEndAtMs", restEndAtMs).put("pausedRestRemainingMs", pausedRestRemainingMs)
             .put("countingPaused", countingPaused).put("countingResetAfterNs", countingResetAfterNs).put("editStatus", editStatus)
             .put("running", running).put("resting", resting).put("paused", paused).put("reps", reps).put("heartRate", heartRate)
@@ -717,6 +765,7 @@ class WearWorkoutService : Service(), SensorEventListener {
             sessionId = state.getString("session"); exerciseId = state.getString("exerciseId"); exerciseName = state.getString("exerciseName")
             setIndex = state.getInt("setIndex"); setId = state.optString("setId"); attemptId = state.optString("attemptId"); targetReps = state.getInt("targetReps")
             weightKg = if (state.isNull("weightKg")) null else state.getDouble("weightKg")
+            phoneRev = state.optLong("phoneRev", 0); mySeq = state.optLong("mySeq", 0)
             restSeconds = state.getInt("restSeconds"); restEndAtMs = state.getLong("restEndAtMs")
             pausedRestRemainingMs = state.getLong("pausedRestRemainingMs")
             running = state.getBoolean("running"); resting = state.getBoolean("resting"); paused = state.getBoolean("paused")
@@ -1302,12 +1351,12 @@ class WearWorkoutService : Service(), SensorEventListener {
         broadcastState(force = true)
     }
 
-    private fun resumeSession() {
+    private fun resumeSession(restDeadline: Long? = null) {
         markPhoneAlive()
         if (!paused) return
         paused = false
         if (pausedRestRemainingMs > 0L) {
-            restEndAtMs = System.currentTimeMillis() + pausedRestRemainingMs
+            restEndAtMs = restDeadline ?: (System.currentTimeMillis() + pausedRestRemainingMs)
             pausedRestRemainingMs = 0L
             val synthetic = Intent(this, WearWorkoutService::class.java).putExtra(EXTRA_COMMAND, "REST")
                 .putExtra("session", sessionId).putExtra("exerciseId", exerciseId).putExtra("exerciseName", exerciseName)
@@ -2104,13 +2153,15 @@ class WearWorkoutService : Service(), SensorEventListener {
             putExtra("manualRequired", trackingProfile.mode == TrackingMode.MANUAL_REQUIRED)
             putExtra("manualStatus", editStatus.ifEmpty { workoutControls.latest()?.takeIf {
                 it.command.sessionId == sessionId && it.command.setId == setId && it.command.attemptId == attemptId &&
-                    it.command.action in setOf(dev.kyungmin.kcoach.core.WatchWorkoutAction.REST_ADJUST, dev.kyungmin.kcoach.core.WatchWorkoutAction.EDIT_SET)
+                    it.command.action in setOf(dev.kyungmin.kcoach.core.WatchWorkoutAction.REST_ADJUST, dev.kyungmin.kcoach.core.WatchWorkoutAction.REST_PAUSE, dev.kyungmin.kcoach.core.WatchWorkoutAction.REST_RESUME, dev.kyungmin.kcoach.core.WatchWorkoutAction.EDIT_SET)
             }?.let { it.ack?.status?.name ?: "PENDING" } ?: run {
                 manualOutbox.latest(sessionId, setId, attemptId)?.let { it.ack?.status?.name ?: "PENDING" }.orEmpty()
             } })
             putExtra("targetReps", targetReps)
             putExtra("weightKg", weightKg ?: Double.NaN)
             putExtra("restSeconds", restSeconds)
+            putExtra("restRev", phoneRev)
+            putExtra("watchRestSeq", mySeq)
             putExtra("restEndAtMs", restEndAtMs)
             // A rest paused from the phone keeps the rest screen, frozen at the time that was left.
             putExtra("restPaused", paused && pausedRestRemainingMs > 0L)

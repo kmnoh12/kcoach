@@ -143,6 +143,14 @@ object WearSync {
         return fields.joinToString("|")
     }
 
+    /** Append-only rest ordering fields; indices 0..21 keep their existing meaning. */
+    fun withRestVersion(payload: String, restRev: Long, watchRestSeq: Long): String {
+        val fields = parse(payload).toMutableList()
+        while (fields.size < 24) fields.add(when (fields.size) { 10, 12 -> "0"; else -> "" })
+        fields[22] = restRev.toString(); fields[23] = watchRestSeq.toString()
+        return fields.joinToString("|")
+    }
+
     fun hello(device: String): String = listOf("1", device, System.currentTimeMillis()).joinToString("|")
 
     fun heartbeat(device: String): String = listOf("1", device, System.currentTimeMillis()).joinToString("|")

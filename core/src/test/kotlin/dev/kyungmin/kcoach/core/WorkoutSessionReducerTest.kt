@@ -82,4 +82,19 @@ class WorkoutSessionReducerTest {
         assertEquals("invalid_set_index", wrongSet.reason)
         assertEquals(snapshot(), wrongSet.snapshot)
     }
+
+    @Test
+    fun `a paused rest can be skipped but never ends by itself`() {
+        val pausedRest = snapshot().copy(phase = WorkoutPhase.PAUSED, paused = true, pausedRestRemainingMs = 40_000L,
+            pausedSinceMs = 10_000L, totalPausedMs = 5_000L)
+        assertEquals(null, WorkoutSessionReducer.advanceAfterRest(pausedRest, 99_000L))
+        val skipped = WorkoutSessionReducer.advanceAfterRest(pausedRest, 25_000L, skip = true)!!
+        assertEquals(WorkoutPhase.WORKING, skipped.phase)
+        assertEquals(false, skipped.paused)
+        assertEquals(0L, skipped.pausedRestRemainingMs)
+        assertEquals(0L, skipped.pausedSinceMs)
+        assertEquals(5_000L + 15_000L, skipped.totalPausedMs)
+        // A workout paused during a set (no rest left) is not a rest and cannot be skipped.
+        assertEquals(null, WorkoutSessionReducer.advanceAfterRest(pausedRest.copy(pausedRestRemainingMs = 0L), 25_000L, skip = true))
+    }
 }

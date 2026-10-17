@@ -82,7 +82,7 @@ class WatchWorkoutControlTest {
         store.applyManualSet(ManualSetCommand("count", offer.sessionId, "leg_press", 0, "set-0", "attempt-0", 8,
             0, ManualSetOperation.COMPLETE), 300).getOrThrow()
         val adjust = WatchWorkoutControl("adjust", WatchWorkoutAction.REST_ADJUST, offer.sessionId, "set-1", "attempt-1",
-            deltaSeconds = 10, restSeconds = 70, restEndAtMs = 70_300)
+            deltaSeconds = 10, restSeconds = 70, restEndAtMs = 70_300, seq = 1)
         assertEquals(WatchWorkoutControlStatus.APPLIED, controller.receive(adjust.encode(), 400).getOrThrow().ack.status)
         assertEquals(70_300L, SessionStore(app).loadActive().getOrThrow()!!.restEndAtMs)
         assertEquals(70, store.loadActive().getOrThrow()!!.plannedSets[0].restSeconds)
@@ -105,6 +105,62 @@ class WatchWorkoutControlTest {
         assertEquals(WatchWorkoutControlStatus.STALE, controller.receive(next.copy(commandId = "wrong-session", sessionId = "other").encode(), 800).getOrThrow().ack.status)
         assertEquals(WatchWorkoutControlStatus.STALE, controller.receive(next.copy(commandId = "wrong-attempt", attemptId = "old").encode(), 800).getOrThrow().ack.status)
         assertEquals(saved, store.loadActive().getOrThrow())
+    }
+
+    private fun restingStore(): SessionStore {
+        val store = SessionStore(RuntimeEnvironment.getApplication())
+        assertTrue(store.saveActive(snapshot().copy(startedAtMs = 100)))
+        store.applyManualSet(ManualSetCommand("rest-count", "watch-session", "leg_press", 0,
+            "set-0", "attempt-0", 8, 0, ManualSetOperation.COMPLETE), 300).getOrThrow()
+        return store
+    }
+
+    @Test fun newestAbsoluteRestWinsAndOldOrRepeatedSequencesDoNotChangeState() {
+        val store = restingStore()
+        val initial = store.loadActive().getOrThrow()!!
+        assertEquals(1L, initial.restRev)
+        val latest = WatchWorkoutControl("latest", WatchWorkoutAction.REST_ADJUST, "watch-session", "set-1", "attempt-1",
+            deltaSeconds = 10, restSeconds = 90, restEndAtMs = 90_300, seq = 3)
+        val applied = store.applyWatchControl(latest, 400).getOrThrow()
+        assertEquals(WatchWorkoutControlStatus.APPLIED, applied.ack.status)
+        val saved = store.loadActive().getOrThrow()!!
+        assertEquals(saved, applied.snapshot)
+        assertEquals(90_300L, saved.restEndAtMs); assertEquals(3L, saved.watchRestSeq)
+        assertEquals(initial.restRev + 1, saved.restRev)
+        for (seq in listOf(1L, 2L, 3L)) {
+            assertEquals(WatchWorkoutControlStatus.STALE, store.applyWatchControl(latest.copy(commandId = "old-$seq",
+                seq = seq, restEndAtMs = 10_000), 500).getOrThrow().ack.status)
+            assertEquals(saved, store.loadActive().getOrThrow())
+        }
+        assertEquals(WatchWorkoutControlStatus.DUPLICATE, store.applyWatchControl(latest, 600).getOrThrow().ack.status)
+        assertEquals(saved, store.loadActive().getOrThrow())
+    }
+
+    @Test fun restPauseResumeAndPhoneEditsShareOneDurableRevisionAndDeadline() {
+        val store = restingStore()
+        val pause = WatchWorkoutControl("pause", WatchWorkoutAction.REST_PAUSE, "watch-session", "set-1", "attempt-1",
+            deltaSeconds = 0, restSeconds = 60, restEndAtMs = 0, seq = 1, pausedRestRemainingMs = 51_234)
+        val frozen = store.applyWatchControl(pause, 500).getOrThrow().snapshot!!
+        assertTrue(frozen.paused); assertEquals(WorkoutPhase.PAUSED, frozen.phase)
+        assertEquals(0L, frozen.restEndAtMs); assertEquals(51_234L, frozen.pausedRestRemainingMs)
+        val resume = pause.copy(commandId = "resume", action = WatchWorkoutAction.REST_RESUME,
+            restEndAtMs = 52_234, seq = 3, pausedRestRemainingMs = null)
+        val resumed = store.applyWatchControl(resume, 1_000).getOrThrow().snapshot!!
+        assertFalse(resumed.paused); assertEquals(WorkoutPhase.RESTING, resumed.phase)
+        assertEquals(52_234L, resumed.restEndAtMs); assertEquals(frozen.restRev + 1, resumed.restRev)
+        assertEquals(WatchWorkoutControlStatus.STALE, store.applyWatchControl(pause.copy(commandId = "late-pause", seq = 2), 1_100).getOrThrow().ack.status)
+        val edited = SessionStore(RuntimeEnvironment.getApplication()).adjustRestDuration("watch-session", 0, 10, 1_200).getOrThrow()!!
+        assertEquals(62_234L, edited.restEndAtMs); assertEquals(resumed.restRev + 1, edited.restRev)
+        val phonePaused = store.setPaused("watch-session", true, 2_000).getOrThrow()!!
+        assertEquals(60_234L, phonePaused.pausedRestRemainingMs)
+        val phoneResumed = store.setPaused("watch-session", false, 3_000).getOrThrow()!!
+        assertEquals(63_234L, phoneResumed.restEndAtMs)
+        assertEquals(edited.restRev + 2, phoneResumed.restRev)
+        assertEquals(3L, phoneResumed.watchRestSeq)
+        val next = store.advanceAfterRest(3_100, skip = true).getOrThrow()!!
+        assertEquals(phoneResumed.restRev + 1, next.restRev); assertEquals(0L, next.restEndAtMs)
+        assertTrue(store.saveActive(next))
+        assertEquals(next.restRev, store.loadActive().getOrThrow()!!.restRev)
     }
 
     @Test fun currentWeightPersistsAndResyncsWithoutChangingRepsAndRejectsStaleOrRestingEdits() {

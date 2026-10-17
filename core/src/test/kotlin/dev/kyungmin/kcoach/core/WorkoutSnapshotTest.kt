@@ -29,11 +29,21 @@ class WorkoutSnapshotTest {
         lastCompletedSetKey = "phone-1:external_rotation:0",
         captureStates = mapOf("capture-1" to CaptureState.ANALYZING),
         routineName = "내 운동",
+        restRev = 42, watchRestSeq = 17,
     )
 
     @Test
     fun `snapshot round trips every recovery field`() {
         assertEquals(snapshot, WorkoutSnapshotCodec.decode(WorkoutSnapshotCodec.encode(snapshot)))
+    }
+
+    @Test
+    fun `version six snapshots restore missing rest versions as zero`() {
+        val current = Base64.getUrlDecoder().decode(WorkoutSnapshotCodec.encode(snapshot))
+        val legacy = current.copyOf(current.size - 16)
+        java.nio.ByteBuffer.wrap(legacy).putInt(4, 6)
+        val decoded = WorkoutSnapshotCodec.decode(Base64.getUrlEncoder().withoutPadding().encodeToString(legacy))
+        assertEquals(snapshot.copy(restRev = 0, watchRestSeq = 0), decoded)
     }
 
     @Test
@@ -51,6 +61,7 @@ class WorkoutSnapshotTest {
         val decoded = WorkoutSnapshotCodec.decode(legacySnapshot(1))
         assertEquals(WorkoutSnapshot.CURRENT_SCHEMA_VERSION, decoded.schemaVersion)
         assertEquals(listOf("NORMAL", "NORMAL"), decoded.plannedSets.map { it.setType })
+        assertEquals(0L, decoded.restRev); assertEquals(0L, decoded.watchRestSeq)
     }
 
     @Test

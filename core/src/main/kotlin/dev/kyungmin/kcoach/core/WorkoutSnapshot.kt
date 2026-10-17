@@ -69,9 +69,12 @@ data class WorkoutSnapshot(
     val lastCompletedSetKey: String?,
     val captureStates: Map<String, CaptureState>,
     val routineName: String = "",
+    val restRev: Long = 0,
+    val watchRestSeq: Long = 0,
 ) {
     init {
         require(schemaVersion == CURRENT_SCHEMA_VERSION) { "Unsupported workout snapshot schema" }
+        require(restRev >= 0 && watchRestSeq >= 0)
         require(sessionId.isNotBlank()) { "Missing workout session id" }
         require(routineId.isNotBlank()) { "Missing routine id" }
         require(exerciseIndex >= 0 && setIndex >= 0) { "Negative workout index" }
@@ -103,7 +106,7 @@ data class WorkoutSnapshot(
     }
 
     companion object {
-        const val CURRENT_SCHEMA_VERSION = 6
+        const val CURRENT_SCHEMA_VERSION = 7
         internal const val MAX_COLLECTION_SIZE = 10_000
     }
 }
@@ -165,6 +168,8 @@ object WorkoutSnapshotCodec {
                 data.writeInt(state.ordinal)
             }
             data.writeString(snapshot.routineName)
+            data.writeLong(snapshot.restRev)
+            data.writeLong(snapshot.watchRestSeq)
         }
         return Base64.getUrlEncoder().withoutPadding().encodeToString(output.toByteArray())
     }
@@ -234,6 +239,8 @@ object WorkoutSnapshotCodec {
                 }
             }
             val routineName = if (schemaVersion >= 5) data.readString() else ""
+            val restRev = if (schemaVersion >= 7) data.readLong() else 0L
+            val watchRestSeq = if (schemaVersion >= 7) data.readLong() else 0L
             require(data.read() == -1) { "Trailing workout snapshot data" }
             WorkoutSnapshot(
                 schemaVersion = WorkoutSnapshot.CURRENT_SCHEMA_VERSION,
@@ -254,6 +261,7 @@ object WorkoutSnapshotCodec {
                 lastCompletedSetKey = lastCompletedSetKey,
                 captureStates = captureStates,
                 routineName = routineName,
+                restRev = restRev, watchRestSeq = watchRestSeq,
             )
         }
     }

@@ -63,7 +63,7 @@ class ManualWatchFlowTest {
             service.onStartCommand(request("REST_ADJUST").putExtra("deltaSeconds", Int.MIN_VALUE), 0, 5)
             assertEquals(0, state().getIntExtra("restSeconds", -1))
             assertTrue(state().getLongExtra("restEndAtMs", 0) in beforeLower..System.currentTimeMillis())
-            assertEquals(3, WatchWorkoutOutbox(RuntimeEnvironment.getApplication()).pending().size)
+            assertEquals(1, WatchWorkoutOutbox(RuntimeEnvironment.getApplication()).pending().size)
             assertEquals("PENDING", state().getStringExtra("manualStatus"))
         } finally { controller.destroy() }
     }
