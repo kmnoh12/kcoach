@@ -84,14 +84,14 @@ class MainActivity : Activity() {
     private lateinit var pager: WatchPager
     private lateinit var editPage: EditPageView
     private lateinit var auxPage: AuxPageView
-    private lateinit var pullGlow: PullGlowView
     /** 0 = the set just finished, 1 = the next set; a rest opens on the next set, the one still to be done. */
     private var restEditSegment = 1
     private var lastWorkingReps = 0
     private var lastWorkingWeight: Double? = null
     private var wasResting = false
-    private var restFlashText = ""
-    private var restFlashUntilMs = 0L
+    /** 0 while the rest runs, 1 when it is paused; animated over 340 ms when the pause state changes (design 4-1). */
+    private var restMorphTarget = 0f
+    private var restMorphAnimator: android.animation.ValueAnimator? = null
     private var countingPausedForEdit = false
     private var rotaryRemainder = 0f
     private val homeStore by lazy { WatchHomeStore(this) }
@@ -275,7 +275,8 @@ class MainActivity : Activity() {
     private fun buildUi(): View {
         face = WatchWorkoutFace(this)
         face.action.setOnClickListener { openFinishedWorkout() }
-        face.restGo.setOnClickListener { requestWorkoutControl() }
+        face.restSkip.onClick = { requestWorkoutControl() }
+        face.restPause.onClick = { toggleRestPause() }
         face.jog.onStep = { delta -> adjustRest(delta) }
         face.hint.setOnClickListener { if (runtimePhase == "START_DIRECTION_WAITING") bypassStartDirection() else if (face.noticeAction != null) face.noticeAction?.invoke() }
         editPage = EditPageView(this).apply {
@@ -288,14 +289,9 @@ class MainActivity : Activity() {
         val frame = FrameLayout(this).apply { setBackgroundColor(Color.BLACK); addView(face, FrameLayout.LayoutParams(-1, -1)) }
         restRing = RestProgressRing().apply { visibility = View.GONE; isClickable = false }
         frame.addView(restRing, FrameLayout.LayoutParams(-1, -1))
-        pullGlow = PullGlowView(this).apply { visibility = View.GONE; isClickable = false }
-        frame.addView(pullGlow, FrameLayout.LayoutParams(-1, -1))
         shadowText = label("", 11f, WatchWorkoutFace.MUTED).apply { gravity = Gravity.CENTER; visibility = View.GONE }
         frame.addView(shadowText, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM).apply { bottomMargin = dp(30) })
         pager = WatchPager(this, frame, editPage, auxPage).apply {
-            pullTarget = face
-            onPullArmed = { armed -> pullGlow.armed = armed; face.restGo.alpha = if (armed) 0f else 1f }
-            onPullCommit = { requestWorkoutControl() }
             onPage = { page -> onPageChanged(page) }
         }
         // Full screens that take over the pages: calibration, the workout result, and on top of everything the
@@ -498,13 +494,8 @@ class MainActivity : Activity() {
     private fun adjustRest(delta: Int) {
         if (!resting || paused) return
         val now = System.currentTimeMillis()
-        val newEnd = (restEndAtMs + delta * 1_000L).coerceAtLeast(now)
-        val applied = ((newEnd - restEndAtMs) / 1_000L).toInt()
+        val applied = delta
         if (applied == 0) return
-        restEndAtMs = newEnd
-        restSeconds = (restSeconds + applied).coerceIn(1, 1_800)
-        restFlashText = if (applied > 0) "+${applied}초" else "${applied}초".replace("-", "−")
-        restFlashUntilMs = now + 900
         sendWorkoutCommand("REST_ADJUST") { putExtra("deltaSeconds", applied) }
         updateUi()
     }
@@ -586,28 +577,6 @@ class MainActivity : Activity() {
             }.show()
     }
 
-    /** A red glow rises from the bottom once the pull passes the threshold; the label turns red and grows. */
-    private inner class PullGlowView(context: android.content.Context) : View(context) {
-        private val glow = Paint(Paint.ANTI_ALIAS_FLAG)
-        private val label = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(255, 106, 92); textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD }
-        var armed = false
-            set(value) {
-                if (field == value) return
-                field = value
-                if (value) { alpha = 0f; visibility = View.VISIBLE; animate().alpha(1f).setDuration(120).start() }
-                else animate().alpha(0f).setDuration(120).withEndAction { if (!armed) visibility = View.GONE }.start()
-            }
-        override fun onDraw(canvas: Canvas) {
-            val side = minOf(width, height).toFloat(); val k = side / 432f
-            val top = height - 190 * k
-            glow.shader = android.graphics.LinearGradient(0f, height.toFloat(), 0f, top,
-                intArrayOf(Color.argb(158, 229, 72, 59), Color.argb(56, 229, 72, 59), Color.argb(0, 229, 72, 59)), floatArrayOf(0f, .58f, 1f), android.graphics.Shader.TileMode.CLAMP)
-            canvas.drawRect(0f, top, width.toFloat(), height.toFloat(), glow)
-            label.textSize = 15f * resources.displayMetrics.scaledDensity
-            canvas.drawText("다음 세트 시작", width / 2f, height - 62 * k, label)
-        }
-    }
-
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
     /** When the rest ends; a paused rest never gets closer, so its end keeps the same distance from now. */
@@ -670,8 +639,10 @@ class MainActivity : Activity() {
         face.hint.text = ""; face.hint.setTextColor(WatchWorkoutFace.MUTED); face.noticeAction = null
         face.size(face.value, if (active) 88f else 24f)
         face.value.setTextColor(WatchWorkoutFace.SAGE)
-        listOf(face.restCard, face.restNextLabel, face.restNextValue).forEach { it.visibility = View.GONE }; face.restGo.visibility = View.GONE; face.jog.visibility = View.GONE
-        val controlsReady = resting && !paused && workoutControls.supportsControls() && setId.isNotBlank() && attemptId.isNotBlank()
+        listOf(face.jog, face.restPause, face.restSkip).forEach { it.visibility = View.GONE }
+        // The rest buttons need the phone to apply them, also while the rest is paused.
+        val restControls = resting && workoutControls.supportsControls() && setId.isNotBlank() && attemptId.isNotBlank()
+        if (!resting) { restMorphTarget = 0f; restMorphAnimator?.cancel(); restRing.fade = 0f }
         if (active) {
             face.title.text = exerciseName
             face.setSubtitle(
@@ -692,18 +663,16 @@ class MainActivity : Activity() {
             if (resting) {
                 val left = RestCountdownCalculator.calculate(now, restEnd(now), restSeconds).remainingSeconds
                 face.value.text = String.format("%d:%02d", left / 60, left % 60)
-                face.size(face.value, 63f); face.value.setTextColor(WatchWorkoutFace.YELLOW)
+                face.size(face.value, 54f)
                 face.target.visibility = View.GONE
-                if (now < restFlashUntilMs) face.setSubtitle(restFlashText, WatchWorkoutFace.YELLOW, sizeSp = 15f, bold = true)
-                else if (restPaused) face.setSubtitle("휴식 · 일시정지", WatchWorkoutFace.MUTED, medium = true)
-                else face.setSubtitle("휴식 · 목표 ${restSeconds / 60}:${"%02d".format(restSeconds % 60)}", WatchWorkoutFace.YELLOW, medium = true)
-                face.bindRestCard("다음 ${setIndex + 1}세트", "${targetReps}회" + (weightKg?.let { " × ${Moment.kg(it)}kg" } ?: ""))
-                listOf(face.restCard, face.restNextLabel, face.restNextValue).forEach { it.visibility = View.VISIBLE }
-                face.jog.visibility = View.VISIBLE
-                face.restGo.text = "다음 세트 시작"
-                face.restGo.visibility = if (controlsReady) View.VISIBLE else View.GONE
+                // Design 4a / 4-1: the line above the time exists only while the rest is paused (it fades in with the morph).
+                face.setSubtitle("휴식 · 일시정지", WatchWorkoutFace.SOFT, medium = true)
+                listOf(face.jog, face.restPause, face.restSkip).forEach { it.visibility = View.VISIBLE }
+                listOf(face.restPause, face.restSkip).forEach { it.isEnabled = restControls; it.alpha = if (restControls) 1f else .4f }
+                morphRest(restPaused)
+                face.applyRestMorph()
             }
-            if (paused) face.hint.text = "폰에서 계속할 수 있어요"
+            if (paused && !restPaused) face.hint.text = "폰에서 계속할 수 있어요"
             face.layoutCount(); face.layoutMetrics()
         } else if (complete) {
             face.title.text = "운동 완료"; face.setSubtitle("수고했어요", WatchWorkoutFace.MUTED)
@@ -749,13 +718,13 @@ class MainActivity : Activity() {
         shadowText.visibility = if (running && shadowCommandId.isNotBlank()) View.VISIBLE else View.GONE
         shadowText.text = "보정 비교 · ${shadowCount}회"; recordShadowFrameCommit()
 
-        // Pages: the editor above, the heart-rate page below while measuring, and the pull-to-start gesture while resting.
+        // Pages: the editor above and the heart-rate page below, while measuring and during a rest that is not paused.
         val editable = active && !paused && !sessionId.startsWith("calibration-") && setId.isNotBlank() && attemptId.isNotBlank() && runtimePhase != "CAPTURE_RECOVERY_REQUIRED"
         pager.topEnabled = editable
-        pager.bottomEnabled = measuring && !paused && !sessionId.startsWith("calibration-")
-        pager.pullEnabled = controlsReady
+        pager.bottomEnabled = active && !paused && !sessionId.startsWith("calibration-")
         face.chevronUp.visibility = if (pager.topEnabled) View.VISIBLE else View.GONE
-        face.chevronDown.visibility = if (pager.bottomEnabled || pager.pullEnabled) View.VISIBLE else View.GONE
+        // During a rest the arrow stays in the layout and the pause morph fades it out, so it can fade rather than vanish.
+        face.chevronDown.visibility = if (pager.bottomEnabled || resting) View.VISIBLE else View.GONE
         if (pager.page == -1 && !pager.topEnabled || pager.page == 1 && !pager.bottomEnabled) pager.show(0)
         if (active) {
             val pending = manualStatus in setOf("PENDING", "STALE", "NO_SESSION", "REJECTED")
@@ -889,11 +858,31 @@ class MainActivity : Activity() {
     }
 
     private fun requestWorkoutControl() {
-        if (!resting || paused || workoutControls.pending().isNotEmpty() || !workoutControls.supportsControls() || setId.isBlank() || attemptId.isBlank()) return
+        if (!resting || workoutControls.pending().isNotEmpty() || !workoutControls.supportsControls() || setId.isBlank() || attemptId.isBlank()) return
         val request = dev.kyungmin.kcoach.core.WatchWorkoutControl(java.util.UUID.randomUUID().toString(),
             dev.kyungmin.kcoach.core.WatchWorkoutAction.NEXT_SET, sessionId, setId, attemptId)
         startService(Intent(this, WearWorkoutService::class.java).putExtra(WearWorkoutService.EXTRA_COMMAND, "WORKOUT_CONTROL_SUBMIT")
             .putExtra("payload", request.encode()))
+    }
+
+    /** "정지" / "계속" on the rest screen: asks the phone to pause or resume the rest, and the screen follows the state it reports. */
+    private fun toggleRestPause() {
+        if (!resting || !workoutControls.supportsControls()) return
+        sendWorkoutCommand(if (restPaused) "REST_RESUME" else "REST_PAUSE")
+    }
+
+    /** Morphs the rest screen to or from the paused state in 340 ms (design 4-1); the ring fades with it. */
+    private fun morphRest(toPaused: Boolean) {
+        val target = if (toPaused) 1f else 0f
+        if (restMorphTarget == target) return
+        restMorphTarget = target
+        restMorphAnimator?.cancel()
+        if (Moment.reducedMotion(this) || !face.isAttachedToWindow) { face.restMorph = target; restRing.fade = target; return }
+        restMorphAnimator = android.animation.ValueAnimator.ofFloat(face.restMorph, target).apply {
+            duration = 340; interpolator = android.view.animation.PathInterpolator(.22f, .8f, .3f, 1f)
+            addUpdateListener { val v = it.animatedValue as Float; face.restMorph = v; restRing.fade = v }
+            start()
+        }
     }
 
     private fun showManualCount(editOnly: Boolean = false) {
@@ -977,6 +966,9 @@ class MainActivity : Activity() {
         private var startAtMs = 0L
         private var endAtMs = 0L
         private var progress: Float? = null
+        /** 0 while the rest runs, 1 when it is paused: the yellow arc drops to 35 % (design 4-1), the rim behind it stays. */
+        var fade = 0f
+            set(value) { if (field != value) { field = value; invalidate() } }
 
         fun setWindow(startAtMs: Long, endAtMs: Long) {
             this.startAtMs = startAtMs
@@ -1074,7 +1066,9 @@ class MainActivity : Activity() {
             // The unlit rim stays visible behind the shrinking rest time, as in the design.
             paint.color = WatchWorkoutFace.TRACK; canvas.drawArc(oval, -90f, 360f, false, paint)
             paint.color = WatchWorkoutFace.YELLOW
+            paint.alpha = (255 * (1f - .65f * fade)).toInt()
             canvas.drawArc(oval, -90f, 360f * fraction, false, paint)
+            paint.alpha = 255
             postInvalidateOnAnimation()
         }
     }

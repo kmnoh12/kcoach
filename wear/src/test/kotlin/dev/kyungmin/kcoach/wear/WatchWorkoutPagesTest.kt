@@ -70,7 +70,7 @@ class WatchWorkoutPagesTest {
         activity.finish()
     }
 
-    @Test fun restShowsTheYellowRingTheNextSetAndAStartLabel() {
+    @Test fun restShowsTheYellowRingTheTimeTheTenSecondBarAndThePauseAndSkipButtons() {
         val app = RuntimeEnvironment.getApplication()
         WatchWorkoutOutbox(app).receivePhoneHello(listOf("1", "phone", "0", "WORKOUT_CONTROL_V1"))
         val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
@@ -80,11 +80,43 @@ class WatchWorkoutPagesTest {
         assertTrue(ring.getGlobalVisibleRect(android.graphics.Rect()))
         val pager = pagerOf(root)
         assertTrue("Resting allows the editor above", pager.topEnabled)
-        assertFalse("There is no heart-rate page while resting", pager.bottomEnabled)
-        assertTrue("Pulling up starts the next set", pager.pullEnabled)
-        val go = descendants(root).filterIsInstance<TextView>().single { it.text == "다음 세트 시작" }
-        assertTrue(go.getGlobalVisibleRect(android.graphics.Rect()))
+        assertTrue("The heart-rate page is below during a rest too", pager.bottomEnabled)
+        val pills = descendants(root).filterIsInstance<RestPill>()
+        val pause = pills.single { it.contentDescription == "정지" }
+        val skip = pills.single { it.contentDescription == "건너뛰기" }
+        assertTrue(pause.getGlobalVisibleRect(android.graphics.Rect())); assertTrue(skip.getGlobalVisibleRect(android.graphics.Rect()))
+        assertTrue("Dragging up no longer skips the rest", descendants(root).filterIsInstance<TextView>().none { it.text == "다음 세트 시작" })
         pager.show(-1); measure(root); shot(root, "rest-edit")
+        activity.finish()
+    }
+
+    @Test fun pausingARestMorphsTheScreenAndResumingMorphsItBack() {
+        val app = RuntimeEnvironment.getApplication()
+        WatchWorkoutOutbox(app).receivePhoneHello(listOf("1", "phone", "0", "WORKOUT_CONTROL_V1"))
+        val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
+        val root = activity.findViewById<ViewGroup>(android.R.id.content).getChildAt(0)
+        val face = descendants(root).filterIsInstance<WatchWorkoutFace>().single()
+        fun state(resting: Boolean, restPaused: Boolean) {
+            app.sendBroadcast(Intent(WearWorkoutService.ACTION_STATE).setPackage(app.packageName)
+                .putExtra("session", "preview").putExtra("setId", "set").putExtra("attemptId", "attempt")
+                .putExtra("exerciseId", "curl").putExtra("exerciseName", "덤벨 컬").putExtra("paired", true)
+                .putExtra("running", false).putExtra("resting", resting).putExtra("paused", restPaused)
+                .putExtra("restPaused", restPaused).putExtra("pausedRestRemainingMs", if (restPaused) 45_000L else 0L)
+                .putExtra("targetReps", 20).putExtra("reps", 8).putExtra("restSeconds", 90)
+                .putExtra("restEndAtMs", if (restPaused) 0L else System.currentTimeMillis() + 45_000).putExtra("phase", if (restPaused) "PAUSED" else "RESTING"))
+            shadowOf(Looper.getMainLooper()).idle()
+        }
+        state(resting = true, restPaused = false); measure(root)
+        assertEquals(0f, face.restMorph, 0f)
+        state(resting = false, restPaused = true)
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(600)); measure(root); shot(root, "rest-paused")
+        assertEquals("The rest screen stays while paused", 1f, face.restMorph, 0.001f)
+        assertEquals(1f, descendants(root).filterIsInstance<RestPill>().first { it.contentDescription == "계속" }.resume, 0.001f)
+        assertEquals("0:45", face.value.text.toString())
+        state(resting = true, restPaused = false)
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(600)); measure(root)
+        assertEquals(0f, face.restMorph, 0.001f)
+        assertTrue(descendants(root).filterIsInstance<RestPill>().any { it.contentDescription == "정지" })
         activity.finish()
     }
 

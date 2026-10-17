@@ -8,9 +8,10 @@
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#0B0C0C; --surface:#161A19; --raised:#1F2322; --hair:#232827;
-  --white:#F2F4F3; --soft:#98A3A0; --muted:#8A9390; --faint:#4F5654;
-  --mint:#8FCFBA; --on-mint:#04201C; --wash:#10312C;
+  /* 앱(워치)의 색 상수와 같은 값: 따뜻한 순검정 + 뼈색 글자 + 세이지 */
+  --bg:#0A0A09; --surface:#0E0E0D; --raised:#1C1B19; --hair:#1E1D1A;
+  --white:#EDE8DC; --soft:#A39F98; --muted:#8F8B82; --faint:#5C5952;
+  --mint:#76DBB9; --on-mint:#04140E; --wash:#0F2A22;
   --z1:#7C8E9C; --z2:#4DA3FF; --z3:#4FD18B; --z4:#FFA033; --z5:#E5483B; --rest:#FFDE70; --over:#FFB45E; --red:#E5483B;
   --font:Roboto,"Noto Sans KR","Apple SD Gothic Neo",sans-serif;
 }
@@ -382,7 +383,7 @@ svg.ic{width:1em;height:1em;stroke:currentColor;fill:none;stroke-width:1.75;stro
 <!-- 1 측정 -->
 <div class="item">
   <div class="watch"><div class="face s1">
-    <svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#161A19" stroke-width="7"/><circle cx="216" cy="216" r="209" fill="none" stroke="#8FCFBA" stroke-width="7" stroke-linecap="round" stroke-dasharray="875 1313" transform="rotate(-90 216 216)" class="progress"/></svg>
+    <svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#1B1B1A" stroke-width="7"/><circle cx="216" cy="216" r="209" fill="none" stroke="#76DBB9" stroke-width="7" stroke-linecap="round" stroke-dasharray="875 1313" transform="rotate(-90 216 216)" class="progress"/></svg>
     <div class="abs clock">02:02</div>
     <div class="abs name">덤벨 컬</div>
     <div class="abs sub"><span class="live"></span><span>1세트 · <b class="wt">20kg</b> · 자동 측정</span></div>
@@ -397,7 +398,7 @@ svg.ic{width:1em;height:1em;stroke:currentColor;fill:none;stroke-width:1.75;stro
 <!-- 2 목표 초과 -->
 <div class="item">
   <div class="watch"><div class="face s1 over">
-    <svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#1B1B1A" stroke-width="7"/><circle cx="216" cy="216" r="209" fill="none" stroke="#8FCFBA" stroke-width="7" stroke-linecap="round" stroke-dasharray="1203 1313" transform="rotate(-90 216 216)" class="ovBase"/><circle cx="216" cy="216" r="209" fill="none" stroke="#FFB45E" stroke-width="7" opacity="0" class="ovSweep"/><circle cx="216" cy="216" r="209" fill="none" stroke="#D9791F" stroke-width="7" stroke-linecap="round" stroke-dasharray="0 1313" transform="rotate(-90 216 216)" class="ovLap"/></svg>
+    <svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#1B1B1A" stroke-width="7"/><circle cx="216" cy="216" r="209" fill="none" stroke="#76DBB9" stroke-width="7" stroke-linecap="round" stroke-dasharray="1203 1313" transform="rotate(-90 216 216)" class="ovBase"/><circle cx="216" cy="216" r="209" fill="none" stroke="#FFB45E" stroke-width="7" opacity="0" class="ovSweep"/><circle cx="216" cy="216" r="209" fill="none" stroke="#D9791F" stroke-width="7" stroke-linecap="round" stroke-dasharray="0 1313" transform="rotate(-90 216 216)" class="ovLap"/></svg>
     <div class="abs clock">02:03</div>
     <div class="abs name">덤벨 컬</div>
     <div class="abs sub ovSubA"><span class="live"></span><span>1세트 · <b class="wt">20kg</b> · 자동 측정</span></div><div class="abs sub ovSubB" style="color:var(--over)">목표 초과</div>
@@ -412,7 +413,7 @@ svg.ic{width:1em;height:1em;stroke:currentColor;fill:none;stroke-width:1.75;stro
 <!-- 1-B 측정 (bpm) -->
 <div class="item">
   <div class="watch"><div class="face s1">
-    <svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#161A19" stroke-width="7"/><circle cx="216" cy="216" r="209" fill="none" stroke="#8FCFBA" stroke-width="7" stroke-linecap="round" stroke-dasharray="875 1313" transform="rotate(-90 216 216)" class="progress"/></svg>
+    <svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#1B1B1A" stroke-width="7"/><circle cx="216" cy="216" r="209" fill="none" stroke="#76DBB9" stroke-width="7" stroke-linecap="round" stroke-dasharray="875 1313" transform="rotate(-90 216 216)" class="progress"/></svg>
     <div class="abs clock">02:02</div>
     <div class="abs name">덤벨 컬</div>
     <div class="abs sub"><span class="live"></span><span>1세트 · <b class="wt">20kg</b> · 자동 측정</span></div>
@@ -427,7 +428,7 @@ svg.ic{width:1em;height:1em;stroke:currentColor;fill:none;stroke-width:1.75;stro
 <!-- 3 저장 -->
 <div class="item">
   <div class="watch"><div class="face s3">
-    <svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#8FCFBA" stroke-width="7"/></svg>
+    <svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#76DBB9" stroke-width="7"/></svg>
     <div class="abs clock">02:04</div>
     <div class="abs check"><svg class="pay" viewBox="0 0 104 104"><circle class="pc" cx="52" cy="52" r="46" pathLength="1"/><path class="pk" d="M31 54.5l14.5 14.5L74 38" pathLength="1"/></svg></div>
     <div class="abs name2">1세트 완료</div>
@@ -440,7 +441,7 @@ svg.ic{width:1em;height:1em;stroke:currentColor;fill:none;stroke-width:1.75;stro
 <!-- 4a 휴식 -->
 <div class="item">
   <div class="watch"><div class="face s4 rv va">
-    <svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#161A19" stroke-width="7"/><circle cx="216" cy="216" r="209" fill="none" stroke="#FFDE70" stroke-opacity="1" stroke-width="7" stroke-linecap="round" stroke-dasharray="880 1313" transform="rotate(-90 216 216)"/></svg>
+    <svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#1B1B1A" stroke-width="7"/><circle cx="216" cy="216" r="209" fill="none" stroke="#FFDE70" stroke-opacity="1" stroke-width="7" stroke-linecap="round" stroke-dasharray="880 1313" transform="rotate(-90 216 216)"/></svg>
     <div class="abs clock">02:05</div>
     <div class="abs num big">0:45</div>
     <div class="tj"><i class="jm">−</i><i class="jp">+</i><b class="knob">10초</b></div>
@@ -454,7 +455,7 @@ svg.ic{width:1em;height:1em;stroke:currentColor;fill:none;stroke-width:1.75;stro
 <!-- 4b 휴식 -->
 <div class="item">
   <div class="watch"><div class="face s4 rv">
-    <svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#161A19" stroke-width="7"/><circle cx="216" cy="216" r="209" fill="none" stroke="#FFDE70" stroke-opacity="1" stroke-width="7" stroke-linecap="round" stroke-dasharray="880 1313" transform="rotate(-90 216 216)"/></svg>
+    <svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#1B1B1A" stroke-width="7"/><circle cx="216" cy="216" r="209" fill="none" stroke="#FFDE70" stroke-opacity="1" stroke-width="7" stroke-linecap="round" stroke-dasharray="880 1313" transform="rotate(-90 216 216)"/></svg>
     <div class="abs clock">02:05</div>
     <div class="abs num big" style="top:calc(var(--u)*120);font-size:calc(var(--u)*86)">0:45</div>
     <div class="sq" style="left:calc(var(--u)*46);top:calc(var(--u)*118);width:calc(var(--u)*84);height:calc(var(--u)*100)"><b>−</b><span>10초</span></div>
@@ -469,7 +470,7 @@ svg.ic{width:1em;height:1em;stroke:currentColor;fill:none;stroke-width:1.75;stro
 <!-- 4c 휴식 -->
 <div class="item">
   <div class="watch"><div class="face s4 rv">
-    <svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#161A19" stroke-width="7"/><circle cx="216" cy="216" r="209" fill="none" stroke="#FFDE70" stroke-opacity="1" stroke-width="7" stroke-linecap="round" stroke-dasharray="880 1313" transform="rotate(-90 216 216)"/></svg>
+    <svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#1B1B1A" stroke-width="7"/><circle cx="216" cy="216" r="209" fill="none" stroke="#FFDE70" stroke-opacity="1" stroke-width="7" stroke-linecap="round" stroke-dasharray="880 1313" transform="rotate(-90 216 216)"/></svg>
     <div class="abs clock">02:05</div>
     <div class="abs num big">0:45</div>
     <div class="half" style="left:calc(var(--u)*66);top:calc(var(--u)*216);width:calc(var(--u)*146);height:calc(var(--u)*84);border-radius:calc(var(--u)*22) calc(var(--u)*6) calc(var(--u)*6) calc(var(--u)*22)">−10</div>
@@ -483,7 +484,7 @@ svg.ic{width:1em;height:1em;stroke:currentColor;fill:none;stroke-width:1.75;stro
 <!-- 4-1 휴식 일시정지 (움직이는 시안) -->
 <div class="item">
   <div class="watch"><div class="face s4 rv va anim paused" id="restAnim">
-    <svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#161A19" stroke-width="7"/><circle class="prog" cx="216" cy="216" r="209" fill="none" stroke="#FFDE70" stroke-width="7" stroke-linecap="round" stroke-dasharray="880 1313" transform="rotate(-90 216 216)"/></svg>
+    <svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#1B1B1A" stroke-width="7"/><circle class="prog" cx="216" cy="216" r="209" fill="none" stroke="#FFDE70" stroke-width="7" stroke-linecap="round" stroke-dasharray="880 1313" transform="rotate(-90 216 216)"/></svg>
     <div class="abs clock">02:05</div>
     <div class="abs lab2 an-lab" style="top:calc(var(--u)*70);font-size:calc(var(--u)*22)">휴식 · 일시정지</div>
     <div class="abs num big an-big">0:45</div>
@@ -538,32 +539,32 @@ svg.ic{width:1em;height:1em;stroke:currentColor;fill:none;stroke-width:1.75;stro
 </div>
 
 <div class="item">
-  <div class="watch"><div class="face rB"><svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#1B1B1A" stroke-width="7"/><circle cx="216" cy="216" r="209" fill="none" stroke="#8FCFBA" stroke-width="7" stroke-linecap="round" stroke-dasharray="1313 1313" transform="rotate(-90 216 216)"/></svg><div class="abs clock">02:04</div><div class="abs lab">최고 중량 갱신</div><div class="bar b0"></div><div class="bar b1"></div><div class="abs bv0">60</div><div class="abs bv1">62.5<small>kg</small></div><div class="abs bl0">이전</div><div class="abs bl1">오늘</div><div class="abs dl2"><svg viewBox="0 0 24 24" class="upi"><path d="M12 19V6M6 11.5l6-6 6 6"/></svg>+2.5kg</div><div class="abs ex2">벤치 프레스 · 1세트 완료</div></div></div>
+  <div class="watch"><div class="face rB"><svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#1B1B1A" stroke-width="7"/><circle cx="216" cy="216" r="209" fill="none" stroke="#76DBB9" stroke-width="7" stroke-linecap="round" stroke-dasharray="1313 1313" transform="rotate(-90 216 216)"/></svg><div class="abs clock">02:04</div><div class="abs lab">최고 중량 갱신</div><div class="bar b0"></div><div class="bar b1"></div><div class="abs bv0">60</div><div class="abs bv1">62.5<small>kg</small></div><div class="abs bl0">이전</div><div class="abs bl1">오늘</div><div class="abs dl2"><svg viewBox="0 0 24 24" class="upi"><path d="M12 19V6M6 11.5l6-6 6 6"/></svg>+2.5kg</div><div class="abs ex2">벤치 프레스 · 1세트 완료</div></div></div>
   <div class="cap"><span class="tag">7 · 세트 직후 · 최고 중량 갱신</span><b>이전과 지금을 막대로 비교</b><span>이전 최고와 오늘 값을 막대 두 개로 나란히 놓아서 올라간 것이 눈으로 바로 보여요. 오늘 막대만 세이지, 이전 막대는 흐려요. 가운데 아래에 차이를 적어요.</span></div>
 </div>
 
 <div class="item">
-  <div class="watch"><div class="face rE"><svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#1B1B1A" stroke-width="7"/><circle cx="216" cy="216" r="209" fill="none" stroke="#8FCFBA" stroke-width="7" stroke-linecap="round" stroke-dasharray="1313 1313" transform="rotate(-90 216 216)"/></svg><div class="abs clock">02:04</div><div class="abs lab">횟수 갱신</div><div class="abs wt">62.5kg</div><div class="abs num big"><span>11</span><i>회</i></div><div class="dotrow"><i class="was" style="left:calc(var(--u)*87.5)"></i><i class="was" style="left:calc(var(--u)*111.5)"></i><i class="was" style="left:calc(var(--u)*135.5)"></i><i class="was" style="left:calc(var(--u)*159.5)"></i><i class="was" style="left:calc(var(--u)*183.5)"></i><i class="was" style="left:calc(var(--u)*207.5)"></i><i class="was" style="left:calc(var(--u)*231.5)"></i><i class="was" style="left:calc(var(--u)*255.5)"></i><i class="was" style="left:calc(var(--u)*279.5)"></i><i class="was" style="left:calc(var(--u)*303.5)"></i><i class="on" style="left:calc(var(--u)*327.5)"></i></div><div class="abs pv2">이전 10회 · +1회</div><div class="abs ex">벤치 프레스 · 1세트 완료</div></div></div>
+  <div class="watch"><div class="face rE"><svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#1B1B1A" stroke-width="7"/><circle cx="216" cy="216" r="209" fill="none" stroke="#76DBB9" stroke-width="7" stroke-linecap="round" stroke-dasharray="1313 1313" transform="rotate(-90 216 216)"/></svg><div class="abs clock">02:04</div><div class="abs lab">횟수 갱신</div><div class="abs wt">62.5kg</div><div class="abs num big"><span>11</span><i>회</i></div><div class="dotrow"><i class="was" style="left:calc(var(--u)*87.5)"></i><i class="was" style="left:calc(var(--u)*111.5)"></i><i class="was" style="left:calc(var(--u)*135.5)"></i><i class="was" style="left:calc(var(--u)*159.5)"></i><i class="was" style="left:calc(var(--u)*183.5)"></i><i class="was" style="left:calc(var(--u)*207.5)"></i><i class="was" style="left:calc(var(--u)*231.5)"></i><i class="was" style="left:calc(var(--u)*255.5)"></i><i class="was" style="left:calc(var(--u)*279.5)"></i><i class="was" style="left:calc(var(--u)*303.5)"></i><i class="on" style="left:calc(var(--u)*327.5)"></i></div><div class="abs pv2">이전 10회 · +1회</div><div class="abs ex">벤치 프레스 · 1세트 완료</div></div></div>
   <div class="cap"><span class="tag">8 · 세트 직후 · 같은 무게 횟수 갱신</span><b>지난번 10칸에 한 칸 더</b><span>점 열한 개가 횟수예요. 지난번까지의 열 개는 흐리고 오늘 늘어난 한 개만 세이지로 켜져요. 숫자는 그 위에 크게 보여요.</span></div>
 </div>
 
 <div class="item">
-  <div class="watch"><div class="face cal2"><svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#1B1B1A" stroke-width="7"/></svg><div class="orbwrap"><svg class="orb" viewBox="0 0 220 220"><circle cx="110" cy="110" r="100" fill="none" stroke="#1F1F1D" stroke-width="6"/><circle cx="110" cy="110" r="100" fill="none" stroke="#8FCFBA" stroke-width="6" stroke-linecap="round" stroke-dasharray="415 628" transform="rotate(-90 110 110)" class="orbprog"/></svg><span class="orbwin"><span class="orbstrip"><span>3</span><span>2</span><span>1</span><span>3</span></span></span></div><div class="abs clock">02:10</div><div class="abs lab3">보정</div><div class="abs msg2">시작 자세로 가만히 있어요</div><div class="abs foot"><svg viewBox="0 0 24 24" class="cam"><rect x="3" y="7" width="14" height="10" rx="2"/><path d="M17 11l4-2.5v7L17 13"/></svg>폰 카메라 촬영 중</div></div></div>
+  <div class="watch"><div class="face cal2"><svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#1B1B1A" stroke-width="7"/></svg><div class="orbwrap"><svg class="orb" viewBox="0 0 220 220"><circle cx="110" cy="110" r="100" fill="none" stroke="#1F1F1D" stroke-width="6"/><circle cx="110" cy="110" r="100" fill="none" stroke="#76DBB9" stroke-width="6" stroke-linecap="round" stroke-dasharray="415 628" transform="rotate(-90 110 110)" class="orbprog"/></svg><span class="orbwin"><span class="orbstrip"><span>3</span><span>2</span><span>1</span><span>3</span></span></span></div><div class="abs clock">02:10</div><div class="abs lab3">보정</div><div class="abs msg2">시작 자세로 가만히 있어요</div><div class="abs foot"><svg viewBox="0 0 24 24" class="cam"><rect x="3" y="7" width="14" height="10" rx="2"/><path d="M17 11l4-2.5v7L17 13"/></svg>폰 카메라 촬영 중</div></div></div>
   <div class="cap"><span class="tag">9 · 보정 · 준비</span><b>숫자가 줄어드는 원</b><span>가운데 원이 줄어들고 숫자는 운동 중 횟수처럼 위로 슥 올라가며 3, 2, 1로 바뀌어요. 위에 "보정", 아래에 한 줄 안내, 맨 아래에 폰이 촬영 중이라는 표시(카메라 아이콘)가 있어요.</span></div>
 </div>
 
 <div class="item">
-  <div class="watch"><div class="face cal3"><svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#1B1B1A" stroke-width="7"/><circle cx="216" cy="216" r="209" fill="none" stroke="#8FCFBA" stroke-width="7" stroke-linecap="round" stroke-dasharray="788 1313" transform="rotate(-90 216 216)" class="progress5"/></svg><div class="abs clock">02:10</div><div class="abs lab3">보정 · 목표 5회</div><div class="abs count"><span class="win"><span class="strip"><span class="d">1</span><span class="d">2</span><span class="d">3</span><span class="d">4</span><span class="d">5</span><span class="d">1</span></span></span><span class="of">/ 5회</span></div><div class="segrow"><i></i><i></i><i></i><i></i><i></i></div><div class="abs msg2" style="top:calc(var(--u)*326)">평소처럼 천천히 해요</div><div class="abs foot" style="top:calc(var(--u)*364)"><svg viewBox="0 0 24 24" class="cam"><rect x="3" y="7" width="14" height="10" rx="2"/><path d="M17 11l4-2.5v7L17 13"/></svg>폰 카메라 촬영 중</div></div></div>
+  <div class="watch"><div class="face cal3"><svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#1B1B1A" stroke-width="7"/><circle cx="216" cy="216" r="209" fill="none" stroke="#76DBB9" stroke-width="7" stroke-linecap="round" stroke-dasharray="788 1313" transform="rotate(-90 216 216)" class="progress5"/></svg><div class="abs clock">02:10</div><div class="abs lab3">보정 · 목표 5회</div><div class="abs count"><span class="win"><span class="strip"><span class="d">1</span><span class="d">2</span><span class="d">3</span><span class="d">4</span><span class="d">5</span><span class="d">1</span></span></span><span class="of">/ 5회</span></div><div class="segrow"><i></i><i></i><i></i><i></i><i></i></div><div class="abs msg2" style="top:calc(var(--u)*326)">평소처럼 천천히 해요</div><div class="abs foot" style="top:calc(var(--u)*364)"><svg viewBox="0 0 24 24" class="cam"><rect x="3" y="7" width="14" height="10" rx="2"/><path d="M17 11l4-2.5v7L17 13"/></svg>폰 카메라 촬영 중</div></div></div>
   <div class="cap"><span class="tag">10 · 보정 · 측정</span><b>횟수와 남은 칸</b><span>큰 숫자가 지금까지 센 횟수이고(운동 중과 같이 숫자가 위로 슥 올라가며 바뀌어요), 아래 다섯 칸과 림 링이 목표 5회 중 어디까지 왔는지 따라서 차올라요. 시안은 1회부터 5회까지 반복해서 보여줘요. 평소 운동 화면과 같은 모양이라 낯설지 않아요.</span></div>
 </div>
 
 <div class="item">
-  <div class="watch"><div class="face cal4"><svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#1B1B1A" stroke-width="7"/><circle cx="216" cy="216" r="209" fill="none" stroke="#8FCFBA" stroke-width="7" stroke-linecap="round" stroke-dasharray="1313 1313" transform="rotate(-90 216 216)"/></svg><div class="abs clock">02:12</div><div class="abs ck"><svg class="pay" viewBox="0 0 104 104"><circle class="pc" cx="52" cy="52" r="46" pathLength="1"/><path class="pk" d="M31 54.5l14.5 14.5L74 38" pathLength="1"/></svg></div><div class="abs h1">보정 완료</div><div class="cmp2"><div><span class="v">5회</span><span class="k">센서</span></div><i></i><div><span class="v">5회</span><span class="k">확인</span></div></div><div class="abs ok">일치</div><div class="abs hint2">폰에서 결과를 확인해요</div></div></div>
+  <div class="watch"><div class="face cal4"><svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#1B1B1A" stroke-width="7"/><circle cx="216" cy="216" r="209" fill="none" stroke="#76DBB9" stroke-width="7" stroke-linecap="round" stroke-dasharray="1313 1313" transform="rotate(-90 216 216)"/></svg><div class="abs clock">02:12</div><div class="abs ck"><svg class="pay" viewBox="0 0 104 104"><circle class="pc" cx="52" cy="52" r="46" pathLength="1"/><path class="pk" d="M31 54.5l14.5 14.5L74 38" pathLength="1"/></svg></div><div class="abs h1">보정 완료</div><div class="cmp2"><div><span class="v">5회</span><span class="k">센서</span></div><i></i><div><span class="v">5회</span><span class="k">확인</span></div></div><div class="abs ok">일치</div><div class="abs hint2">폰에서 결과를 확인해요</div></div></div>
   <div class="cap"><span class="tag">11 · 보정 · 완료</span><b>센서와 확인이 맞았는지</b><span>체크와 "보정 완료", 센서가 센 횟수와 폰에서 확인한 횟수를 나란히 놓아요. 두 값이 같으면 "일치"가 붙어요. 결과는 폰에서 봐요.</span></div>
 </div>
 
 <div class="item">
-  <div class="watch"><div class="face res2"><svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#1B1B1A" stroke-width="7"/><circle cx="216" cy="216" r="209" fill="none" stroke="#8FCFBA" stroke-width="7" stroke-linecap="round" stroke-dasharray="1313 1313" transform="rotate(-90 216 216)"/></svg><div class="abs clock">02:48</div><div class="abs t1"><svg viewBox="0 0 24 24" class="chk"><circle cx="12" cy="12" r="10"/><path d="M7.5 12.5l3 3 6-7"/></svg>운동 완료</div><div class="abs num time">42:10</div><div class="abs tk">운동 시간</div><div class="m3"><div><span class="v">18</span><span class="k">세트</span></div><i></i><div><span class="v">8,420</span><span class="k">볼륨 kg</span></div><i></i><div><span class="v">121</span><span class="k">평균 심박</span></div></div><div class="abs rc"><svg viewBox="0 0 24 24" class="upi"><path d="M12 19V6M6 11.5l6-6 6 6"/></svg>오늘 깬 기록 2개</div><div class="more2">폰에서 자세히 보기</div></div></div>
+  <div class="watch"><div class="face res2"><svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#1B1B1A" stroke-width="7"/><circle cx="216" cy="216" r="209" fill="none" stroke="#76DBB9" stroke-width="7" stroke-linecap="round" stroke-dasharray="1313 1313" transform="rotate(-90 216 216)"/></svg><div class="abs clock">02:48</div><div class="abs t1"><svg viewBox="0 0 24 24" class="chk"><circle cx="12" cy="12" r="10"/><path d="M7.5 12.5l3 3 6-7"/></svg>운동 완료</div><div class="abs num time">42:10</div><div class="abs tk">운동 시간</div><div class="m3"><div><span class="v">18</span><span class="k">세트</span></div><i></i><div><span class="v">8,420</span><span class="k">볼륨 kg</span></div><i></i><div><span class="v">121</span><span class="k">평균 심박</span></div></div><div class="abs rc"><svg viewBox="0 0 24 24" class="upi"><path d="M12 19V6M6 11.5l6-6 6 6"/></svg>오늘 깬 기록 2개</div><div class="more2">폰에서 자세히 보기</div></div></div>
   <div class="cap"><span class="tag">12 · 운동 결과</span><b>한 장으로 정리</b><span>운동 시간이 가장 크고, 세트 수, 볼륨, 평균 심박이 구분선으로 나뉜 한 줄이에요. 기록 갱신은 세이지 화살표와 함께 한 줄, 맨 아래는 폰에서 자세히 보는 주 버튼이에요.</span></div>
 </div>
 

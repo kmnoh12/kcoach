@@ -3,7 +3,6 @@ package dev.kyungmin.kcoach.wear
 import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Color
-import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.VelocityTracker
 import android.view.View
@@ -14,20 +13,14 @@ import kotlin.math.abs
 
 /**
  * Three full-screen pages stacked vertically: [top] above the [main] page and [bottom] below it. Dragging down
- * reveals the top page, dragging up the bottom one. When there is no bottom page the upward drag can instead
- * pull the main page's [pullTarget] toward a one-third threshold that arms [onPullCommit] (the rest screen's
- * "start the next set"): the content follows the finger with resistance and a tick marks the threshold.
+ * reveals the top page, dragging up the bottom one.
  */
 internal class WatchPager(context: Context, private val main: View, private val top: View, private val bottom: View) : FrameLayout(context) {
     var topEnabled = false
         set(value) { field = value; applyPosition() }
     var bottomEnabled = false
         set(value) { field = value; applyPosition() }
-    var pullEnabled = false
-    var pullTarget: View? = null
     var onPage: (Int) -> Unit = {}
-    var onPullArmed: (Boolean) -> Unit = {}
-    var onPullCommit: () -> Unit = {}
 
     /** 0 is the main page, -1 the top page, 1 the bottom page. */
     var page = 0
@@ -38,8 +31,6 @@ internal class WatchPager(context: Context, private val main: View, private val 
     private var downY = 0f
     private var downX = 0f
     private var startPosition = 0f
-    private var pulling = false
-    private var armed = false
     private var animator: ValueAnimator? = null
     private var velocity: VelocityTracker? = null
     private val slop = ViewConfiguration.get(context).scaledTouchSlop
@@ -83,7 +74,7 @@ internal class WatchPager(context: Context, private val main: View, private val 
     }
 
     private fun canDrag(dy: Float): Boolean = when (page) {
-        0 -> if (dy > 0) topEnabled else bottomEnabled || pullEnabled
+        0 -> if (dy > 0) topEnabled else bottomEnabled
         -1 -> dy < 0
         else -> dy > 0
     }
@@ -94,7 +85,6 @@ internal class WatchPager(context: Context, private val main: View, private val 
         if (dragging) return true
         if (abs(dy) > slop && abs(dy) > abs(dx) * 1.2f && canDrag(dy)) {
             dragging = true; animator?.cancel(); parent?.requestDisallowInterceptTouchEvent(true)
-            pulling = page == 0 && !bottomEnabled && pullEnabled && dy < 0
             startPosition = position
             return true
         }
@@ -118,25 +108,14 @@ internal class WatchPager(context: Context, private val main: View, private val 
                 if (!dragging && !startDragIfVertical(e)) return true
                 val dy = e.y - downY
                 val h = height.toFloat().coerceAtLeast(1f)
-                if (pulling) {
-                    val pull = (-dy).coerceAtLeast(0f)
-                    pullTarget?.translationY = -pull * .75f
-                    val nowArmed = pull >= h / 3f
-                    if (nowArmed != armed) {
-                        armed = nowArmed; onPullArmed(armed)
-                        performHapticFeedback(if (armed) HapticFeedbackConstants.CONFIRM else HapticFeedbackConstants.CLOCK_TICK)
-                    }
-                } else {
-                    position = rubber(startPosition - dy / h)
-                    applyPosition()
-                }
+                position = rubber(startPosition - dy / h)
+                applyPosition()
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 if (!dragging) { velocity?.recycle(); velocity = null; return true }
                 dragging = false
                 velocity?.computeCurrentVelocity(1000); val vy = velocity?.yVelocity ?: 0f
                 velocity?.recycle(); velocity = null
-                if (pulling) { finishPull(e.actionMasked == MotionEvent.ACTION_UP); return true }
                 val moved = position - page          // > 0: toward the bottom page, < 0: toward the top page
                 val towardBottom = moved > .28f || vy < -flingVelocity
                 val towardTop = moved < -.28f || vy > flingVelocity
@@ -151,14 +130,6 @@ internal class WatchPager(context: Context, private val main: View, private val 
             }
         }
         return true
-    }
-
-    private fun finishPull(released: Boolean) {
-        val commit = released && armed
-        pulling = false
-        if (armed) { armed = false; onPullArmed(false) }
-        if (commit) onPullCommit()
-        pullTarget?.animate()?.translationY(0f)?.setDuration(220)?.setInterpolator(ease)?.start()
     }
 
     /** The pages follow the finger inside their range and resist beyond the first and last enabled page. */

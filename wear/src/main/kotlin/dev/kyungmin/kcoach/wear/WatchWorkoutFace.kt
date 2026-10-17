@@ -42,16 +42,12 @@ internal class WatchWorkoutFace(context: Context) : FrameLayout(context) {
     val clock = label(13f, WHITE, 116, 42, 316, 72)
     val title = label(17f, WHITE, 63, 74, 369, 110, true).apply { maxLines = 1 }
     val subtitle = label(11f, MUTED, 52, 72, 380, 142)
-    val jog = JogBar(context).also { positions[it] = android.graphics.Rect(80, 202, 352, 298); addView(it, LayoutParams(1, 1)); it.visibility = GONE }
+    val jog = JogBar(context).also { positions[it] = android.graphics.Rect(48, 182, 384, 262); addView(it, LayoutParams(1, 1)); it.visibility = GONE }
+    /** Design 4a: the left button is "정지" (and "계속" while the rest is paused), the right one skips the rest. */
+    val restPause = RestPill(context, false).also { positions[it] = android.graphics.Rect(67, 280, 205, 350); addView(it, LayoutParams(1, 1)); it.visibility = GONE }
+    val restSkip = RestPill(context, true).also { positions[it] = android.graphics.Rect(227, 280, 365, 350); addView(it, LayoutParams(1, 1)); it.visibility = GONE }
     val chevronUp = ChevronView(context, true).also { positions[it] = android.graphics.Rect(199, 14, 233, 31); addView(it, LayoutParams(1, 1)); it.visibility = GONE }
     val chevronDown = ChevronView(context, false).also { positions[it] = android.graphics.Rect(199, 398, 233, 415); addView(it, LayoutParams(1, 1)); it.visibility = GONE }
-    /** The rest screen's card for the next set: a muted label on the left, the set itself on the right. */
-    val restCard = View(context).also {
-        positions[it] = android.graphics.Rect(72, 296, 360, 350); addView(it, LayoutParams(1, 1)); it.visibility = GONE
-        it.background = android.graphics.drawable.GradientDrawable().apply { setColor(CARD) }
-    }
-    val restNextLabel = label(9.5f, SOFT, 92, 300, 200, 346).apply { gravity = Gravity.START or Gravity.CENTER_VERTICAL; visibility = GONE }
-    val restNextValue = label(12.5f, WHITE, 200, 300, 340, 346).apply { gravity = Gravity.END or Gravity.CENTER_VERTICAL; visibility = GONE }
     val valueGhost = label(88f, SAGE, 50, 140, 270, 320, false).apply { alpha = 0f; isClickable = false; importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO }
     val value = label(88f, SAGE, 50, 140, 270, 320, false)
     val target = label(15f, SOFT, 270, 232, 382, 292)
@@ -61,7 +57,6 @@ internal class WatchWorkoutFace(context: Context) : FrameLayout(context) {
     val heartRate = label(17f, WHITE, 268, 336, 352, 378, false)
     val hint = label(11f, MUTED, 76, 370, 356, 400).apply { isClickable = true }
     val down = label(12f, MUTED, 180, 391, 252, 419)
-    val restGo = label(10.5f, SOFT, 96, 366, 336, 394, false).apply { visibility = GONE; isClickable = true; isFocusable = true }
     val action = label(16f, Color.rgb(23, 22, 18), 76, 280, 356, 376, true).apply {
         tag = "phone-result"; isClickable = true; isFocusable = true
         background = android.graphics.drawable.GradientDrawable().apply {
@@ -69,12 +64,11 @@ internal class WatchWorkoutFace(context: Context) : FrameLayout(context) {
         }
     }
     init {
-        listOf(weight, heartRate, clock, value, valueGhost, restNextValue).forEach { it.typeface = medium }
+        listOf(weight, heartRate, clock, value, valueGhost).forEach { it.typeface = medium }
         // Design baselines: top + 0.841 x size for the sheet's line-height:1 text.
         baselines[clock] = 63.9f; baselines[title] = 100.6f; baselines[subtitle] = 134.5f
-        baselines[restNextLabel] = 330.5f; baselines[restNextValue] = 332.5f; baselines[restGo] = 385.7f
         baselines[hint] = 392f
-        fitting += listOf(value, valueGhost, hint, restNextValue)
+        fitting += listOf(value, valueGhost, hint)
     }
     var showDivider = true
     init { setBackgroundColor(Color.BLACK); setWillNotDraw(false) }
@@ -101,7 +95,6 @@ internal class WatchWorkoutFace(context: Context) : FrameLayout(context) {
         designSp.keys.forEach { applyTextSize(it) }
         // Long exercise names shrink to fit one line, between 11 and 17 design sp.
         androidx.core.widget.TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(title, (22f * scale).toInt().coerceAtLeast(8), (34f * scale).toInt().coerceAtLeast(10), 1, android.util.TypedValue.COMPLEX_UNIT_PX)
-        (restCard.background as? android.graphics.drawable.GradientDrawable)?.cornerRadius = 18f * scale
         positions.forEach { (view, rect) ->
             var height = (rect.height() * scale).toInt()
             if (view === action) height = maxOf(height, (48 * resources.displayMetrics.density).toInt())
@@ -132,17 +125,66 @@ internal class WatchWorkoutFace(context: Context) : FrameLayout(context) {
                 view.layout(l, (centreY - half).toInt(), r, (centreY + half).toInt())
             } else view.layout(l, offsetY + (rect.top * scale).toInt(), r, offsetY + (rect.bottom * scale).toInt())
         }
+        applyRestMorph()
     }
+    /**
+     * 0 while the rest runs, 1 once it is paused (design 4-1). The time shrinks to 85 % and turns white, the
+     * "정지" button becomes the yellow "계속", the label fades in, the ten-second bar dims and the heart arrow goes.
+     */
+    var restMorph = 0f
+        set(value) {
+            val next = value.coerceIn(0f, 1f)
+            if (field == next) return
+            field = next
+            applyRestMorph()
+        }
+
+    /** Puts the rest screen into the state [restMorph] describes; the pivots follow the line box of the time (centre 216, 126). */
+    fun applyRestMorph() {
+        if (mode != 2) return
+        val p = restMorph
+        val side = minOf(width, height); val scale = side / 432f
+        val offsetX = (width - side) / 2f; val offsetY = (height - side) / 2f
+        val shrink = 1f - .148f * p
+        listOf(value, valueGhost).forEach {
+            it.setTextColor(blend(YELLOW, WHITE, p))
+            it.scaleX = shrink; it.scaleY = shrink; it.translationY = 12f * scale * p
+            if (it.width > 0) { it.pivotX = offsetX + 216f * scale - it.left; it.pivotY = offsetY + 126f * scale - it.top }
+        }
+        subtitle.alpha = p; subtitle.translationY = 6f * scale * (1f - p)
+        jog.alpha = 1f - .65f * p; jog.isEnabled = p < .5f
+        chevronDown.alpha = 1f - p
+        restPause.resume = p
+    }
+
+    /** Back to the plain state when the screen is not the rest screen. */
+    private fun resetRestMorph() {
+        restMorph = 0f
+        listOf(value, valueGhost).forEach { it.scaleX = 1f; it.scaleY = 1f; it.translationY = 0f }
+        subtitle.alpha = 1f; subtitle.translationY = 0f
+        jog.alpha = 1f; jog.isEnabled = true
+        chevronDown.alpha = 1f
+        restPause.resume = 0f
+    }
+
+    private fun blend(from: Int, to: Int, t: Float): Int = Color.rgb(
+        (Color.red(from) + (Color.red(to) - Color.red(from)) * t).toInt(),
+        (Color.green(from) + (Color.green(to) - Color.green(from)) * t).toInt(),
+        (Color.blue(from) + (Color.blue(to) - Color.blue(from)) * t).toInt())
+
     private var mode = -1
     /** The counter sits left of its "/ 12회" while measuring and is centred (and wider) for the rest timer and home. */
     fun primary(mode: Int) {
         this.mode = mode
         when (mode) {
-            2 -> listOf(value, valueGhost).forEach { place(it, 44, 96, 388, 224); baseline(it, 206f); it.letterSpacing = -4f / 126f }
-            1 -> listOf(value, valueGhost).forEach { place(it, 44, 120, 388, 300); baseline(it, null); it.letterSpacing = 0f }
-            else -> listOf(value, valueGhost).forEach { it.letterSpacing = -4f / 176f }
+            // Design 4a: a 108-unit bold time whose line box starts at 72, so the baseline is 72 + 0.841 x 108.
+            2 -> listOf(value, valueGhost).forEach { place(it, 44, 64, 388, 200); baseline(it, 162.8f); it.letterSpacing = -3f / 108f; it.typeface = Typeface.DEFAULT_BOLD }
+            1 -> listOf(value, valueGhost).forEach { place(it, 44, 120, 388, 300); baseline(it, null); it.letterSpacing = 0f; it.typeface = medium }
+            else -> listOf(value, valueGhost).forEach { it.letterSpacing = -4f / 176f; it.typeface = medium }
         }
-        baseline(subtitle, if (mode == 2) 96.5f else 134.5f)
+        // The rest label ("휴식 · 일시정지") has its line box at 70 with a 22-unit size.
+        baseline(subtitle, if (mode == 2) 88.5f else 134.5f)
+        if (mode != 2) resetRestMorph()
     }
 
     /**
@@ -172,21 +214,11 @@ internal class WatchWorkoutFace(context: Context) : FrameLayout(context) {
         place(heartRate, (x - 4).toInt(), 336, (x + rateWidth + 4).toInt(), 378); baseline(heartRate, 366.6f)
     }
 
-    /** The rest card: "다음 2세트" on the left, "12회 × 20kg" on the right; the set shrinks when both do not fit. */
-    fun bindRestCard(label: String, set: CharSequence) {
-        restNextLabel.text = label; restNextValue.text = set
-        val labelWidth = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 19f }.measureText(label)
-        place(restNextLabel, 92, 300, (92 + labelWidth + 6).toInt(), 346)
-        place(restNextValue, (92 + labelWidth + 14).toInt(), 300, 340, 346)
-    }
-
     /** The status line under the exercise name; a small coloured dot in front of it marks a live measurement. */
     fun setSubtitle(text: String, color: Int, dot: Int? = null, sizeSp: Float = 11f, bold: Boolean = false, medium: Boolean = false) {
         subtitle.setTextColor(color); size(subtitle, sizeSp)
         subtitle.typeface = when { bold -> Typeface.DEFAULT_BOLD; medium -> this.medium; else -> Typeface.DEFAULT }
         subtitle.setCompoundDrawablesRelative(null, null, null, null)
-        // The rest screen's "+10초" flash is the larger 30-unit line in the same place.
-        if (mode == 2) baseline(subtitle, if (sizeSp >= 15f) 103.2f else 96.5f)
         if (dot == null) subtitle.text = text
         else {
             val scale = minOf(width, height).coerceAtLeast(1) / 432f

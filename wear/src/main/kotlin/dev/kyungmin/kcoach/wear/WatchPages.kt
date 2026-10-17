@@ -131,7 +131,7 @@ internal class JogBar(context: Context) : View(context) {
     var onStep: (Int) -> Unit = {}
     private val track = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = WatchWorkoutFace.CARD }
     private val knob = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val glyph = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = WatchWorkoutFace.MUTED; textAlign = Paint.Align.CENTER }
+    private val glyph = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = WatchWorkoutFace.MUTED; typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL) }
     private val label = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD }
     private val slop = ViewConfiguration.get(context).scaledTouchSlop
     private var offset = 0f
@@ -140,21 +140,23 @@ internal class JogBar(context: Context) : View(context) {
     private var armed = true
     private var back: ValueAnimator? = null
 
-    private fun u() = width / 272f // the bar is 272 design units wide
+    private fun u() = width / 336f // the bar is 336 design units wide (design 4a)
 
     override fun onTouchEvent(e: MotionEvent): Boolean {
+        // A paused rest does not take ten-second steps.
+        if (!isEnabled) return false
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> { back?.cancel(); startX = e.x; moved = false; armed = true; parent?.requestDisallowInterceptTouchEvent(true); return true }
             MotionEvent.ACTION_MOVE -> {
                 val dx = e.x - startX
                 if (abs(dx) > slop) moved = true
                 if (!moved) return true
-                offset = dx.coerceIn(-64f * u(), 64f * u())
-                if (armed && abs(offset) >= 44f * u()) {
+                offset = dx.coerceIn(-70f * u(), 70f * u())
+                if (armed && abs(offset) >= 48f * u()) {
                     armed = false
                     performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                     onStep(if (offset > 0) 10 else -10)
-                } else if (!armed && abs(offset) <= 20f * u()) armed = true
+                } else if (!armed && abs(offset) <= 22f * u()) armed = true
                 invalidate()
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
@@ -172,7 +174,7 @@ internal class JogBar(context: Context) : View(context) {
 
     override fun performClick(): Boolean { super.performClick(); return true }
 
-    private fun nudge(delta: Int) { offset = (if (delta > 0) 24f else -24f) * u(); invalidate() }
+    private fun nudge(delta: Int) { offset = (if (delta > 0) 26f else -26f) * u(); invalidate() }
 
     private fun springBack() {
         back?.cancel()
@@ -185,17 +187,20 @@ internal class JogBar(context: Context) : View(context) {
     override fun onDraw(canvas: Canvas) {
         val k = u()
         val cy = height / 2f
-        canvas.drawRoundRect(RectF(0f, cy - 24 * k, width.toFloat(), cy + 24 * k), 12 * k, 12 * k, track)
-        glyph.textSize = 26 * k
-        val gy = cy + 9 * k
-        canvas.drawText("−", 28 * k, gy, glyph); canvas.drawText("+", width - 28 * k, gy, glyph)
+        // Design 4a: an 80-unit bar with 22-unit corners; the sign glyphs are 46 units, set 26 units from the ends.
+        canvas.drawRoundRect(RectF(0f, cy - 40 * k, width.toFloat(), cy + 40 * k), 22 * k, 22 * k, track)
+        glyph.textSize = 46 * k
+        // A line-height:1 box of size S centred on the bar puts the baseline 0.841 S below its top: 15.7 units under the centre.
+        val gy = cy + 15.7f * k
+        glyph.textAlign = Paint.Align.LEFT; canvas.drawText("−", 26 * k, gy, glyph)
+        glyph.textAlign = Paint.Align.RIGHT; canvas.drawText("+", width - 26 * k, gy, glyph)
         val active = abs(offset) > 1f
         knob.color = if (active) WatchWorkoutFace.YELLOW else Color.rgb(50, 56, 55)
         label.color = if (active) Color.rgb(36, 26, 0) else WatchWorkoutFace.WHITE
-        label.textSize = 22 * k
+        label.textSize = 36 * k
         val cx = width / 2f + offset
-        canvas.drawRoundRect(RectF(cx - 46 * k, cy - 20 * k, cx + 46 * k, cy + 20 * k), 9 * k, 9 * k, knob)
-        canvas.drawText("10초", cx, cy + 8 * k, label)
+        canvas.drawRoundRect(RectF(cx - 70 * k, cy - 34 * k, cx + 70 * k, cy + 34 * k), 17 * k, 17 * k, knob)
+        canvas.drawText("10초", cx, cy + 12.3f * k, label)
     }
 }
 

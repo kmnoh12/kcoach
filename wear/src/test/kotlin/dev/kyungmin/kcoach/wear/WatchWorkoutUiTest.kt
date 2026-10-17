@@ -50,8 +50,10 @@ class WatchWorkoutUiTest {
             .putExtra("exerciseId", "leg_press").putExtra("exerciseName", "레그 프레스")
             .putExtra("running", false).putExtra("resting", true).putExtra("phase", "RESTING"))
         shadowOf(Looper.getMainLooper()).idle()
-        val button = texts(activity.window.decorView).single { it.text == "다음 세트 시작" }
-        button.performClick()
+        fun pills(view: android.view.View): List<RestPill> = (if (view is RestPill) listOf(view) else emptyList()) +
+            if (view is android.view.ViewGroup) (0 until view.childCount).flatMap { pills(view.getChildAt(it)) } else emptyList()
+        // The skip button on the rest screen carries the next set's identity.
+        pills(activity.window.decorView).single { it.contentDescription == "건너뛰기" }.performClick()
         val command = WatchWorkoutControl.decode(dispatched().getStringExtra("payload")!!)
         assertEquals(WatchWorkoutAction.NEXT_SET, command.action)
         assertEquals("next-set", command.setId)
