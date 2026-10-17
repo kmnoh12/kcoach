@@ -304,6 +304,20 @@ svg.ic{width:1em;height:1em;stroke:currentColor;fill:none;stroke-width:1.75;stro
 .dotrow i.on{animation:dotPop 4.2s cubic-bezier(.3,1.6,.5,1) infinite}
 @keyframes dotPop{0%,22%{transform:scale(0)}38%,92%{transform:scale(1)}100%{transform:scale(0)}}
 @media(prefers-reduced-motion:reduce){.rB .b1,.dotrow i.on{animation:none}}
+
+/* 2번 목표 초과: 12 → 13 → 14 → 다시 12 */
+.over .num{color:inherit}
+.ovStrip{animation:ovRoll 6.4s cubic-bezier(.4,0,.2,1) infinite !important}
+@keyframes ovRoll{0%,16%{transform:translateY(0)}22%,42%{transform:translateY(calc(var(--u)*-170))}48%,68%{transform:translateY(calc(var(--u)*-340))}76%,100%{transform:translateY(calc(var(--u)*-510))}}
+.ovBase{animation:ovBase 6.4s linear infinite}
+@keyframes ovBase{0%,16%{stroke:#8FCFBA}22%,68%{stroke:#FFB45E}76%,100%{stroke:#8FCFBA}}
+.ovLap{animation:ovLap 6.4s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes ovLap{0%,16%{stroke-dasharray:0 1313}22%,42%{stroke-dasharray:110 1313}48%,68%{stroke-dasharray:219 1313}76%,100%{stroke-dasharray:0 1313}}
+.over .ovSubA{animation:ovSubA 6.4s steps(1,end) infinite}
+.over .ovSubB{animation:ovSubB 6.4s steps(1,end) infinite}
+@keyframes ovSubA{0%,18%{opacity:1}20%,72%{opacity:0}74%,100%{opacity:1}}
+@keyframes ovSubB{0%,18%{opacity:0}20%,72%{opacity:1}74%,100%{opacity:0}}
+@media(prefers-reduced-motion:reduce){.ovStrip,.ovBase,.ovLap,.over .ovSubA,.over .ovSubB{animation:none !important}}
 </style>
 </head>
 <body>
@@ -335,11 +349,11 @@ svg.ic{width:1em;height:1em;stroke:currentColor;fill:none;stroke-width:1.75;stro
 <!-- 2 목표 초과 -->
 <div class="item">
   <div class="watch"><div class="face s1 over">
-    <svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#FFB45E" stroke-width="7"/><circle cx="216" cy="216" r="209" fill="none" stroke="#E0872E" stroke-width="7" stroke-linecap="round" stroke-dasharray="109.4 1313" transform="rotate(-90 216 216)"/></svg>
+    <svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#8FCFBA" stroke-width="7" class="ovBase"/><circle cx="216" cy="216" r="209" fill="none" stroke="#E0872E" stroke-width="7" stroke-linecap="round" stroke-dasharray="0 1313" transform="rotate(-90 216 216)" class="ovLap"/></svg>
     <div class="abs clock">02:03</div>
     <div class="abs name">덤벨 컬</div>
-    <div class="abs sub" style="color:var(--over)">목표 초과</div>
-    <div class="abs count"><span class="num">13</span><span class="of">/ 12회</span></div>
+    <div class="abs sub ovSubA"><span class="live"></span>1세트 · 자동 측정</div><div class="abs sub ovSubB" style="color:var(--over)">목표 초과</div>
+    <div class="abs count"><span class="win"><span class="strip ovStrip"><span class="d" style="color:var(--mint)">12</span><span class="d" style="color:var(--over)">13</span><span class="d" style="color:var(--over)">14</span><span class="d" style="color:var(--mint)">12</span></span></span><span class="of">/ 12회</span></div>
     <div class="hair" style="left:calc(var(--u)*96);right:calc(var(--u)*96);top:calc(var(--u)*322)"></div>
     <div class="abs metrics">
       <div><span class="v">20</span><span class="u">kg</span></div>
@@ -348,7 +362,7 @@ svg.ic{width:1em;height:1em;stroke:currentColor;fill:none;stroke-width:1.75;stro
     <div class="vsep"></div>
     <svg class="chev u" viewBox="0 0 24 12"><path d="M4 9.5L12 3l8 6.5"/></svg><svg class="chev d" viewBox="0 0 24 12"><path d="M4 2.5L12 9l8-6.5"/></svg>
   </div></div>
-  <div class="cap"><span class="tag">2 · 목표 초과</span><b>링과 숫자가 같이 색을 바꿔요</b><span>목표를 넘으면 링이 한 바퀴 다 차고, 넘은 횟수만큼 12시부터 다시 한 겹 더 쌓여요. 겹친 구간은 더 진한 앰버로 보여요(13/12면 1시 방향까지). 숫자도 주황으로 바뀌어요. 글자 "목표 초과"도 같이 떠서 색을 못 보는 사람도 알 수 있어요. 빨강은 오류와 삭제용으로 아껴요.</span></div>
+  <div class="cap"><span class="tag">2 · 목표 초과</span><b>링과 숫자가 같이 색을 바꿔요</b><span>목표를 넘으면 링이 한 바퀴 다 차고, 넘은 횟수만큼 12시부터 다시 한 겹 더 쌓여요. 시안은 12회에서 13, 14회로 올라갔다가 다시 12회로 돌아오는 장면을 반복해요(12회에서는 평소 세이지, 넘는 순간 숫자와 링이 연한 앰버로 바뀌고 두 번째 겹이 12시부터 자라요). 겹친 구간은 더 진한 앰버로 보여요(13/12면 1시 방향까지). 숫자도 주황으로 바뀌어요. 글자 "목표 초과"도 같이 떠서 색을 못 보는 사람도 알 수 있어요. 빨강은 오류와 삭제용으로 아껴요.</span></div>
 </div>
 
 <!-- 3 저장 -->
