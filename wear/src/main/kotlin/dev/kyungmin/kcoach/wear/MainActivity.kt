@@ -383,7 +383,7 @@ class MainActivity : Activity() {
             setDoneUntilMs = maxOf(setDoneUntilMs, now + 2_500L)
             if (quiet) setDone.bind(moment, clockText)
             else setDone.animate().alpha(0f).setDuration(100).withEndAction {
-                setDone.bind(moment, clockText); setDone.animate().alpha(1f).setDuration(150).start()
+                setDone.bind(moment, clockText); setDone.playEntrance(); setDone.animate().alpha(1f).setDuration(150).start()
             }.start()
         } else {
             setDoneUntilMs = now + Moment.SET_DONE_MS
@@ -398,6 +398,7 @@ class MainActivity : Activity() {
                 setDoneLayer.animate().alpha(1f).setDuration(120).withEndAction { setDone.animate().alpha(1f).setDuration(150).start() }.start()
             }
             if (setDone.look == SetDoneView.Look.DONE) setDone.check.play()
+            else setDone.playEntrance()
             buzzOnce()
         }
         handler.removeCallbacks(setDoneEnd)

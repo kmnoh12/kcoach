@@ -51,7 +51,7 @@ class WorkoutSetHighlightTest {
         }
     }
 
-    /** Read the rendered row's mint pixels, including its set number and current-set marker. */
+    /** Read the rendered row's accent (bone) pixels, including its set number and current-set marker. */
     private fun mintPixelsInSetRow(label: String): Int {
         val cell = compose.onNode(hasTextExactly(label) and hasClickAction())
         cell.performScrollTo().assertIsDisplayed()
@@ -68,7 +68,8 @@ class WorkoutSetHighlightTest {
                 val red = (color shr 16) and 255
                 val green = (color shr 8) and 255
                 val blue = color and 255
-                if (green > 140 && blue > 115 && red < 102) mint++
+                // The current-set marker is the bone accent (about 237, 232, 220); plain text is a cooler white.
+                if (red >= 225 && green >= 215 && blue <= 228 && red - blue >= 14) mint++
             }
         }
         pixels.recycle()

@@ -20,8 +20,8 @@ import org.robolectric.annotation.GraphicsMode
 class RecordCelebrationTest {
     @get:Rule val compose = createComposeRule()
 
-    private val max = RecordUi("벤치 프레스", RecordTier.MAX_WEIGHT, "85kg", "이전 80kg · +5kg")
-    private val reps = RecordUi("벤치 프레스", RecordTier.REPS, "80kg 6회", "이 무게 최고 횟수 · 이전 5회")
+    private val max = RecordUi("벤치 프레스", RecordTier.MAX_WEIGHT, "85kg", "이전 80kg · +5kg", value = 85.0, previous = 80.0)
+    private val reps = RecordUi("벤치 프레스", RecordTier.REPS, "80kg 6회", "이 무게 최고 횟수 · 이전 5회", reps = 6, previousReps = 5)
     private val estimate = RecordUi("벤치 프레스", RecordTier.ESTIMATE, "추정 1RM 101 → 103kg", "")
 
     @Test fun eachTierHasItsOwnWeightOnTheResultList() {
@@ -65,6 +65,22 @@ class RecordCelebrationTest {
         compose.onNodeWithText("85kg").assertExists()
         compose.mainClock.advanceTimeBy(6_000)
         compose.onNodeWithText("85kg").assertDoesNotExist()
+    }
+
+    @Test fun todaysBarRisesAndTheNewDotsPopInOneAfterAnother() {
+        compose.mainClock.autoAdvance = false
+        val manyMore = RecordUi("벤치 프레스", RecordTier.REPS, "80kg 11회", "이 무게 최고 횟수 · 이전 8회", reps = 11, previousReps = 8)
+        compose.setContent {
+            Column(androidx.compose.ui.Modifier.background(KColors.Bg).padding(20.dp)) { RecordList(listOf(max, manyMore)) }
+        }
+        compose.mainClock.advanceTimeBy(120)
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/record-enter-early.png")
+        compose.mainClock.advanceTimeBy(330)
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/record-enter-middle.png")
+        compose.mainClock.advanceTimeBy(1_600)
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/record-enter-done.png")
+        compose.onNodeWithText("85kg").assertExists()
+        compose.onNodeWithText("벤치 프레스 · 80kg 11회").assertExists()
     }
 
     @Test fun noBannerMeansNothingOnScreen() {

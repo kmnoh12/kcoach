@@ -16,10 +16,11 @@ object RecordPresentation {
         fun weight(kg: Double) = clean(kg * unit)
         return when (hit.kind) {
             RecordKind.HEAVIEST_WEIGHT -> RecordUi(name, RecordTier.MAX_WEIGHT, "${weight(hit.value)}$suffix",
-                "이전 ${weight(hit.previous)}$suffix · +${weight(hit.value - hit.previous)}$suffix")
+                "이전 ${weight(hit.previous)}$suffix · +${weight(hit.value - hit.previous)}$suffix",
+                value = hit.value * unit, previous = hit.previous * unit)
             RecordKind.SAME_WEIGHT_REPS -> RecordUi(name, RecordTier.REPS,
                 "${hit.weightKg?.let { "${weight(it)}$suffix " }.orEmpty()}${clean(hit.value)}회",
-                "이 무게 최고 횟수 · 이전 ${clean(hit.previous)}회")
+                "이 무게 최고 횟수 · 이전 ${clean(hit.previous)}회", reps = hit.value.toInt(), previousReps = hit.previous.toInt())
             RecordKind.ESTIMATED_ONE_REP_MAX -> RecordUi(name, RecordTier.ESTIMATE,
                 "추정 1RM ${weight(hit.previous)} → ${weight(hit.value)}$suffix", "")
             RecordKind.BEST_VOLUME -> RecordUi(name, RecordTier.ESTIMATE,

@@ -122,6 +122,30 @@ class WatchMomentScreensTest {
         controller.pause().stop().destroy()
     }
 
+    @Test fun recordScreensPlayAnEntranceAndEndOnTheFinishedPicture() {
+        val (controller, root) = start()
+        state(running = true, reps = 5, weight = 62.5)
+        state(running = false, reps = 5, weight = 62.5, phase = "READY") {
+            putExtra("recordSetId", "set-1"); putExtra("recordKind", "HEAVIEST_WEIGHT")
+            putExtra("recordWeightKg", 62.5); putExtra("recordPreviousWeightKg", 60.0)
+        }
+        idle(2_000)
+        assertEquals("The entrance has finished by the time the screen has been up for two seconds", 1f, setDone(root).entranceProgress, 0f)
+        listOf(0f, .15f, .3f, .45f, .6f).forEach { setDone(root).seekEntrance(it); measure(root); shot(root, "record-heaviest-enter-${(it * 100).toInt()}") }
+        setDone(root).seekEntrance(1f)
+        idle(2_000)
+        state(setId = "set-2", running = true, setIndex = 1, reps = 11, weight = 62.5)
+        state(setId = "set-2", running = false, setIndex = 1, reps = 11, weight = 62.5, phase = "READY") {
+            putExtra("recordSetId", "set-2"); putExtra("recordKind", "SAME_WEIGHT_REPS")
+            putExtra("recordWeightKg", 62.5); putExtra("recordReps", 11); putExtra("recordPreviousReps", 10)
+        }
+        idle(2_000)
+        assertEquals(1f, setDone(root).entranceProgress, 0f)
+        listOf(0f, .2f, .4f, .55f, .7f, .85f).forEach { setDone(root).seekEntrance(it); measure(root); shot(root, "record-reps-enter-${(it * 100).toInt()}") }
+        setDone(root).seekEntrance(1f)
+        controller.pause().stop().destroy()
+    }
+
     @Test fun aRecordReportedAfterTheSetEndedReplacesTheCheckAndANewSetEndsTheMoment() {
         val (controller, root) = start()
         state(running = true, reps = 8)

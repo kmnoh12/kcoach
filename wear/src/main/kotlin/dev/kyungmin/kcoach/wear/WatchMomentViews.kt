@@ -300,6 +300,26 @@ internal class SetDoneView(context: Context) : Grid432(context) {
     private var previousBar = 92f
     private var dots = 0
     private var litFrom = 0
+    /** 0..1 progress of the record entrance: today's bar rises, then the new dots pop in one after another. */
+    private var entrance = 1f
+    private var entranceAnimator: ValueAnimator? = null
+
+    /** Plays the entrance of a record screen; every other look, and reduced motion, shows the finished picture at once. */
+    fun playEntrance() {
+        entranceAnimator?.cancel()
+        if (look == Look.DONE || Moment.reducedMotion(context)) { entrance = 1f; invalidate(); return }
+        entrance = 0f
+        entranceAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = if (look == Look.HEAVIEST) 700L else (520L + 55L * (dots - litFrom).coerceIn(1, 8))
+            startDelay = 240L; interpolator = LinearInterpolator()
+            addUpdateListener { entrance = it.animatedValue as Float; invalidate() }
+            start()
+        }
+    }
+    /** Freezes the entrance at [fraction] (0..1); used by previews and tests to look at single frames. */
+    fun seekEntrance(fraction: Float) { entranceAnimator?.cancel(); entrance = fraction.coerceIn(0f, 1f); invalidate() }
+    val entranceProgress: Float get() = entrance
+    override fun onDetachedFromWindow() { entranceAnimator?.cancel(); entrance = 1f; super.onDetachedFromWindow() }
 
     init {
         setBackgroundColor(Color.BLACK); setWillNotDraw(false)
@@ -391,7 +411,12 @@ internal class SetDoneView(context: Context) : Grid432(context) {
                     canvas.drawRoundRect(rect, r, r, fill)
                     canvas.drawRect(rect.left, rect.bottom - r, rect.right, rect.bottom, fill)
                 }
-                bar(118f, previousBar, Moment.PREVIOUS_BAR); bar(238f, 114f, WatchWorkoutFace.SAGE)
+                bar(118f, previousBar, Moment.PREVIOUS_BAR)
+                // Today's bar rises in the first 60 percent, a touch past its height and back, like the design's "숙".
+                val rise = (entrance / .6f).coerceIn(0f, 1f)
+                val eased = 1f - (1f - rise) * (1f - rise) * (1f - rise)
+                val overshoot = if (rise >= 1f) 0f else 0f
+                bar(238f, (114f * eased + overshoot).coerceAtLeast(0f), WatchWorkoutFace.SAGE)
             }
             Look.REPS -> drawDots(canvas, k, ox, oy)
             Look.DONE -> Unit
@@ -413,10 +438,23 @@ internal class SetDoneView(context: Context) : Grid432(context) {
         val pitch = if (dots == 1) 0f else minOf(24f, 240f / (dots - 1))
         val size = if (dots == 1) 14f else minOf(14f, pitch * .6f)
         val first = 216f - pitch * (dots - 1) / 2f
+        val added = (dots - litFrom).coerceAtLeast(1)
         for (i in 0 until dots) {
-            fill.color = if (i < litFrom) WatchWorkoutFace.BONE else WatchWorkoutFace.SAGE
-            canvas.drawCircle(ox + (first + i * pitch) * k, cy, size / 2f * k, fill)
+            val isNew = i >= litFrom
+            // The earlier dots fade in together in the first 25 percent; each new dot then pops in turn.
+            val local = if (!isNew) (entrance / .25f).coerceIn(0f, 1f)
+                else ((entrance - .3f) / .7f * (added + 1) - (i - litFrom)).coerceIn(0f, 1f)
+            if (local <= 0f) continue
+            // Ease out with one overshoot so the new dots go "똥".
+            val scale = if (!isNew) local else {
+                val t = local - 1f
+                1f + 2.4f * t * t * t + 1.4f * t * t
+            }.coerceIn(0f, 1.35f)
+            fill.color = if (isNew) WatchWorkoutFace.SAGE else WatchWorkoutFace.BONE
+            fill.alpha = (255 * minOf(1f, local * 2f)).toInt()
+            canvas.drawCircle(ox + (first + i * pitch) * k, cy, size / 2f * k * scale, fill)
         }
+        fill.alpha = 255
     }
 }
 

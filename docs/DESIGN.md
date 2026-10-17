@@ -44,7 +44,7 @@
 
 ## 모션 (`Motion`)
 
-패널 300ms easeInOutCirc, 작은 변화 200ms easeInOut, 숫자는 linear 롤링, 스프링·바운스 없음. 새 화면이 열릴 때 숫자와 막대는 한 번 자라난다 (`rememberEntered`).
+패널 300ms easeInOutCirc, 작은 변화 200ms easeInOut, 숫자는 linear 롤링, 스프링·바운스 없음. 단, 기록 갱신 순간(폰 결과·워치 7·8번)만 예외: 오늘 막대가 위로 올라오고 새로 늘어난 점은 한 번 튕기며(스프링 한 번) 생긴다. 모션 줄이기 설정이면 완성된 모양으로 바로 보인다. 새 화면이 열릴 때 숫자와 막대는 한 번 자라난다 (`rememberEntered`).
 
 ## 화면별 규칙
 

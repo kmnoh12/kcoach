@@ -126,8 +126,8 @@ class ScreenshotTest {
                     listOf(2.9, 3.0, 2.8, 2.6, 2.9, 3.1, 3.3, 3.4, 3.6, 3.5))),
                 ANALYSIS_ESTIMATE_NOTE,
                 listOf(
-                    RecordUi("랫 풀 다운", RecordTier.MAX_WEIGHT, "62.5kg", "이전 60kg · +2.5kg"),
-                    RecordUi("시티드 로우", RecordTier.REPS, "50kg 12회", "이 무게 최고 횟수 · 이전 10회"),
+                    RecordUi("랫 풀 다운", RecordTier.MAX_WEIGHT, "62.5kg", "이전 60kg · +2.5kg", value = 62.5, previous = 60.0),
+                    RecordUi("시티드 로우", RecordTier.REPS, "50kg 12회", "이 무게 최고 횟수 · 이전 10회", reps = 12, previousReps = 10),
                     RecordUi("덤벨 컬", RecordTier.ESTIMATE, "추정 1RM 24 → 25kg", ""),
                 ),
             ),
