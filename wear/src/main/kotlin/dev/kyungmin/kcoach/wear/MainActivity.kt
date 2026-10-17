@@ -54,6 +54,9 @@ class MainActivity : Activity() {
     private var paired = false
     private var running = false
     private var resting = false
+    /** A rest the phone paused: the rest screen stays, with its time frozen at [pausedRestRemainingMs]. */
+    private var restPaused = false
+    private var pausedRestRemainingMs = 0L
     private var paused = false
     private var screenDimmed = false
     private var sessionId = ""
@@ -82,7 +85,8 @@ class MainActivity : Activity() {
     private lateinit var editPage: EditPageView
     private lateinit var auxPage: AuxPageView
     private lateinit var pullGlow: PullGlowView
-    private var restEditSegment = 0
+    /** 0 = the set just finished, 1 = the next set; a rest opens on the next set, the one still to be done. */
+    private var restEditSegment = 1
     private var lastWorkingReps = 0
     private var lastWorkingWeight: Double? = null
     private var wasResting = false
@@ -195,7 +199,9 @@ class MainActivity : Activity() {
     private fun applyRuntimeState(intent: Intent) {
         paired = intent.getBooleanExtra("paired", paired)
         running = intent.getBooleanExtra("running", running)
-        resting = intent.getBooleanExtra("resting", resting)
+        restPaused = intent.getBooleanExtra("restPaused", false)
+        pausedRestRemainingMs = intent.getLongExtra("pausedRestRemainingMs", 0L)
+        resting = intent.getBooleanExtra("resting", resting) || restPaused
         paused = intent.getBooleanExtra("paused", paused)
         sessionId = intent.getStringExtra("session").orEmpty()
         exerciseId = intent.getStringExtra("exerciseId").orEmpty()
@@ -604,6 +610,9 @@ class MainActivity : Activity() {
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
+    /** When the rest ends; a paused rest never gets closer, so its end keeps the same distance from now. */
+    private fun restEnd(now: Long) = if (restPaused) now + pausedRestRemainingMs else restEndAtMs
+
     private fun requestPermissionsIfNeeded() {
         val permissions = listOf(Manifest.permission.BODY_SENSORS, Manifest.permission.ACTIVITY_RECOGNITION) +
             if (Build.VERSION.SDK_INT >= 33) listOf(Manifest.permission.POST_NOTIFICATIONS) else emptyList()
@@ -641,7 +650,7 @@ class MainActivity : Activity() {
         val count = displayedCount()
         val measuring = active && !resting
         if (measuring) { lastWorkingReps = count ?: reps; lastWorkingWeight = weightKg }
-        if (resting && !wasResting) restEditSegment = 0
+        if (resting && !wasResting) restEditSegment = 1
         wasResting = resting
         face.primary(if (resting) 2 else if (active) 0 else 1)
         face.homeLayout(!active && !complete)
@@ -681,11 +690,12 @@ class MainActivity : Activity() {
                 face.hint.text = if (runtimePhase == "START_DIRECTION_WAITING") "손목 방향을 맞춰 주세요 · 눌러서 직접 시작" else "손목을 잠시 멈춰 주세요"
             }
             if (resting) {
-                val left = RestCountdownCalculator.calculate(now, restEndAtMs, restSeconds).remainingSeconds
+                val left = RestCountdownCalculator.calculate(now, restEnd(now), restSeconds).remainingSeconds
                 face.value.text = String.format("%d:%02d", left / 60, left % 60)
                 face.size(face.value, 63f); face.value.setTextColor(WatchWorkoutFace.YELLOW)
                 face.target.visibility = View.GONE
                 if (now < restFlashUntilMs) face.setSubtitle(restFlashText, WatchWorkoutFace.YELLOW, sizeSp = 15f, bold = true)
+                else if (restPaused) face.setSubtitle("휴식 · 일시정지", WatchWorkoutFace.MUTED, medium = true)
                 else face.setSubtitle("휴식 · 목표 ${restSeconds / 60}:${"%02d".format(restSeconds % 60)}", WatchWorkoutFace.YELLOW, medium = true)
                 face.bindRestCard("다음 ${setIndex + 1}세트", "${targetReps}회" + (weightKg?.let { " × ${Moment.kg(it)}kg" } ?: ""))
                 listOf(face.restCard, face.restNextLabel, face.restNextValue).forEach { it.visibility = View.VISIBLE }
@@ -754,7 +764,7 @@ class MainActivity : Activity() {
                 val previous = restEditSegment == 0
                 val repsShown = if (previous) lastWorkingReps else targetReps
                 val weightShown = if (previous) lastWorkingWeight else weightKg
-                val left = RestCountdownCalculator.calculate(now, restEndAtMs, restSeconds).remainingSeconds
+                val left = RestCountdownCalculator.calculate(now, restEnd(now), restSeconds).remainingSeconds
                 editPage.bindRest("휴식 ${left / 60}:${"%02d".format(left % 60)}", clockText,
                     if (lastFinishedSetNumber > 0) "방금 ${lastFinishedSetNumber}세트" else "방금 세트", "다음 ${setIndex + 1}세트", restEditSegment,
                     repsShown.toString(), weightShown?.let { if (it % 1.0 == 0.0) it.toInt().toString() else "%.1f".format(it) } ?: "—")
@@ -775,8 +785,8 @@ class MainActivity : Activity() {
             auxPage.bind(heartRate, if (elapsed >= 3600) "%d:%02d:%02d".format(elapsed / 3600, elapsed % 3600 / 60, elapsed % 60) else "%d:%02d".format(elapsed / 60, elapsed % 60), setIndex, clockText)
         }
         if (!active) face.heart.show(0)
-        if (resting && restEndAtMs > now) {
-            restRing.setWindow(restEndAtMs - restSeconds.coerceAtLeast(1) * 1_000L, restEndAtMs); restRing.visibility = View.VISIBLE
+        if (resting && restEnd(now) > now) {
+            restRing.setWindow(restEnd(now) - restSeconds.coerceAtLeast(1) * 1_000L, restEnd(now)); restRing.visibility = View.VISIBLE
         } else if (active && !resting && !paused && count != null && targetReps > 0) {
             restRing.setProgress(count.toFloat() / targetReps); restRing.visibility = View.VISIBLE
         } else restRing.visibility = View.GONE

@@ -2112,6 +2112,9 @@ class WearWorkoutService : Service(), SensorEventListener {
             putExtra("weightKg", weightKg ?: Double.NaN)
             putExtra("restSeconds", restSeconds)
             putExtra("restEndAtMs", restEndAtMs)
+            // A rest paused from the phone keeps the rest screen, frozen at the time that was left.
+            putExtra("restPaused", paused && pausedRestRemainingMs > 0L)
+            putExtra("pausedRestRemainingMs", pausedRestRemainingMs)
             putExtra("reps", reps)
             putExtra("heartRate", heartRate)
             putExtra("captureSampleCount", captureSampleCount.coerceAtMost(MAX_CAPTURE_SAMPLES))
