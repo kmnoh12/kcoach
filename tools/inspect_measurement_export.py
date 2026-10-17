@@ -129,7 +129,7 @@ def inspect_archive(path):
     if path.stat().st_size > 360_000_000:
         raise ValueError("Archive exceeds the selected-capture size limit")
     required = {"watch.kcs", "watch.manifest", "capture.json", "camera-frames.jsonl", "review.json", "clocks.json"}
-    allowed = required | {"reference.mp4", "evidence-manifest.json"}
+    allowed = required | {"reference.mp4", "performance.json", "evidence-manifest.json"}
     with zipfile.ZipFile(path) as archive:
         files = archive.infolist()
         names = [f.filename for f in files]

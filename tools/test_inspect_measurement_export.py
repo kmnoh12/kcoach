@@ -6,8 +6,44 @@ import tempfile
 import struct
 import unittest
 import zipfile
+import os
 
 from inspect_measurement_export import inspect_archive
+
+
+class CurrentExportCompatibilityTest(unittest.TestCase):
+    def setUp(self):
+        configured = os.environ.get("KCOACH_EVIDENCE_ZIP", "")
+        self.source = Path(configured)
+        if not configured or not self.source.is_file():
+            self.skipTest("Configure a private current-format evidence ZIP")
+
+    def repack(self, transform):
+        with zipfile.ZipFile(self.source) as archive:
+            entries = {name: archive.read(name) for name in archive.namelist()}
+        transform(entries)
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        target = Path(folder.name) / "evidence.zip"
+        with zipfile.ZipFile(target, "w") as archive:
+            for name, data in entries.items():
+                archive.writestr(name, data)
+        return target
+
+    def test_hash_indexed_performance_entry_from_current_app_is_accepted(self):
+        report = inspect_archive(self.source)
+        self.assertTrue(report["integrityVerified"])
+        self.assertFalse(report["accuracyImprovementVerified"])
+
+    def test_changed_performance_bytes_are_still_rejected(self):
+        def modify(entries):
+            entries["performance.json"] += b" "
+        with self.assertRaisesRegex(ValueError, "changed: performance.json"):
+            inspect_archive(self.repack(modify))
+
+    def test_unknown_entries_remain_rejected(self):
+        with self.assertRaisesRegex(ValueError, "Unexpected"):
+            inspect_archive(self.repack(lambda entries: entries.__setitem__("unrecognized.json", b"{}")))
 
 
 class ExportInspectionTest(unittest.TestCase):
