@@ -278,6 +278,25 @@ svg.ic{width:1em;height:1em;stroke:currentColor;fill:none;stroke-width:1.75;stro
 .s3 .check svg,.cal4 .ck svg{width:calc(var(--u)*104);height:calc(var(--u)*104);stroke-width:5.5}
 .cal4 .ck{font-size:inherit}
 @media(prefers-reduced-motion:reduce){.pay,.pay .pc,.pay .pk{animation:none;stroke-dashoffset:0}}
+
+/* 9 · 10 숫자 롤링 */
+.orbwin{position:relative;display:block;width:calc(var(--u)*150);height:calc(var(--u)*128);overflow:hidden}
+.orbstrip{display:block;animation:orbroll 3s cubic-bezier(.4,0,.2,1) infinite}
+.orbstrip span{display:flex;height:calc(var(--u)*128);align-items:center;justify-content:center;font-family:Roboto,sans-serif;font-weight:500;font-size:calc(var(--u)*128);line-height:1;color:var(--mint);transform:translateY(calc(var(--u)*-3))}
+@keyframes orbroll{0%,26%{transform:translateY(0)}33%,59%{transform:translateY(calc(var(--u)*-128))}66%,93%{transform:translateY(calc(var(--u)*-256))}100%{transform:translateY(calc(var(--u)*-384))}}
+.orbprog{animation:orbfill 3s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes orbfill{0%,26%{stroke-dasharray:628 628}33%,59%{stroke-dasharray:419 628}66%,93%{stroke-dasharray:209 628}100%{stroke-dasharray:0 628}}
+.ring .progress5{animation:fill5 5.5s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes fill5{0%,16%{stroke-dasharray:263 1313}20%,36%{stroke-dasharray:525 1313}40%,56%{stroke-dasharray:788 1313}60%,76%{stroke-dasharray:1050 1313}80%,96%{stroke-dasharray:1313 1313}100%{stroke-dasharray:263 1313}}
+.segrow i{animation:segoff 5.5s steps(1,end) infinite}
+.segrow i:nth-child(1){background:var(--mint);animation:none}
+.segrow i:nth-child(2){animation-name:seg2}.segrow i:nth-child(3){animation-name:seg3}.segrow i:nth-child(4){animation-name:seg4}.segrow i:nth-child(5){animation-name:seg5}
+@keyframes seg2{0%,18%{background:#2A2927}20%,100%{background:var(--mint)}}
+@keyframes seg3{0%,38%{background:#2A2927}40%,100%{background:var(--mint)}}
+@keyframes seg4{0%,58%{background:#2A2927}60%,100%{background:var(--mint)}}
+@keyframes seg5{0%,78%{background:#2A2927}80%,100%{background:var(--mint)}}
+@keyframes segoff{0%{background:#2A2927}}
+@media(prefers-reduced-motion:reduce){.orbstrip,.orbprog,.ring .progress5,.segrow i{animation:none}}
 </style>
 </head>
 <body>
@@ -335,7 +354,7 @@ svg.ic{width:1em;height:1em;stroke:currentColor;fill:none;stroke-width:1.75;stro
     <div class="abs sub"><b>12회</b> · <b>20kg</b></div>
     <div class="abs rec">최고 중량 갱신</div>
   </div></div>
-  <div class="cap"><span class="tag">3 · 세트 완료 (0.8초)</span><b>멈춘 숫자와 끝난 세트를 구별</b><span>세트가 끝나면 체크와 "1세트 완료"이 잠깐 떠서 기록이 남았다는 걸 알려줘요. 기록 갱신이 있을 때만 맨 아래에 한 줄이 붙어요. 소리와 긴 애니메이션은 없고, 지나가면 휴식 화면으로 넘어가요.</span></div>
+  <div class="cap"><span class="tag">3 · 세트 완료 (3.5초)</span><b>멈춘 숫자와 끝난 세트를 구별</b><span>세트가 끝나면 체크와 "1세트 완료"이 잠깐 떠서 기록이 남았다는 걸 알려줘요. 기록 갱신이 있을 때만 맨 아래에 한 줄이 붙어요. 소리와 긴 애니메이션은 없고, 지나가면 휴식 화면으로 넘어가요.</span></div>
 </div>
 
 <!-- 4 휴식 -->
@@ -443,13 +462,13 @@ svg.ic{width:1em;height:1em;stroke:currentColor;fill:none;stroke-width:1.75;stro
 </div>
 
 <div class="item">
-  <div class="watch"><div class="face cal2"><svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#1B1B1A" stroke-width="7"/></svg><div class="orbwrap"><svg class="orb" viewBox="0 0 220 220"><circle cx="110" cy="110" r="100" fill="none" stroke="#1F1F1D" stroke-width="6"/><circle cx="110" cy="110" r="100" fill="none" stroke="#8FCFBA" stroke-width="6" stroke-linecap="round" stroke-dasharray="415 628" transform="rotate(-90 110 110)"/></svg><span class="orbn">3</span></div><div class="abs clock">02:10</div><div class="abs lab3">보정</div><div class="abs msg2">시작 자세로 가만히 있어요</div><div class="abs foot"><svg viewBox="0 0 24 24" class="cam"><rect x="3" y="7" width="14" height="10" rx="2"/><path d="M17 11l4-2.5v7L17 13"/></svg>폰 카메라 촬영 중</div></div></div>
-  <div class="cap"><span class="tag">9 · 보정 · 준비</span><b>숫자가 줄어드는 원</b><span>가운데 원이 3, 2, 1을 세며 줄어요. 위에 "보정", 아래에 한 줄 안내, 맨 아래에 폰이 촬영 중이라는 표시(카메라 아이콘)가 있어요.</span></div>
+  <div class="watch"><div class="face cal2"><svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#1B1B1A" stroke-width="7"/></svg><div class="orbwrap"><svg class="orb" viewBox="0 0 220 220"><circle cx="110" cy="110" r="100" fill="none" stroke="#1F1F1D" stroke-width="6"/><circle cx="110" cy="110" r="100" fill="none" stroke="#8FCFBA" stroke-width="6" stroke-linecap="round" stroke-dasharray="415 628" transform="rotate(-90 110 110)" class="orbprog"/></svg><span class="orbwin"><span class="orbstrip"><span>3</span><span>2</span><span>1</span><span>3</span></span></span></div><div class="abs clock">02:10</div><div class="abs lab3">보정</div><div class="abs msg2">시작 자세로 가만히 있어요</div><div class="abs foot"><svg viewBox="0 0 24 24" class="cam"><rect x="3" y="7" width="14" height="10" rx="2"/><path d="M17 11l4-2.5v7L17 13"/></svg>폰 카메라 촬영 중</div></div></div>
+  <div class="cap"><span class="tag">9 · 보정 · 준비</span><b>숫자가 줄어드는 원</b><span>가운데 원이 줄어들고 숫자는 운동 중 횟수처럼 위로 슥 올라가며 3, 2, 1로 바뀌어요. 위에 "보정", 아래에 한 줄 안내, 맨 아래에 폰이 촬영 중이라는 표시(카메라 아이콘)가 있어요.</span></div>
 </div>
 
 <div class="item">
-  <div class="watch"><div class="face cal3"><svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#1B1B1A" stroke-width="7"/><circle cx="216" cy="216" r="209" fill="none" stroke="#8FCFBA" stroke-width="7" stroke-linecap="round" stroke-dasharray="788 1313" transform="rotate(-90 216 216)"/></svg><div class="abs clock">02:10</div><div class="abs lab3">보정 · 목표 5회</div><div class="abs count"><span class="num" style="font-size:calc(var(--u)*150)">3</span><span class="of">/ 5회</span></div><div class="segrow"><i class="on"></i><i class="on"></i><i class="on"></i><i class=""></i><i class=""></i></div><div class="abs msg2" style="top:calc(var(--u)*326)">평소처럼 천천히 해요</div><div class="abs foot" style="top:calc(var(--u)*364)"><svg viewBox="0 0 24 24" class="cam"><rect x="3" y="7" width="14" height="10" rx="2"/><path d="M17 11l4-2.5v7L17 13"/></svg>폰 카메라 촬영 중</div></div></div>
-  <div class="cap"><span class="tag">10 · 보정 · 측정</span><b>횟수와 남은 칸</b><span>큰 숫자가 지금까지 센 횟수이고, 아래 다섯 칸이 목표 5회 중 어디까지 왔는지 보여줘요. 평소 운동 화면과 같은 모양이라 낯설지 않아요.</span></div>
+  <div class="watch"><div class="face cal3"><svg class="ring" viewBox="0 0 432 432"><circle cx="216" cy="216" r="209" fill="none" stroke="#1B1B1A" stroke-width="7"/><circle cx="216" cy="216" r="209" fill="none" stroke="#8FCFBA" stroke-width="7" stroke-linecap="round" stroke-dasharray="788 1313" transform="rotate(-90 216 216)" class="progress5"/></svg><div class="abs clock">02:10</div><div class="abs lab3">보정 · 목표 5회</div><div class="abs count"><span class="win"><span class="strip"><span class="d">1</span><span class="d">2</span><span class="d">3</span><span class="d">4</span><span class="d">5</span><span class="d">1</span></span></span><span class="of">/ 5회</span></div><div class="segrow"><i></i><i></i><i></i><i></i><i></i></div><div class="abs msg2" style="top:calc(var(--u)*326)">평소처럼 천천히 해요</div><div class="abs foot" style="top:calc(var(--u)*364)"><svg viewBox="0 0 24 24" class="cam"><rect x="3" y="7" width="14" height="10" rx="2"/><path d="M17 11l4-2.5v7L17 13"/></svg>폰 카메라 촬영 중</div></div></div>
+  <div class="cap"><span class="tag">10 · 보정 · 측정</span><b>횟수와 남은 칸</b><span>큰 숫자가 지금까지 센 횟수이고(운동 중과 같이 숫자가 위로 슥 올라가며 바뀌어요), 아래 다섯 칸과 림 링이 목표 5회 중 어디까지 왔는지 따라서 차올라요. 시안은 1회부터 5회까지 반복해서 보여줘요. 평소 운동 화면과 같은 모양이라 낯설지 않아요.</span></div>
 </div>
 
 <div class="item">
