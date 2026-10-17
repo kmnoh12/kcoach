@@ -47,6 +47,8 @@ object KColors {
     val OnAccent = Color(0xFF04140E)
     val AccentWash = Color(0xFF0F2A22)
     val Red = Color(0xFFE5483B)
+    /** Red with a touch of coral: the filled destructive button (end without saving), white text on top. */
+    val DangerFill = Color(0xFFF0594B)
 }
 
 /** Radii: slightly rounded rectangles, never pills. */
