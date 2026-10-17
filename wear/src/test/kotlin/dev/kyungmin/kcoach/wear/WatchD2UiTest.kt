@@ -38,13 +38,13 @@ class WatchD2UiTest {
         while (true) { val next = app.nextStartedService ?: break; if (next.getStringExtra("command") == "MANUAL_SUBMIT") results += next }
         return results
     }
-    @Test fun onlyAboveTheTargetTurnsOrangeAndHeartRateHasNoBpmLabel() {
+    @Test fun onlyAboveTheTargetTurnsOrangeAndHeartRateCarriesTheSmallBpmUnit() {
         val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
         val face = views(controller.get().window.decorView).filterIsInstance<WatchWorkoutFace>().single()
         broadcast(20); assertEquals(WatchWorkoutFace.SAGE, face.value.currentTextColor)
         broadcast(21); assertEquals(WatchWorkoutFace.ORANGE, face.value.currentTextColor)
         assertEquals("112", face.heartRate.text.toString()); assertEquals(android.view.View.VISIBLE, face.heart.visibility)
-        assertFalse(views(face).filterIsInstance<TextView>().any { it.text.contains("bpm") })
+        assertEquals("The unit is the small muted label next to the rate (design 1-B)", "bpm", face.bpm.text.toString())
         controller.pause().stop().destroy()
     }
     @Test fun countCorrectionIsOnlyADraftUntilTheUserFinishesTheSet() {

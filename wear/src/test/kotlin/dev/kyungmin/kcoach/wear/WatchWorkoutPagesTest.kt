@@ -70,6 +70,28 @@ class WatchWorkoutPagesTest {
         activity.finish()
     }
 
+    @Test fun measuringShowsSetWeightAndModeOnOneLineAndOnlyTheHeartRateBelow() {
+        val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
+        val root = activity.findViewById<ViewGroup>(android.R.id.content).getChildAt(0)
+        val app = RuntimeEnvironment.getApplication()
+        app.sendBroadcast(Intent(WearWorkoutService.ACTION_STATE).setPackage(app.packageName)
+            .putExtra("session", "preview").putExtra("setId", "set").putExtra("attemptId", "attempt")
+            .putExtra("exerciseId", "curl").putExtra("exerciseName", "덤벨 컬").putExtra("setIndex", 0)
+            .putExtra("paired", true).putExtra("running", true).putExtra("resting", false)
+            .putExtra("targetReps", 12).putExtra("reps", 8).putExtra("heartRate", 112).putExtra("weightKg", 20.0)
+            .putExtra("phase", "WORKING"))
+        shadowOf(Looper.getMainLooper()).idle(); measure(root); shot(root, "measure-1b")
+        val face = descendants(root).filterIsInstance<WatchWorkoutFace>().single()
+        assertEquals("1세트 · 20kg · 자동 측정", face.subtitle.text.toString().removePrefix("\u200b"))
+        val spanned = face.subtitle.text as android.text.Spanned
+        val bright = spanned.getSpans(0, spanned.length, android.text.style.ForegroundColorSpan::class.java)
+            .map { spanned.subSequence(spanned.getSpanStart(it), spanned.getSpanEnd(it)).toString() }
+        assertEquals(listOf("1세트", "20kg"), bright)
+        assertEquals("112", face.heartRate.text.toString()); assertEquals("bpm", face.bpm.text.toString())
+        assertTrue(descendants(root).filterIsInstance<TextView>().none { it.text.toString() == "20kg" || it.text.toString() == "20" })
+        activity.finish()
+    }
+
     @Test fun restShowsTheYellowRingTheTimeTheTenSecondBarAndThePauseAndSkipButtons() {
         val app = RuntimeEnvironment.getApplication()
         WatchWorkoutOutbox(app).receivePhoneHello(listOf("1", "phone", "0", "WORKOUT_CONTROL_V1"))

@@ -51,10 +51,10 @@ internal class WatchWorkoutFace(context: Context) : FrameLayout(context) {
     val valueGhost = label(88f, SAGE, 50, 140, 270, 320, false).apply { alpha = 0f; isClickable = false; importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO }
     val value = label(88f, SAGE, 50, 140, 270, 320, false)
     val target = label(15f, SOFT, 270, 232, 382, 292)
-    /** The weight with its small "kg" on one line, as the design sets them. */
-    val weight = label(17f, WHITE, 84, 336, 176, 378, false)
     val heart = HeartView(context).also { positions[it] = android.graphics.Rect(232, 340, 266, 374); addView(it, LayoutParams(1, 1)) }
-    val heartRate = label(17f, WHITE, 268, 336, 352, 378, false)
+    /** Design 1-B: the only thing below the divider is the heart, its rate at 37.4 units and a small muted "bpm". */
+    val heartRate = label(18.7f, WHITE, 180, 336, 260, 378, false)
+    val bpm = label(10f, MUTED, 250, 336, 300, 378, false).apply { text = "bpm" }
     val hint = label(11f, MUTED, 76, 370, 356, 400).apply { isClickable = true }
     val down = label(12f, MUTED, 180, 391, 252, 419)
     val action = label(16f, Color.rgb(23, 22, 18), 76, 280, 356, 376, true).apply {
@@ -64,11 +64,11 @@ internal class WatchWorkoutFace(context: Context) : FrameLayout(context) {
         }
     }
     init {
-        listOf(weight, heartRate, clock, value, valueGhost).forEach { it.typeface = medium }
+        listOf(heartRate, clock, value, valueGhost).forEach { it.typeface = medium }
         // Design baselines: top + 0.841 x size for the sheet's line-height:1 text.
         baselines[clock] = 63.9f; baselines[title] = 100.6f; baselines[subtitle] = 134.5f
         baselines[hint] = 392f
-        fitting += listOf(value, valueGhost, hint)
+        fitting += listOf(value, valueGhost, hint, subtitle)
     }
     var showDivider = true
     init { setBackgroundColor(Color.BLACK); setWillNotDraw(false) }
@@ -200,18 +200,48 @@ internal class WatchWorkoutFace(context: Context) : FrameLayout(context) {
         place(target, left + 218 - 6, 250, left + 218 + ofWidth.toInt() + 6, 290); baseline(target, 278.8f)
     }
 
-    /** The weight with its unit and the heart with its rate, centred as the design's two groups 44 units apart. */
+    /**
+     * The heart row of design 1-B: a 35.6-unit heart, 6 units, the rate (37.4 units, medium), 6 units, "bpm" (20 units),
+     * centred as one group; the rate and "bpm" share the baseline at 373 and the heart is centred on the line box (359.9).
+     */
     fun layoutMetrics() {
-        val big = android.text.TextPaint(Paint.ANTI_ALIAS_FLAG).apply { typeface = medium; textSize = 34f }
-        val weightWidth = android.text.Layout.getDesiredWidth(weight.text, big)
-        val rateWidth = big.measureText(heartRate.text.toString())
+        val rate = android.text.TextPaint(Paint.ANTI_ALIAS_FLAG).apply { typeface = medium; textSize = 37.4f }
+        val unit = android.text.TextPaint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 20f }
+        val rateWidth = rate.measureText(heartRate.text.toString())
+        val unitWidth = unit.measureText(bpm.text.toString())
         val showHeart = heart.visibility == VISIBLE
-        val total = weightWidth + 44f + (if (showHeart) 32.4f + 6f else 0f) + rateWidth
+        val heartBox = 35.6f
+        val total = (if (showHeart) heartBox + 6f else 0f) + rateWidth + 6f + unitWidth
         var x = 216f - total / 2f
-        place(weight, (x - 4).toInt(), 336, (x + weightWidth + 4).toInt(), 378); baseline(weight, 366.6f)
-        x += weightWidth + 44f
-        if (showHeart) { place(heart, x.toInt(), 339, (x + 32.4f).toInt(), 371); x += 32.4f + 6f }
-        place(heartRate, (x - 4).toInt(), 336, (x + rateWidth + 4).toInt(), 378); baseline(heartRate, 366.6f)
+        if (showHeart) { place(heart, x.toInt(), 342, (x + heartBox).toInt(), 378); x += heartBox + 6f }
+        place(heartRate, (x - 4).toInt(), 336, (x + rateWidth + 4).toInt(), 378); baseline(heartRate, 373f)
+        x += rateWidth + 6f
+        place(bpm, (x - 4).toInt(), 336, (x + unitWidth + 4).toInt(), 378); baseline(bpm, 373f)
+    }
+
+    /**
+     * The status line of the measuring screen: "1세트 · 20kg · 자동 측정" where the set and the weight are bright and the
+     * rest is muted (design 1); [weight] is left out for body-weight exercises. A dot in front marks a live measurement.
+     */
+    fun setStatusLine(set: String, weight: String?, mode: String, dot: Int?) {
+        subtitle.setTextColor(MUTED); size(subtitle, 11f)
+        subtitle.typeface = Typeface.DEFAULT
+        subtitle.setCompoundDrawablesRelative(null, null, null, null)
+        val text = android.text.SpannableStringBuilder()
+        if (dot != null) text.append("\u200b")
+        fun bright(part: String) {
+            val start = text.length; text.append(part)
+            text.setSpan(android.text.style.ForegroundColorSpan(WHITE), start, text.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            text.setSpan(android.text.style.TypefaceSpan("sans-serif-medium"), start, text.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+        bright(set); text.append(" · ")
+        if (weight != null) { bright(weight); text.append(" · ") }
+        text.append(mode)
+        if (dot != null) {
+            val scale = minOf(width, height).coerceAtLeast(1) / 432f
+            text.setSpan(DotSpan(dot, (9f * scale).toInt().coerceAtLeast(6), (10f * scale).toInt().coerceAtLeast(6)), 0, 1, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+        subtitle.text = text
     }
 
     /** The status line under the exercise name; a small coloured dot in front of it marks a live measurement. */
@@ -245,7 +275,6 @@ internal class WatchWorkoutFace(context: Context) : FrameLayout(context) {
         if (showDivider) {
             divider.strokeWidth = 1.5f * scale
             canvas.drawLine(x + 96 * scale, y + 322.75f * scale, x + 336 * scale, y + 322.75f * scale, divider)
-            canvas.drawLine(x + 216 * scale, y + 336 * scale, x + 216 * scale, y + 374 * scale, divider)
         }
     }
     companion object {

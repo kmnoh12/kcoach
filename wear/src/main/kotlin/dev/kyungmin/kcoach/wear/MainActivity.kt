@@ -626,7 +626,7 @@ class MainActivity : Activity() {
         face.value.maxLines = if (complete) 2 else 1
         face.showDivider = measuring
         face.invalidate()
-        listOf(face.target, face.weight, face.heartRate).forEach { it.visibility = if (measuring) View.VISIBLE else View.GONE }
+        listOf(face.target, face.heartRate, face.bpm).forEach { it.visibility = if (measuring) View.VISIBLE else View.GONE }
         face.title.visibility = if (resting) View.GONE else View.VISIBLE
         face.down.visibility = View.GONE
         // The finished workout has its own screen with its own button (screen 12).
@@ -645,13 +645,12 @@ class MainActivity : Activity() {
         if (!resting) { restMorphTarget = 0f; restMorphAnimator?.cancel(); restRing.fade = 0f }
         if (active) {
             face.title.text = exerciseName
-            face.setSubtitle(
-                when { paused -> "일시정지"; manualRequired -> "${setIndex + 1}세트 · 직접 기록"; else -> "${setIndex + 1}세트 · 자동 측정" },
-                WatchWorkoutFace.MUTED, dot = if (!paused && !manualRequired && running) WatchWorkoutFace.SAGE else null)
+            if (paused) face.setSubtitle("일시정지", WatchWorkoutFace.MUTED)
+            else face.setStatusLine("${setIndex + 1}세트", weightKg?.let { "${Moment.kg(it)}kg" }, if (manualRequired) "직접 기록" else "자동 측정",
+                dot = if (!manualRequired && running) WatchWorkoutFace.SAGE else null)
             face.target.text = "/ ${targetReps}회"
             face.value.text = count?.toString() ?: "—"
             face.value.setTextColor(if (count != null && count > targetReps) WatchWorkoutFace.ORANGE else WatchWorkoutFace.SAGE)
-            face.weight.text = Moment.valueWithUnit(weightKg?.let(Moment::kg) ?: "—", "kg", 20f / 34f, WatchWorkoutFace.MUTED, gapEm = 6f / 34f)
             face.heart.show(if (resting) 0 else heartRate); face.heartRate.text = heartRate.takeIf { it > 0 }?.toString() ?: "—"
             // Past the target the line under the name says so in the over-target colour (the design's screen 2).
             if (running && !paused && count != null && count > targetReps) face.setSubtitle("목표 초과", WatchWorkoutFace.ORANGE, medium = true)
