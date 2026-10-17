@@ -29,7 +29,7 @@ enum class CameraPoseFamily(
     STAND_ELBOW_BENT_SIDE(false, 8.0, -6.0 to 100.0),
     OVERHEAD_EXTENSION_SIDE(false, 0.0, 170.0 to -70.0),
     // Start pose: upper arms straight up beside the head, forearms folded down and back behind it (the wrist is hidden by the head).
-    CABLE_OVERHEAD_EXTENSION_SIDE(false, 2.0, 180.0 to -15.0, armInward = 8.0 to 40.0),
+    CABLE_OVERHEAD_EXTENSION_SIDE(false, 2.0, 170.0 to -15.0, armInward = 2.0 to 40.0),
     // 45 degrees: a pure side view points the forearm along the camera axis, which hides the wrist and flattens its depth.
     EXTERNAL_ROTATION_OBLIQUE(true, 0.0, 0.0 to -90.0, widthScale = kotlin.math.cos(Math.toRadians(CameraOrientationPolicy.OBLIQUE))),
     PREACHER_SIDE(false, 10.0, 45.0 to 40.0),
