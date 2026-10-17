@@ -670,6 +670,15 @@ class CalibrationCameraActivity : ComponentActivity() {
                 }
                 shape.style = Paint.Style.FILL; shape.pathEffect = android.graphics.CornerPathEffect(6 * dp)
                 canvas.drawPath(path, shape); shape.pathEffect = null
+                shown.torsoSplit?.let { (top, bottom) ->
+                    // The side face, shaded darker so the body reads as turned toward the camera.
+                    val side = android.graphics.Path().apply {
+                        moveTo(gx(top), gy(top)); lineTo(gx(shown.torso[0]), gy(shown.torso[0]))
+                        lineTo(gx(shown.torso[3]), gy(shown.torso[3])); lineTo(gx(bottom), gy(bottom)); close()
+                    }
+                    shape.color = Color.argb(90, 0, 0, 0); shape.pathEffect = android.graphics.CornerPathEffect(6 * dp)
+                    canvas.drawPath(side, shape); shape.pathEffect = null; shape.color = color
+                }
             }
             shape.style = Paint.Style.FILL
             canvas.drawCircle(gx(shown.head), gy(shown.head), shown.headRadius.toFloat() * scale, shape)

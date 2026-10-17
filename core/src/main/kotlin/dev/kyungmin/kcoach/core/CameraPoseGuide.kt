@@ -60,13 +60,15 @@ data class GuideLimb(val points: List<GuidePoint>, val width: Double, val primar
 
 /** [torso] is a two-point capsule (side views) or a four-point outline (front views). */
 data class GuideFigure(val head: GuidePoint, val headRadius: Double, val torso: List<GuidePoint>, val torsoWidth: Double,
-    val limbs: List<GuideLimb>, val lowerBody: Boolean)
+    val limbs: List<GuideLimb>, val lowerBody: Boolean,
+    /** Turned views only: the edge between the chest face and the narrower side face, shoulder end first. */
+    val torsoSplit: Pair<GuidePoint, GuidePoint>? = null)
 
 object CameraPoseGuide {
     // Drillis-Contini segment lengths as a fraction of standing height.
     private const val UPPER_ARM = .186; private const val FOREARM = .146; private const val SHOULDER_WIDTH = .259
     private const val TORSO = .288; private const val HIP_WIDTH = .191; private const val THIGH = .245; private const val SHANK = .246
-    private const val HEAD_RADIUS = .065; private const val HEAD_OFFSET = .115
+    private const val CHEST_FACE_SHARE = .7; private const val HEAD_RADIUS = .065; private const val HEAD_OFFSET = .115
 
     fun familyFor(exerciseId: String): CameraPoseFamily? {
         val id = ExerciseMotionCatalog.normalizeExerciseId(exerciseId)
@@ -165,8 +167,14 @@ object CameraPoseGuide {
         }
         // Turned 45 degrees, the head sits between the two shoulders, not over the near one.
         val neck = GuidePoint((anchor.shoulder.x + far.x) / 2, anchor.shoulder.y)
-        return GuideFigure(neck + up * (HEAD_OFFSET * h), HEAD_RADIUS * h, listOf(anchor.shoulder, far, hip + GuidePoint(-f * HIP_WIDTH * family.widthScale * h, 0.0), hip), .12 * h,
-            limbs, family.lowerBody)
+        val hipFar = hip + GuidePoint(-f * HIP_WIDTH * family.widthScale * h, 0.0)
+        // Turned toward the camera, the chest face is the wide part and the side face the narrow strip on the near side.
+        val split = if (family.widthScale < 1.0) {
+            fun along(a: GuidePoint, b: GuidePoint) = GuidePoint(a.x + (b.x - a.x) * CHEST_FACE_SHARE, a.y + (b.y - a.y) * CHEST_FACE_SHARE)
+            along(far, anchor.shoulder) to along(hipFar, hip)
+        } else null
+        return GuideFigure(neck + up * (HEAD_OFFSET * h), HEAD_RADIUS * h, listOf(anchor.shoulder, far, hipFar, hip), .12 * h,
+            limbs, family.lowerBody, split)
     }
 
     private fun outward(degrees: Double, out: Double) = Math.toRadians(degrees).let { GuidePoint(out * sin(it), cos(it)) }
