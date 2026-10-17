@@ -1044,7 +1044,8 @@ class MainActivity : ComponentActivity() {
             listOf(ResultSectionUi("분석 대기", listOf("센서 기록" to "워치에서 받는 중", "자동 추정 횟수" to "센서 기록을 받으면 표시돼요")))
         } else {
             result.analyses.values.sortedWith(compareBy<SetAnalysisUi> { it.exerciseName }.thenBy { it.setIndex }).map { analysis ->
-                ResultSectionUi("${analysis.exerciseName} · 세트 ${analysis.setIndex + 1}", analysis.resultMetricRows())
+                ResultSectionUi("${analysis.exerciseName} · 세트 ${analysis.setIndex + 1}", analysis.resultMetricRows(),
+                    analysis.motionMetrics?.reps?.map { it.durationMs / 1000.0 }.orEmpty())
             }
         }
         val ui = ResultUi(

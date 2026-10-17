@@ -122,7 +122,8 @@ class ScreenshotTest {
         WorkoutResultScreen(
             ResultUi(
                 "등·이두", "68분 · 22세트 · 세션 12345678",
-                listOf(ResultSectionUi("랫 풀 다운 · 세트 1", SetAnalysisUi("lat_pull_down", "랫 풀 다운", 0, 10, 10, 10, 0.87).resultMetricRows())),
+                listOf(ResultSectionUi("랫 풀 다운 · 세트 1", SetAnalysisUi("lat_pull_down", "랫 풀 다운", 0, 10, 10, 10, 0.87).resultMetricRows(),
+                    listOf(2.9, 3.0, 2.8, 2.6, 2.9, 3.1, 3.3, 3.4, 3.6, 3.5))),
                 ANALYSIS_ESTIMATE_NOTE,
                 listOf(
                     RecordUi("랫 풀 다운", RecordTier.MAX_WEIGHT, "62.5kg", "이전 60kg · +2.5kg"),

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>폰 기록 갱신 시안</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#151514;--hair:#262624;--white:#F1EEE7;--soft:#A39F98;--muted:#94908A;--bone:#EDE8DC;--sage:#8FCFBA;--ink:#171612;--font:Roboto,"Noto Sans KR","Apple SD Gothic Neo",sans-serif}
+*{box-sizing:border-box;margin:0}
+body{background:#0c0c0b;color:var(--white);font-family:var(--font);padding:40px 20px 80px;-webkit-font-smoothing:antialiased}
+h1{font-size:20px;font-weight:500;text-align:center}.lead{color:var(--soft);font-size:13px;text-align:center;margin-top:8px}
+.row{display:flex;flex-wrap:wrap;gap:36px;justify-content:center;margin-top:36px}
+.col{width:360px}
+.cap{margin-top:14px}.cap b{display:block;font-size:14px;font-weight:500}.cap span{display:block;color:var(--soft);font-size:12.5px;line-height:1.6;margin-top:4px}.tag{color:var(--sage);font-size:11px;margin-bottom:6px;display:block}
+.phone{width:360px;background:var(--bg);border-radius:28px;padding:26px 20px 28px;box-shadow:0 0 0 2px #1b1d1d,0 0 0 8px #0f1010,0 0 0 9px #232626;min-height:640px}
+.top{display:flex;align-items:center;gap:14px;font-size:22px}
+.top svg{width:20px;height:20px;stroke:var(--white);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.name{font-size:30px;margin-top:26px;font-weight:500;letter-spacing:-.3px}.meta{color:var(--muted);font-size:13px;margin-top:6px}
+.cnt{display:flex;align-items:baseline;gap:8px;margin-top:26px}.cnt b{font-size:48px;font-weight:500;font-family:Roboto,sans-serif;line-height:1}.cnt span{font-size:15px;color:var(--soft)}
+.sec{color:var(--soft);font-size:13px;margin:20px 0 10px}
+.small{margin-top:16px}.small .r{font-size:14px;font-weight:500;color:var(--sage)}.small .d{font-size:12px;color:var(--soft);margin-top:3px}
+.small .e{font-size:12px;color:var(--muted);margin-top:14px}
+/* A: bars */
+.A{display:flex;align-items:flex-end;gap:18px;padding:4px 0 2px}
+.A .bars{display:flex;align-items:flex-end;gap:10px;height:96px}
+.A .b{width:46px;border-radius:5px 5px 0 0}.A .b0{height:70px;background:#403E3A}.A .b1{height:90px;background:var(--sage)}
+.A .lb{display:flex;gap:10px;margin-top:6px}.A .lb span{width:46px;text-align:center;font-size:11px;color:var(--muted)}.A .lb span:last-child{color:var(--sage);font-weight:700}
+.A .tx{padding-bottom:22px}.A .k{font-size:12px;color:var(--soft)}.A .v{font-size:40px;font-weight:500;font-family:Roboto,sans-serif;line-height:1.1;margin-top:4px}.A .v small{font-size:16px;color:var(--soft);font-weight:400;margin-left:3px}.A .dd{font-size:14px;color:var(--sage);margin-top:4px;font-weight:500}
+/* B: type only */
+.B{border-top:1px solid var(--hair);border-bottom:1px solid var(--hair);padding:16px 0}
+.B .k{font-size:12px;color:var(--soft)}.B .v{font-size:56px;font-weight:500;font-family:Roboto,sans-serif;line-height:1.05;margin-top:6px;letter-spacing:-1px}.B .v small{font-size:20px;color:var(--soft);font-weight:400;margin-left:4px;letter-spacing:0}.B .dd{font-size:14px;color:var(--sage);margin-top:6px;font-weight:500}
+/* C: solid bone */
+.C{background:var(--bone);color:var(--ink);border-radius:10px;padding:16px 18px}
+.C .k{font-size:12px;color:#5C574D}.C .v{font-size:46px;font-weight:500;font-family:Roboto,sans-serif;line-height:1.05;margin-top:4px}.C .v small{font-size:18px;color:#5C574D;font-weight:400;margin-left:3px}.C .dd{font-size:14px;color:#1F5C4C;margin-top:5px;font-weight:700}
+</style></head><body>
+<h1>폰 결과 화면 · 기록 갱신 시안</h1>
+<p class="lead">지금의 반투명 민트 면 + 테두리를 없애고 셋 중 하나로 바꿔요. 아래 두 줄(횟수 갱신, 추정 1RM)은 셋 다 같아요.</p>
+<div class="row">
+<div class="col"><div class="phone"><div class="top"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>운동 완료 결과</div>
+<div class="name">등·이두</div><div class="meta">68분 · 22세트</div>
+<div class="cnt"><b>3</b><span>개 갱신</span></div><div class="sec">오늘 깬 기록</div>
+<div class="A"><div><div class="bars"><i class="b b0"></i><i class="b b1"></i></div><div class="lb"><span>이전</span><span>오늘</span></div></div><div class="tx"><div class="k">최고 중량 · 랫 풀 다운</div><div class="v">62.5<small>kg</small></div><div class="dd">이전 60kg · +2.5kg</div></div></div>
+<div class="small"><div class="r">시티드 로우 · 50kg 12회</div><div class="d">이 무게 최고 횟수 · 이전 10회</div><div class="e">덤벨 컬 · 추정 1RM 24 → 25kg</div></div></div><div class="cap"><span class="tag">A · 막대</span><b>워치 7번과 같은 비교</b><span>워치의 최고 중량 갱신 화면과 같은 모양이에요. 이전과 오늘이 막대로 보이고 오른쪽에 숫자가 와요. 면도 테두리도 없어요.</span></div></div><div class="col"><div class="phone"><div class="top"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>운동 완료 결과</div>
+<div class="name">등·이두</div><div class="meta">68분 · 22세트</div>
+<div class="cnt"><b>3</b><span>개 갱신</span></div><div class="sec">오늘 깬 기록</div>
+<div class="B"><div class="k">최고 중량 · 랫 풀 다운</div><div class="v">62.5<small>kg</small></div><div class="dd">이전 60kg · +2.5kg</div></div>
+<div class="small"><div class="r">시티드 로우 · 50kg 12회</div><div class="d">이 무게 최고 횟수 · 이전 10회</div><div class="e">덤벨 컬 · 추정 1RM 24 → 25kg</div></div></div><div class="cap"><span class="tag">B · 글자만</span><b>가장 조용한 안</b><span>면도 막대도 없이 큰 숫자 하나와 위아래 가는 선뿐이에요. 다른 목록과 같은 결이라 가장 깔끔해요.</span></div></div><div class="col"><div class="phone"><div class="top"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>운동 완료 결과</div>
+<div class="name">등·이두</div><div class="meta">68분 · 22세트</div>
+<div class="cnt"><b>3</b><span>개 갱신</span></div><div class="sec">오늘 깬 기록</div>
+<div class="C"><div class="k">최고 중량 · 랫 풀 다운</div><div class="v">62.5<small>kg</small></div><div class="dd">이전 60kg · +2.5kg</div></div>
+<div class="small"><div class="r">시티드 로우 · 50kg 12회</div><div class="d">이 무게 최고 횟수 · 이전 10회</div><div class="e">덤벨 컬 · 추정 1RM 24 → 25kg</div></div></div><div class="cap"><span class="tag">C · 뼈색 면</span><b>불투명한 뼈색 한 덩어리</b><span>반투명이 아니라 단색 뼈색 면에 먹색 글자예요. 가장 크게 눈에 띄는 안이에요. 최고 중량 갱신만 이렇게 강하게 가요.</span></div></div>
+</div></body></html>

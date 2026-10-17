@@ -80,10 +80,6 @@ fun SettingsScreen(
                 Text("운동별 자세", color = KColors.White)
             }
             Text("운동마다 평소 하는 그립이나 시작 자세를 지정해요.", color = KColors.Muted, fontSize = 13.sp)
-            Spacer(Modifier.height(16.dp))
-            OutlinedButton(onClick = actions.tempo, modifier = Modifier.fillMaxWidth().height(50.dp), shape = KShape.Control) {
-                Text("운동별 템포 알림", color = KColors.White)
-            }
         }
     }
 }

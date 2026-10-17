@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -217,7 +218,7 @@ private fun NumberCard(title: String, initial: String, modifier: Modifier) {
 
 // ---- Workout result --------------------------------------------------------
 
-class ResultSectionUi(val title: String, val values: List<Pair<String, String>>)
+class ResultSectionUi(val title: String, val values: List<Pair<String, String>>, val repSeconds: List<Double> = emptyList())
 
 class ResultUi(
     val title: String,
@@ -253,12 +254,53 @@ fun WorkoutResultScreen(result: ResultUi, back: () -> Unit, toRecords: () -> Uni
         Text("세트별 센서 추정", color = KColors.Soft, fontSize = 15.sp)
         Spacer(Modifier.height(10.dp))
         result.sections.forEach {
-            SectionCard(it.title, it.values)
+            if (it.repSeconds.isNotEmpty()) {
+                Text(it.title, color = KColors.Muted, fontSize = 13.sp, modifier = Modifier.padding(bottom = 10.dp))
+                RepTempoBars(it.repSeconds)
+                Spacer(Modifier.height(14.dp))
+                SectionCard("센서 추정", it.values)
+            } else SectionCard(it.title, it.values)
             Spacer(Modifier.height(24.dp))
         }
         Spacer(Modifier.height(8.dp))
         Text(result.footnote, color = KColors.Muted, fontSize = 13.sp)
         Spacer(Modifier.height(18.dp))
         WideButton("운동 기록으로 돌아가기", KColors.SurfaceRaised, KColors.White, 58, onClick = toRecords)
+    }
+}
+
+/** How long each repetition took, one bar per rep: the fastest in sage, the slowest in bone, the rest muted. */
+@Composable
+fun RepTempoBars(seconds: List<Double>, modifier: Modifier = Modifier) {
+    val longest = seconds.max(); val shortest = seconds.min()
+    // Bars span 35 to 100 percent of the height so small differences stay visible; the numbers below are the exact values.
+    fun height(value: Double): Float = if (longest - shortest < 0.05) .7f else (.35 + .65 * (value - shortest) / (longest - shortest)).toFloat()
+    val fastest = seconds.indices.minByOrNull { seconds[it] }
+    val slowest = seconds.indices.maxByOrNull { seconds[it] }
+    fun format(value: Double) = "%.1f초".format(java.util.Locale.US, value)
+    Column(modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth().height(64.dp), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.Bottom) {
+            seconds.forEachIndexed { index, value ->
+                val color = when {
+                    seconds.size < 2 -> KColors.Muted
+                    index == slowest -> KColors.Accent
+                    index == fastest -> KColors.Sage
+                    else -> KColors.Muted.copy(alpha = .45f)
+                }
+                Box(Modifier.weight(1f).fillMaxHeight(height(value)).clip(RoundedCornerShape(2.dp)).background(color))
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(Modifier.fillMaxWidth()) {
+            Text("한 회 걸린 시간", color = KColors.Muted, fontSize = 12.sp, modifier = Modifier.weight(1f))
+            Text("평균 ${format(seconds.average())}", color = KColors.White, fontSize = 12.sp)
+        }
+        if (seconds.size >= 2) {
+            Spacer(Modifier.height(4.dp))
+            Row(Modifier.fillMaxWidth()) {
+                Text("가장 빠른 ${format(seconds[fastest!!])}", color = KColors.Sage, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                Text("가장 느린 ${format(seconds[slowest!!])}", color = KColors.Soft, fontSize = 12.sp)
+            }
+        }
     }
 }
