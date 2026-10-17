@@ -576,8 +576,13 @@ class WearWorkoutService : Service(), SensorEventListener {
                 }
             }
             "REST_ADJUST", "EDIT_SET" -> {
-                if (!resting) return
                 val adjusting = intent.getStringExtra(EXTRA_COMMAND) == "REST_ADJUST"
+                val editingCurrent = !adjusting && intent.getStringExtra("which") == "CURRENT"
+                if (editingCurrent) {
+                    val weight = intent.getDoubleExtra("weightKg", Double.NaN)
+                    if (!running || resting || paused || calibrationStage != null ||
+                        intent.getIntExtra("reps", -1) != -1 || !weight.isFinite() || weight < 0) return
+                } else if (!resting) return
                 if (!adjusting && intent.getIntExtra("reps", -1) == -1 && intent.getDoubleExtra("weightKg", Double.NaN).isNaN()) return
                 val delta = intent.getIntExtra("deltaSeconds", 0)
                 val now = System.currentTimeMillis()
@@ -598,6 +603,7 @@ class WearWorkoutService : Service(), SensorEventListener {
                 }
                 editStatus = ""
                 if (adjusting) { restSeconds = seconds; restEndAtMs = end }
+                if (editingCurrent) weightKg = request.weightKg
                 check(checkpoint())
                 replayWorkoutControls()
             }
