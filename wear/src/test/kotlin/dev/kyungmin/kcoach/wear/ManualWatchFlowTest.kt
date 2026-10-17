@@ -34,4 +34,63 @@ class ManualWatchFlowTest {
         assertTrue(ManualSetOutbox(RuntimeEnvironment.getApplication()).pending().isEmpty())
         restored.destroy()
     }
+    private fun request(type: String) = Intent().putExtra("command", type).putExtra("session", "session")
+        .putExtra("setId", "next").putExtra("attemptId", "attempt")
+    private fun state() = shadowOf(RuntimeEnvironment.getApplication()).broadcastIntents.last { it.action == WearWorkoutService.ACTION_STATE }
+    private fun rest(service: WearWorkoutService) {
+        service.onStartCommand(request("START").putExtra("exerciseId", "leg_press"), 0, 1)
+        service.onStartCommand(request("REST").putExtra("restSeconds", 60)
+            .putExtra("restEndAtMs", System.currentTimeMillis() + 60_000), 0, 2)
+    }
+    @Test fun restAdjustClampsBothValuesAndQueuesExactDeadlineDurably() {
+        val controller = Robolectric.buildService(WearWorkoutService::class.java).create()
+        val service = controller.get()
+        try {
+            rest(service)
+            val original = state().getLongExtra("restEndAtMs", 0)
+            service.onStartCommand(request("REST_ADJUST").putExtra("deltaSeconds", 10), 0, 3)
+            val outbox = WatchWorkoutOutbox(RuntimeEnvironment.getApplication())
+            val first = outbox.pending().single()
+            assertEquals(WatchWorkoutAction.REST_ADJUST, first.action)
+            assertEquals(70, first.restSeconds)
+            assertEquals(original + 10_000, first.restEndAtMs)
+            assertEquals(first.restEndAtMs, state().getLongExtra("restEndAtMs", 0))
+            val beforeUpper = System.currentTimeMillis()
+            service.onStartCommand(request("REST_ADJUST").putExtra("deltaSeconds", Int.MAX_VALUE), 0, 4)
+            assertEquals(1800, state().getIntExtra("restSeconds", -1))
+            assertTrue(state().getLongExtra("restEndAtMs", 0) in (beforeUpper + 1_800_000)..(System.currentTimeMillis() + 1_800_000))
+            val beforeLower = System.currentTimeMillis()
+            service.onStartCommand(request("REST_ADJUST").putExtra("deltaSeconds", Int.MIN_VALUE), 0, 5)
+            assertEquals(0, state().getIntExtra("restSeconds", -1))
+            assertTrue(state().getLongExtra("restEndAtMs", 0) in beforeLower..System.currentTimeMillis())
+            assertEquals(3, WatchWorkoutOutbox(RuntimeEnvironment.getApplication()).pending().size)
+            assertEquals("PENDING", state().getStringExtra("manualStatus"))
+        } finally { controller.destroy() }
+    }
+    @Test fun editsForwardPreviousAndNextWithoutInventingLocalResultsAndAckIsVisible() {
+        val controller = Robolectric.buildService(WearWorkoutService::class.java).create()
+        val service = controller.get()
+        try {
+            service.onStartCommand(request("START").putExtra("exerciseId", "leg_press"), 0, 1)
+            service.onStartCommand(request("EDIT_SET").putExtra("which", "NEXT").putExtra("reps", 9), 0, 2)
+            assertTrue(WatchWorkoutOutbox(RuntimeEnvironment.getApplication()).pending().isEmpty())
+            rest(service)
+            service.onStartCommand(request("EDIT_SET").putExtra("which", "PREVIOUS")
+                .putExtra("reps", 0).putExtra("weightKg", 35.0), 0, 3)
+            service.onStartCommand(request("EDIT_SET").putExtra("which", "NEXT")
+                .putExtra("reps", -1).putExtra("weightKg", 40.0), 0, 4)
+            val pending = WatchWorkoutOutbox(RuntimeEnvironment.getApplication()).pending()
+            assertEquals(listOf("PREVIOUS", "NEXT"), pending.map { it.which })
+            assertEquals(0, pending[0].reps); assertEquals(35.0, pending[0].weightKg!!, 0.0)
+            assertEquals(-1, pending[1].reps); assertEquals(40.0, pending[1].weightKg!!, 0.0)
+            assertEquals(pending, WatchWorkoutOutbox(RuntimeEnvironment.getApplication()).pending())
+            val command = pending.last()
+            service.onStartCommand(request("WORKOUT_CONTROL_ACK").putExtra("payload", WatchWorkoutControlAck(
+                command.commandId, command.sessionId, command.setId, command.attemptId, WatchWorkoutControlStatus.STALE).encode()), 0, 5)
+            assertEquals("STALE", state().getStringExtra("manualStatus"))
+            service.onStartCommand(request("EDIT_SET").putExtra("session", "other").putExtra("which", "NEXT").putExtra("reps", 7), 0, 6)
+            assertEquals(1, WatchWorkoutOutbox(RuntimeEnvironment.getApplication()).pending().size)
+        } finally { controller.destroy() }
+    }
+
 }
