@@ -11,6 +11,23 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class CaptureClockStoreTest {
+    @Test fun cameraSessionPrefixNeedsAnExplicitUpgradedWatchCapability() {
+        val store = CaptureClockStore(RuntimeEnvironment.getApplication())
+        fun reply(capture: String, format: String?) {
+            val sent = 2_000_000_000L
+            val request = store.prepareProbe(capture, "START", sent, "phone", true).getOrThrow()
+            val response = ClockProbeProtocol.reply(request, sent - 990_000_000, sent - 988_000_000, "watch", true)
+            val capabilities = mapOf("pairedReferenceSupported" to "true", "captureFormats" to "1,2") +
+                (format?.let { mapOf("calibrationCameraStateFormat" to it) } ?: emptyMap())
+            store.acceptReply(response.copy(payload = response.payload + capabilities), sent + 22_000_000, "phone").getOrThrow()
+        }
+        reply("calibration-paired-old", null)
+        assertFalse(store.calibrationCameraStateSupported("calibration-paired-old"))
+        reply("calibration-paired-new", "1")
+        assertTrue(store.calibrationCameraStateSupported("calibration-paired-new"))
+        reply("calibration-paired-new", null)
+        assertFalse(store.calibrationCameraStateSupported("calibration-paired-new"))
+    }
     @Test fun explicitlyDeclaredDirectionNeedsSupportFromEveryReplyInOneWatchEpoch() {
         val store = CaptureClockStore(RuntimeEnvironment.getApplication())
         fun reply(id: String, sentNs: Long, format: String?, epoch: String = "watch") {

@@ -235,11 +235,12 @@ class CalibrationReviewActivity : ComponentActivity() {
         content.addView(button("확인한 구간 저장") {
             if (pauseStart != null) { toast("표시하던 정지의 끝을 지정하거나 구간 표시를 취소해 주세요."); return@button }
             reviews.saveCycles(id, cycles, alignment.isChecked, review?.revision ?: 0, simultaneous.isChecked, nonRepIntervals).onSuccess {
+                worker.execute { CalibrationPatternSafetyMonitor(applicationContext).check(id) }
                 review = it
                 observedMetricsText?.text = observedText(it)
                 toast(if (ExerciseMeasurementContracts.resolve(selected.exerciseId).recipe == MeasurementRecipe.SQUAT)
                     "영상 확인 반복 ${it.references.size}개 저장 · 워치 단독 횟수는 수동 입력이에요."
-                    else "완전 반복 ${it.references.size}개 · 제외 구간 ${it.nonRepIntervals.size}개 저장 · 보정 자료 조건 통과 ${it.references.count { ref -> ref.eligibleForLearning }}개")
+                    else "완전 반복 ${it.references.size}개 · 제외 구간 ${it.nonRepIntervals.size}개를 저장했어요. 촬영 품질과 횟수 일치는 후보 생성 전에 다시 확인해요")
             }.onFailure { toast("구간·총 횟수 또는 영상 상태를 다시 확인해 주세요.") }
         })
         content.addView(button("원본 수신 상태 새로고침") { showCapture(id) })
@@ -251,7 +252,8 @@ class CalibrationReviewActivity : ComponentActivity() {
                     if (isFinishing || isDestroyed) return@runOnUiThread
                     built.onSuccess {
                         startActivity(Intent(this, PatternCandidatesActivity::class.java).putExtra("candidateId", it.profile.id))
-                    }.onFailure { toast("보정 후보를 만들지 못했어요. 워치 방향·원본 수신·동작 정렬과 확인된 반복 3회 이상을 확인해 주세요.") }
+                    }.onFailure { error -> toast(error.message?.takeIf { it.contains("보정에 적용하지 않아요") }
+                        ?: "보정 후보를 만들지 못했어요. 촬영 방향·관절 가시성, 세 가지 횟수 일치와 확인 반복 ${CalibrationSafety.MIN_REPS}회 이상을 확인해 주세요") }
                 }
             }
         }) else content.addView(text("이 운동은 손목 자동 측정 대상이 아니에요. 영상과 실제 횟수는 보관하며 워치 횟수 보정 후보를 만들지 않아요."))

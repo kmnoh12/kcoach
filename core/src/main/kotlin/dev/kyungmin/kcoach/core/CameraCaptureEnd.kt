@@ -14,7 +14,7 @@ class CameraCaptureEnd(private val holdNs: Long = 2_500_000_000L) {
 
     /** Missing/ambiguous poses and gaps cannot count as observed stillness. Camera time, never processing time. */
     fun observe(ns: Long, image: List<CameraLandmark>?, world: List<CameraLandmark>?,
-        guide: CameraCaptureGuide, left: Boolean): Long? {
+        guide: CameraCaptureGuide, left: Boolean, allowEnd: Boolean = true): Long? {
         endCameraNs?.let { return it }
         val previous = lastNs
         lastNs = ns
@@ -23,7 +23,7 @@ class CameraCaptureEnd(private val holdNs: Long = 2_500_000_000L) {
         val baseline = initial ?: image.also { initial = it }
         // The same tolerance is used for departure and stillness, not a rep ROM threshold.
         if (drift(baseline, image, guide.required) > POSITION_DRIFT || !guide.startReady(image, world, left)) moved = true
-        if (!moved || !guide.startReady(image, world, left) || drift(baseline, image, guide.required) > POSITION_DRIFT) {
+        if (!allowEnd || !moved || !guide.startReady(image, world, left) || drift(baseline, image, guide.required) > POSITION_DRIFT) {
             resetHold(); return null
         }
         val held = anchor

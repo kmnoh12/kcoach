@@ -104,6 +104,8 @@ object ReviewedPatternValidation {
         // Missing predictions cost expected+1 for the improvement decision only. This
         // explicit refusal penalty is not reported as measured raw MAE or hidden as zero.
         fun penalty(row: PatternValidationRow, count: Int?) = count?.let { abs(it - row.expected) } ?: (row.expected + 1)
+        if (rows.any { penalty(it, it.candidateCount) > penalty(it, it.baselineCount) ||
+                penalty(it, it.causalCount) > penalty(it, it.baselineCount) }) failures += "capture_regression"
         val candidatePenalty = rows.sumOf { penalty(it, it.candidateCount) }
         val baselinePenalty = rows.sumOf { penalty(it, it.baselineCount) }
         if (size == 0 || candidatePenalty >= baselinePenalty) failures += "no_strict_improvement"

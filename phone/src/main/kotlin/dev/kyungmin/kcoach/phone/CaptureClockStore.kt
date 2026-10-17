@@ -76,6 +76,13 @@ class CaptureClockStore(private val context: Context) {
         }
     }
 
+    fun calibrationCameraStateSupported(captureId: String): Boolean = synchronized(lock) {
+        val values = JSONArray(prefs.getString(samplesKey(captureId, "START"), "[]")!!)
+        pairedCaptureSupported(captureId) && (0 until values.length()).all {
+            WireCodec.decode(values.getJSONObject(it).getString("reply")).payload["calibrationCameraStateFormat"] == "1"
+        }
+    }
+
     fun patternShadowSupported(captureId: String): Boolean = synchronized(lock) {
         val values = JSONArray(prefs.getString(samplesKey(captureId, "START"), "[]")!!)
         val replies = (0 until values.length()).map { WireCodec.decode(values.getJSONObject(it).getString("reply")) }

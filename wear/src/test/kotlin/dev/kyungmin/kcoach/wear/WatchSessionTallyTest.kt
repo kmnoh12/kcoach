@@ -25,6 +25,18 @@ class WatchSessionTallyTest {
         assertNull("No records were announced", summary.recordsBroken)
     }
 
+    @Test fun recordsCountDistinctSetsSurviveRestartAndIgnoreOtherSessions() {
+        tally.observe("records", "a", "1", true, false, false, 8, 20.0, 0, 1_000L)
+        tally.noteSetRecord("records", "a")
+        tally.noteSetRecord("records", "a")
+        tally.noteSetRecord("wrong", "b")
+        WatchSessionTally::class.java.getDeclaredField("instance").apply { isAccessible = true }.set(null, null)
+        tally.noteSetRecord("records", "a")
+        tally.noteSetRecord("records", "b")
+        tally.noteRecord("records", "exercise") // legacy UI callback must not add a third record
+        assertEquals(2, tally.finish("records", 2_000L)!!.recordsBroken)
+    }
+
     @Test fun calibrationAndUnknownSessionsLeaveNothingBehind() {
         tally.observe("calibration-1", "", "", true, false, false, 5, null, 100, 1_000L)
         assertNull(tally.finish("calibration-1", 2_000L))

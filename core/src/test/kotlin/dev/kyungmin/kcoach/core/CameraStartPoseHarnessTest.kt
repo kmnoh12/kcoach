@@ -26,7 +26,8 @@ class CameraStartPoseHarnessTest {
     }
 
     /** Landmarks of a user holding [family]'s start pose. Near-side joints get [near]; the hidden side gets [far]. */
-    private fun landmarks(family: CameraPoseFamily, left: Boolean, near: Double, far: Double): Pair<List<CameraLandmark>, List<CameraLandmark>> {
+    private fun landmarks(c: Case, left: Boolean, near: Double, far: Double): Pair<List<CameraLandmark>, List<CameraLandmark>> {
+        val family = c.family
         val bodyHeight = 450.0
         val shoulder = GuidePoint(300.0, 200.0)
         val anchor = if (family.front) GuideAnchor(shoulder, GuidePoint(shoulder.x - .259 * bodyHeight, shoulder.y), bodyHeight, 1)
@@ -52,7 +53,7 @@ class CameraStartPoseHarnessTest {
             val primary = arms.last { true }; val secondary = arms.first()
             put(idx(11, left), primary.points[0], near); put(idx(13, left), primary.points[1], near); put(idx(15, left), primary.points[2], near)
             put(idx(11, !left), secondary.points[0], far); put(idx(13, !left), secondary.points[1], far); put(idx(15, !left), secondary.points[2], far)
-            put(idx(23, left), figure.torso[1], near); put(idx(23, !left), figure.torso[1], far)
+            put(idx(23, left), figure.torso[3], near); put(idx(23, !left), figure.torso[2], far)
             figure.limbs.filter { it.width >= .06 * bodyHeight }.let { legs ->
                 if (legs.size == 2) {
                     put(idx(23, left), legs[1].points[0], near); put(idx(25, left), legs[1].points[1], near); put(idx(27, left), legs[1].points[2], near)
@@ -60,7 +61,41 @@ class CameraStartPoseHarnessTest {
                 }
             }
         }
-        return image to world
+        // The drawing is a 2D projection. Give it anatomical depth, rather than pretending a side
+        // drawing is a front-facing 3D body. Angles and source pose proportions remain unchanged.
+        if (!family.front) {
+            for (onLeft in listOf(true, false)) {
+                val sign = if (onLeft) 1.0 else -1.0
+                for (base in listOf(11, 13, 15, 23, 25, 27)) {
+                    val index = idx(base, onLeft)
+                    val p = image[index]
+                    if ((p.visibility ?: 0.0) == 0.0) continue
+                    val reference = image[idx(11, onLeft)]
+                    world[index] = world[index].copy(x = sign * (if (base < 23) .13 else .095),
+                        y = (p.y - image[idx(11, left)].y) * h / bodyHeight,
+                        z = -(p.x - reference.x) * w / bodyHeight)
+                }
+            }
+        }
+        if (c.id == "external_rotation") {
+            // The thumbnail's inward horizontal forearm represents forward reach in 3D,
+            // not a wrist crossing through the chest in the frontal plane.
+            for ((elbow, wrist) in listOf(13 to 15, 14 to 16)) {
+                world[wrist] = world[elbow].copy(z = world[elbow].z - .146)
+            }
+        }
+        if (c.id == "chest_press") {
+            // Machine handles/elbows sit outside the torso, rather than inside its silhouette.
+            for (onLeft in listOf(true, false)) for (base in listOf(13, 15)) {
+                val index = idx(base, onLeft)
+                world[index] = world[index].copy(x = if (onLeft) .20 else -.20)
+            }
+        }
+        val target = c.guide.viewTarget!!
+        val yaw = Math.toRadians(target.degrees * if (left) -1 else 1)
+        val rotated = world.map { p -> p.copy(x = p.x * kotlin.math.cos(yaw) - p.z * kotlin.math.sin(yaw),
+            z = p.x * kotlin.math.sin(yaw) + p.z * kotlin.math.cos(yaw)) }
+        return image to rotated
     }
 
     /** Scales confidences so that the gate's fixed 0.65 acts as [threshold]; lets the report ask "what if the bar were X". */
@@ -76,7 +111,7 @@ class CameraStartPoseHarnessTest {
         val failures = mutableListOf<String>()
         listOf(true, false).forEach { left ->
             cases(left).filter { it.id !in needsFieldData }.forEach { c ->
-                val (image, world) = landmarks(c.family, left, near = .95, far = .30)
+                val (image, world) = landmarks(c, left, near = .95, far = .95)
                 if (!c.guide.startReady(image, world, left))
                     failures += "${c.id} (${c.family}, left=$left): ${c.guide.diagnose(image, world, left).blocker}"
             }
@@ -84,25 +119,25 @@ class CameraStartPoseHarnessTest {
         assertTrue(failures.isEmpty(), "Start poses the app asks for but its own gate rejects:\n" + failures.joinToString("\n"))
     }
 
-    @Test fun sideViewExercisesNeverRequireAJointThatTheBodyHides() {
-        val offenders = mutableListOf<String>()
+    @Test fun obliqueViewsRequireBothTorsoSidesEvenThoughOnlyTheWatchArmIsCounted() {
         listOf(true, false).forEach { left ->
-            cases(left).filter { !it.family.front && it.id !in needsFieldData }.forEach { c ->
-                val hidden = c.guide.required.filter { farSide(it, left) }
-                if (hidden.isNotEmpty()) offenders += "${c.id} (${c.family}, left=$left) requires far-side joints $hidden"
+            cases(left).forEach { c ->
+                assertTrue(c.guide.required.containsAll(CameraOrientationPolicy.torsoJoints), c.id)
+                val (image, world) = landmarks(c, left, near = .95, far = .30)
+                if (!c.family.front) assertFalse(c.guide.startReady(image, world, left), c.id)
             }
         }
-        assertTrue(offenders.isEmpty(), offenders.joinToString("\n"))
     }
 
     @Test fun diagnosisNamesTheJointThatBlocksReadiness() {
         val c = cases(true).first { it.family == CameraPoseFamily.STAND_ARMS_DOWN_SIDE }
-        val (image, world) = landmarks(c.family, true, near = .95, far = .30)
+        val (image, world) = landmarks(c, true, near = .95, far = .95)
         assertTrue(c.guide.diagnose(image, world, true).ready)
         val weak = image.toMutableList().also { it[13] = it[13].copy(visibility = .40) }
         val diagnosis = c.guide.diagnose(weak, world, true)
         assertFalse(diagnosis.ready)
-        assertTrue(diagnosis.blocker!!.contains("13"), diagnosis.blocker)
+        assertEquals(13, diagnosis.joints.first { !it.ok }.index)
+        assertEquals("팔이 몸에 가려져요", diagnosis.blocker)
     }
 
     /** Writes the per-exercise threshold sensitivity table to build/reports/camera-start-pose.md. */
@@ -110,19 +145,19 @@ class CameraStartPoseHarnessTest {
         val thresholds = listOf(.40, .50, .60, .65, .70, .80)
         val ladder = (50..95 step 5).map { it / 100.0 }
         val out = StringBuilder("# 시작 자세 통과율 (합성 랜드마크)\n\n")
-        out.append("근거 한계: 관절 신뢰도는 합성값이다. 가까운 쪽 관절을 0.50~0.95 균등 구간, 몸에 가려지는 반대쪽을 0.30으로 가정했다. ")
+        out.append("근거 한계: 관절 신뢰도는 합성값이다. 가까운 쪽 관절을 0.50~0.95 균등 구간, 가려진 반대쪽을 0.30으로 가정했다. 새 요 판정은 양어깨·골반이 필요하므로 몸통 반대쪽이 가려진 사선은 의도적으로 거절한다. ")
         out.append("실제 모델 분포가 아니라 \"어떤 종목이 기준값과 무관하게 영영 통과 못 하는가\"를 보는 표다.\n\n")
         out.append("| 종목 | 자세 | 시점 | 필수 관절 | ").append(thresholds.joinToString(" | ") { "≥%.2f".format(it) }).append(" |\n")
         out.append("|---|---|---|---|").append(thresholds.joinToString("") { "---|" }).append("\n")
         cases(true).forEach { c ->
             val cells = thresholds.map { t ->
                 val passed = ladder.count { level ->
-                    val (image, world) = landmarks(c.family, true, near = level, far = .30)
+                    val (image, world) = landmarks(c, true, near = level, far = .30)
                     c.guide.startReady(rescaled(image, t), world, true)
                 }
                 "%d%%".format(passed * 100 / ladder.size)
             }
-            out.append("| ${c.id} | ${c.family} | ${if (c.family.front) "정면" else "측면"} | ${c.guide.required.sorted().joinToString(",")} | ")
+            out.append("| ${c.id} | ${c.family} | ${c.guide.viewTarget!!.label} | ${c.guide.required.sorted().joinToString(",")} | ")
                 .append(cells.joinToString(" | ")).append(" |\n")
         }
         val file = File("build/reports/camera-start-pose.md").apply { parentFile.mkdirs() }
@@ -133,13 +168,14 @@ class CameraStartPoseHarnessTest {
     @Test fun diagnosisReportsTheElbowAngleForRotationLiftsThatHaveNoMovementMetric() {
         val c = cases(true).first { it.id == "external_rotation" }
         assertNull(c.guide.metric)
-        val (image, world) = landmarks(c.family, true, near = .95, far = .30)
+        val (image, world) = landmarks(c, true, near = .95, far = .95)
         val ok = c.guide.diagnose(image, world, true)
         assertNotNull(ok.angle); assertEquals(true, ok.atRest); assertTrue(ok.ready)
         // A forearm pointing along the camera axis flattens the model's depth estimate; the overlay must show that angle.
         val straightArm = world.toMutableList().also { it[15] = it[13].copy(x = it[13].x - (it[11].x - it[13].x), y = it[13].y - (it[11].y - it[13].y)) }
         val bad = c.guide.diagnose(image, straightArm, true)
         assertEquals(false, bad.atRest); assertFalse(bad.ready)
-        assertTrue(bad.blocker!!.contains("75~105"), bad.blocker)
+        assertEquals(75.0..105.0, bad.requiredBand)
+        assertEquals("안내된 시작 자세로 팔과 다리를 맞춰 주세요", bad.blocker)
     }
 }

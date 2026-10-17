@@ -12,6 +12,7 @@ import java.util.concurrent.TimeUnit
 
 class PhoneWearBridge(private val context: Context) {
     private val emulatorBridge = EmulatorBridgeClient { _, _ -> }
+    private val recordOutbox = PhoneRecordOutbox(context)
     private val commandOutbox = PhoneCommandOutbox(context)
     private val queueLock = Any()
     private val pendingMessages = linkedMapOf<String, Pair<String, String>>()
@@ -76,6 +77,7 @@ class PhoneWearBridge(private val context: Context) {
     }
 
     fun retryPendingCommand() {
+        recordOutbox.pending()?.let { dispatch(WearSync.PATH_SET_RECORD, it) }
         commandOutbox.pendingForDelivery()?.let { dispatch(WearSync.PATH_COMMAND, it) }
         PatternTransferOutbox(context).pending().onSuccess { commands -> commands.forEach {
             dispatch(WearSync.PATH_PATTERN_PROFILE, it.encode())
@@ -102,6 +104,10 @@ class PhoneWearBridge(private val context: Context) {
     }
 
     private fun sendPath(path: String, payload: String) {
+        if (path == WearSync.PATH_SET_RECORD) {
+            recordOutbox.enqueue(payload)?.let { dispatch(path, it) }
+            return
+        }
         val durable = if (path == WearSync.PATH_COMMAND) commandOutbox.enqueue(WorkoutWearingStore(context).bind(payload).getOrThrow()) else payload
         dispatch(path, durable)
     }
@@ -145,6 +151,8 @@ class PhoneWearBridge(private val context: Context) {
                     ?.singleOrNull { it.commandId == requested.commandId } ?: continue
                 if (current != requested) continue
                 current.encode()
+            } else if (path == WearSync.PATH_SET_RECORD) {
+                recordOutbox.pending()?.takeIf { it == message.second } ?: continue
             } else message.second
             runCatching {
                 val nodes = Tasks.await(Wearable.getNodeClient(context).connectedNodes, 2, TimeUnit.SECONDS)

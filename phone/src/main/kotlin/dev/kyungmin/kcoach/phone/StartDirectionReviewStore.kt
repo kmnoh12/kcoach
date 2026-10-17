@@ -73,7 +73,7 @@ internal class StartDirectionReviewStore(context: Context) {
             StartDirectionCandidateInfo(it.getString("id"), it.getLong("version"))
         }.toList()
     } }
-    private fun reviewId(id: String): String = if (id.startsWith("paired-"))
+    private fun reviewId(id: String): String = if (CapturePurpose.forSession(id) == CapturePurpose.PAIRED_REFERENCE)
         CalibrationCaptureStore(app).sensor(id).getOrNull()?.validated?.captureId ?: id else id
     fun reviewRevision(id: String): Result<Long> {
         val sourceId = reviewId(id)

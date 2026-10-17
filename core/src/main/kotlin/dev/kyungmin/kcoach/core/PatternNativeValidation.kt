@@ -96,6 +96,8 @@ object PatternNativeValidation {
                 case.baselineWatchCount.takeIf { baselineReason == null }, trace?.let { SensorCaptureFormat.sha256(PatternTrialTraceCodec.encode(it).toByteArray(Charsets.UTF_8)) },
                 finalReason, latency, errors, trace?.processingP95UpperNs)
         }
+        if (rows.any { row -> row.predicted == null || row.baseline == null ||
+                abs(row.predicted - row.expected) > abs(row.baseline - row.expected) }) failures += "native_capture_regression"
         val total = rows.size + unscored.size
         val reps = rows.sumOf { it.expected } + unscored.mapNotNull { it.expected }.sum()
         val days = rows.filter { it.exclusionReason == null }.map { it.dayId }.distinct().size

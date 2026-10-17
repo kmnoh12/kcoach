@@ -11,6 +11,34 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class PatternProfileStoreTest {
+    @Test fun oldReceiptsWithoutCameraSafetyEvidenceAreQuarantinedAndCanStillBeDisabled() {
+        val app = RuntimeEnvironment.getApplication()
+        val store = PatternProfileStore(app, "watch-A")
+        val runtime = runtime(1)
+        val command = PatternProfileCommand("old", PatternProfileOperation.ACTIVATE, runtime, 0,
+            PatternValidationEvidence("c".repeat(64), "d".repeat(64)))
+        val envelope = WireCodec.decode(command.encode())
+        val oldEncoded = WireCodec.encode(envelope.copy(payload = envelope.payload - "safetyVersion"))
+        val old = PatternProfileCommand.decode(oldEncoded)
+        assertEquals(0, old.evidence!!.safetyVersion)
+        assertTrue(store.stage(old).isFailure)
+        store.stage(command).getOrThrow()
+        val frozen = store.beginSet(runtime.compatibility, "s", "set", "attempt", "clock", true).getOrThrow()!!
+        store.confirmUsed(frozen, 10, 11).getOrThrow()
+        val prefs = app.getSharedPreferences("reviewed-pattern-runtime", 0)
+        val state = org.json.JSONObject(prefs.getString("state", null)!!)
+        val slots = state.getJSONObject("slots")
+        slots.getJSONObject(slots.keys().next()).put("currentActive", oldEncoded)
+        state.getJSONObject("receipts").getJSONObject("old").put("command", oldEncoded)
+        assertTrue(prefs.edit().putString("state", state.toString()).commit())
+        assertNull(store.frozen(runtime.compatibility, true).getOrThrow())
+        assertNull(store.beginSet(runtime.compatibility, "s", "next", "next-attempt", "clock", true).getOrThrow())
+        val disable = PatternProfileCommand("disable-old", PatternProfileOperation.DISABLE, runtime, 1,
+            old.evidence!!.copy(previousActiveHash = runtime.candidateHash))
+        store.stage(disable).getOrThrow()
+        assertNull(store.beginSet(runtime.compatibility, "s", "third", "third-attempt", "clock", true).getOrThrow())
+        assertEquals(PatternProfileStatus.DISABLED, store.confirmDisabled(runtime.compatibility, "s", "third", "third-attempt", "clock", 20, 21).getOrThrow()!!.status)
+    }
     @Test fun disablingWaitsForANewAttemptAndAnObservedBasicDetectorSample() {
         val app = RuntimeEnvironment.getApplication()
         val first = runtime(1)

@@ -22,6 +22,7 @@ internal class WatchSessionTally private constructor(private val app: Context) {
     private var open: SetEntry? = null
     private var lastKey = ""
     private val records = LinkedHashSet<String>()
+    private val recordSets = LinkedHashSet<String>()
     private var heartWeighted = 0.0
     private var heartMs = 0L
     private var lastHeart = 0
@@ -71,10 +72,17 @@ internal class WatchSessionTally private constructor(private val app: Context) {
         save(System.currentTimeMillis())
     }
 
-    /** The phone announced a record for [exerciseId] in [session]; one exercise counts once. */
+    /** Service-owned count, independent of Activity visibility and its legacy exercise announcements. */
     @Synchronized
-    fun noteRecord(session: String, exerciseId: String) {
-        if (session != sessionId || exerciseId.isBlank() || !records.add(exerciseId)) return
+    fun noteSetRecord(session: String, setId: String) {
+        if (session != sessionId || setId.isBlank() || !recordSets.add(setId)) return
+        save(System.currentTimeMillis())
+    }
+
+    /** Legacy screen announcement; used only when no service records are available. */
+    @Synchronized
+    fun noteRecord(session: String, setId: String) {
+        if (session != sessionId || setId.isBlank() || !records.add(setId)) return
         save(System.currentTimeMillis())
     }
 
@@ -95,7 +103,7 @@ internal class WatchSessionTally private constructor(private val app: Context) {
             volumeKg = loaded.takeIf { it.isNotEmpty() }?.sumOf { it.reps * (it.weightKg ?: 0.0) },
             // Under half a minute of readings is not an average worth showing.
             averageHeartRate = if (heartMs >= 30_000L) Math.round(heartWeighted / heartMs).toInt() else null,
-            recordsBroken = records.size.takeIf { it > 0 },
+            recordsBroken = (if (recordSets.isNotEmpty()) recordSets.size else records.size).takeIf { it > 0 },
         )
         reset("", 0L)
         return summary
@@ -103,7 +111,7 @@ internal class WatchSessionTally private constructor(private val app: Context) {
 
     private fun reset(session: String, nowMs: Long) {
         sessionId = session; startedAtMs = nowMs
-        sets.clear(); open = null; lastKey = ""; records.clear()
+        sets.clear(); open = null; lastKey = ""; records.clear(); recordSets.clear()
         heartWeighted = 0.0; heartMs = 0L; lastHeart = 0; lastHeartAtMs = 0L
         save(nowMs)
     }
@@ -112,7 +120,7 @@ internal class WatchSessionTally private constructor(private val app: Context) {
         savedAtMs = nowMs
         val json = JSONObject().put("session", sessionId).put("startedAt", startedAtMs).put("lastKey", lastKey)
             .put("heartWeighted", heartWeighted).put("heartMs", heartMs)
-            .put("records", JSONArray(records.toList()))
+            .put("records", JSONArray(records.toList())).put("recordSets", JSONArray(recordSets.toList()))
             .put("sets", JSONArray(sets.values.map { JSONObject().put("key", it.key).put("reps", it.reps).put("weight", it.weightKg ?: JSONObject.NULL) }))
         open?.let { json.put("open", JSONObject().put("key", it.key).put("reps", it.reps).put("weight", it.weightKg ?: JSONObject.NULL)) }
         prefs.edit().putString("tally", json.toString()).apply()
@@ -124,10 +132,11 @@ internal class WatchSessionTally private constructor(private val app: Context) {
         runCatching {
             sessionId = json.getString("session"); startedAtMs = json.getLong("startedAt"); lastKey = json.optString("lastKey")
             heartWeighted = json.getDouble("heartWeighted"); heartMs = json.getLong("heartMs")
+            json.optJSONArray("recordSets")?.let { ids -> for (i in 0 until ids.length()) recordSets += ids.getString(i) }
             val list = json.getJSONArray("records"); for (i in 0 until list.length()) records += list.getString(i)
             val array = json.getJSONArray("sets"); for (i in 0 until array.length()) entry(array.getJSONObject(i)).let { sets[it.key] = it }
             open = json.optJSONObject("open")?.let(::entry)
-        }.onFailure { sessionId = ""; startedAtMs = 0L; sets.clear(); records.clear(); open = null }
+        }.onFailure { sessionId = ""; startedAtMs = 0L; sets.clear(); records.clear(); recordSets.clear(); open = null }
     }
 
     companion object {

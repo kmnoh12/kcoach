@@ -69,8 +69,10 @@ class CalibrationCameraActivity : ComponentActivity() {
     @Volatile private var preparedCapture: CalibrationCapture? = null
     private var starting = false
     private var watchStartScheduled = false
+    @Volatile private var watchMeasurementReady = false
     @Volatile private var selectedShadow: PatternProfileCommand? = null
     private var encoder: ReferenceVideoEncoder? = null
+    @Volatile private var lastPoseReceivedNs = 0L
     @Volatile private var poseReady = false
     @Volatile private var previewLeft = true
     private var poseReadySinceNs: Long? = null
@@ -80,12 +82,24 @@ class CalibrationCameraActivity : ComponentActivity() {
     private var timestampSource = CameraTimestampSource.UNKNOWN
     private var counter: UpperBodyPoseCounter? = null
     private var captureEnd = CameraCaptureEnd()
+    private val orientationTracker = CameraOrientationTracker()
+    private var orientationFrames = 0
+    private var orientationRejected = 0
     private val guideFamily by lazy { CameraPoseGuide.familyFor(exerciseId) }
     private val guideSmoother = CameraPoseGuideSmoother()
     private val finalizer by lazy { CalibrationCaptureFinalizer(store) }
     private var lastClockWindowAtMs = 0L
     private val clockReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action == PhoneWearListenerService.ACTION_LIVE) {
+                val fields = WearSync.parse(intent.getStringExtra("payload").orEmpty())
+                val active = capture ?: return
+                if (fields.getOrNull(0) == "2" && fields.getOrNull(1) == active.id &&
+                    fields.getOrNull(17) == active.setId && fields.getOrNull(18) == active.attemptId) {
+                    watchMeasurementReady = fields.getOrNull(9)?.let { it.startsWith("WORKING") || it == "CONTROLLED_REPS" || it == "MANUAL_REQUIRED" } == true
+                }
+                return
+            }
             val prepared = preparedCapture ?: return
             if (intent.getStringExtra("captureId") == prepared.id || intent.getStringExtra("commandId") == selectedShadow?.commandId)
                 startWhenReady(prepared)
@@ -122,6 +136,7 @@ class CalibrationCameraActivity : ComponentActivity() {
         }
         ContextCompat.registerReceiver(this, clockReceiver, IntentFilter(PhoneWearListenerService.ACTION_CAPTURE_CLOCK).apply {
             addAction(PhoneWearListenerService.ACTION_PATTERN_PROFILE)
+            addAction(PhoneWearListenerService.ACTION_LIVE)
         }, ContextCompat.RECEIVER_NOT_EXPORTED)
         store.recoverInterrupted().onFailure { ui = ui.copy(status = "이전 촬영 자료를 확인해야 해요.") }
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) bindCamera()
@@ -151,6 +166,7 @@ class CalibrationCameraActivity : ComponentActivity() {
         deviceTop = selection?.deviceTop ?: "UNKNOWN"
         startVariant = wearingStore.preparationAnswers().getOrNull()?.get(ExerciseMotionCatalog.normalizeExerciseId(exerciseId)) ?: "UNKNOWN"
         poseReady = false; poseReadySinceNs = null
+        orientationTracker.reset()
         val guide = CameraCaptureGuide.forExercise(exerciseId, previewLeft)
         ui = ui.copy(headline = guide.headline, startHint = guide.startHint, wearingSummary = selection?.let {
             (if (it.side == "LEFT") "왼손" else "오른손") + " · " + (if (it.placement == "OUTSIDE") "손등 쪽" else "손바닥 쪽")
@@ -242,7 +258,7 @@ class CalibrationCameraActivity : ComponentActivity() {
         Wearable.getNodeClient(this).connectedNodes.addOnSuccessListener { nodes ->
             // Left the screen while the watch was checked: never start a capture with no camera frames.
             if (!lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) { starting = false; return@addOnSuccessListener }
-            if (nodes.isEmpty()) { starting = false; ui = ui.copy(status = "워치를 연결한 뒤 자세를 다시 잡아 주세요.", blocked = true); return@addOnSuccessListener }
+            if (nodes.isEmpty()) { starting = false; ui = ui.copy(status = "워치를 연결한 뒤 자세를 다시 잡아 주세요.", blocked = true, ready = false); return@addOnSuccessListener }
             val onLeft = selected.side == "LEFT"
             val wearing = selected.placement
             val pickedTop = deviceTop
@@ -271,26 +287,31 @@ class CalibrationCameraActivity : ComponentActivity() {
                     val next = store.begin(exerciseId, exerciseName, onLeft, epoch.id, wearing, declared).getOrThrow()
                     frameIndex = 0; firstCameraNs = null; stopping = false; watchStartScheduled = false; encoder = null
                     captureEnd = CameraCaptureEnd()
+                    orientationFrames = 0; orientationRejected = 0
                     val motion = CameraCaptureGuide.forExercise(exerciseId, onLeft).metric
                     counter = motion?.let(::UpperBodyPoseCounter)
                     preparedCapture = next
                     lastClockWindowAtMs = SystemClock.elapsedRealtime()
                     probe(next.id, "START")
                     main.post {
-                        ui = ui.copy(recording = true, stopEnabled = true, status = "워치의 동시 촬영 지원과 응답을 확인하는 중…")
+                        ui = ui.copy(ready = false, recording = true, stopEnabled = true, status = "워치의 동시 촬영 지원과 응답을 확인하는 중…")
                         if (!lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) {
                             stopCapture("Camera screen left foreground"); return@post
                         }
                         main.postDelayed({ if (preparedCapture?.id == next.id) stopCapture("Watch reference capture support not confirmed") }, 5_000)
                         startWhenReady(next)
                     }
-                }.onFailure { main.post { starting = false; ui = ui.copy(status = "다른 운동이 진행 중이거나 저장을 시작하지 못했어요.", blocked = true) } }
+                }.onFailure { main.post { starting = false; ui = ui.copy(status = "다른 운동이 진행 중이거나 저장을 시작하지 못했어요.", blocked = true, ready = false) } }
             }
-        }.addOnFailureListener { starting = false; ui = ui.copy(status = "워치 연결을 확인하지 못했어요. 자세를 다시 잡아 주세요.", blocked = true) }
+        }.addOnFailureListener { starting = false; ui = ui.copy(status = "워치 연결을 확인하지 못했어요. 자세를 다시 잡아 주세요.", blocked = true, ready = false) }
     }
 
     private fun startWhenReady(prepared: CalibrationCapture) {
         if (!clocks.pairedCaptureSupported(prepared.id)) return
+        if (!clocks.calibrationCameraStateSupported(prepared.id)) {
+            ui = ui.copy(ready = false, status = "보정 세션을 연결하려면 워치를 업데이트해 주세요")
+            return
+        }
         if (prepared.startWristContext != null && !clocks.startWristContextSupported(prepared.id)) {
             ui = ui.copy(status = "시작 방향 자료를 저장하려면 워치도 업데이트해 주세요. 응답을 다시 확인하는 중…")
             return
@@ -305,12 +326,13 @@ class CalibrationCameraActivity : ComponentActivity() {
     }
 
     @Synchronized private fun startPreparedCapture(prepared: CalibrationCapture) {
-        if (stopping || watchStartScheduled || preparedCapture?.id != prepared.id) return
+        if (stopping || watchStartScheduled || preparedCapture?.id != prepared.id || !poseReady || SystemClock.elapsedRealtimeNanos() - lastPoseReceivedNs > CameraOrientationPolicy.MAX_GAP_NS) return
         watchStartScheduled = true
         worker.execute {
             synchronized(this) {
-                if (stopping) return@execute
+                if (stopping || !poseReady || SystemClock.elapsedRealtimeNanos() - lastPoseReceivedNs > CameraOrientationPolicy.MAX_GAP_NS) { watchStartScheduled = false; return@execute }
                 capture = prepared
+                watchMeasurementReady = false
                 perf.reset()
                 preparedCapture = null
                 val startCommand = WearSync.withPatternShadow(WearSync.richCommand("START", prepared.id, exerciseId,
@@ -322,7 +344,11 @@ class CalibrationCameraActivity : ComponentActivity() {
                 } ?: patternBound
                 PhoneWorkoutService.send(this, WearSync.PATH_COMMAND, boundCommand)
             }
-            main.post { starting = false; ui = ui.copy(recordingSinceMs = SystemClock.uptimeMillis(), status = "10회 후 시작 자세에서 3초 멈춰 주세요") }
+            main.post {
+                starting = false
+                ui = ui.copy(recordingSinceMs = SystemClock.uptimeMillis(), status = "워치 준비 중이에요. 시작 자세를 유지해 주세요")
+                main.postDelayed({ if (capture?.id == prepared.id && !watchMeasurementReady) stopCapture("워치 준비 상태를 확인하지 못했어요") }, 15_000)
+            }
         }
     }
 
@@ -354,12 +380,15 @@ class CalibrationCameraActivity : ComponentActivity() {
             val guide = CameraCaptureGuide.forExercise(exerciseId, previewLeft)
             val pose = normalized.singleOrNull()
             val worldPose = world.singleOrNull()
-            val poseCandidate = pose != null && worldPose != null && guide.startReady(pose, worldPose, previewLeft)
-            val diagnosis = if (pose != null && worldPose != null) guide.diagnose(pose, worldPose, previewLeft) else null
+            val orientation = orientationTracker.observe(cameraNs, pose, worldPose, previewLeft, requireNotNull(guide.viewTarget))
+            val diagnosis = if (pose != null && worldPose != null) guide.diagnose(pose, worldPose, previewLeft, orientation) else null
+            lastPoseReceivedNs = receivedNs
+            val poseCandidate = diagnosis?.ready == true
             logDiagnosis(diagnosis, modelMs)
             if (poseCandidate) { if (poseReadySinceNs == null) poseReadySinceNs = cameraNs } else poseReadySinceNs = null
             poseReady = poseReadySinceNs?.let { cameraNs - it >= guide.readyHoldMs * 1_000_000L } == true
             val ready = poseReady; val people = normalized.size
+            preparedCapture?.let { next -> main.post { startWhenReady(next) } }
             if (capture == null && preparedCapture == null && !starting) main.post {
                 autoStart(ready, !poseCandidate)
                 // A refused start keeps its reason on screen until the user breaks the pose and tries again.
@@ -369,9 +398,11 @@ class CalibrationCameraActivity : ComponentActivity() {
                     wearing == null -> "워치 착용 정보를 먼저 저장해 주세요"
                     people > 1 -> "한 사람만 화면에 들어오게 해 주세요"
                     ready -> "자세 확인 · 곧 촬영을 시작해요"
-                    guideFamily != null -> "회색 졸라맨에 맞춰 자세를 잡아 주세요"
-                    else -> "필요한 관절이 다 보이게 맞춰 주세요"
+                    else -> diagnosis?.status(ready) ?: orientation.message ?: "필요한 관절이 다 보이게 맞춰 주세요"
                 }, ready = ready && wearing != null)
+            }
+            if ((starting || preparedCapture != null) && !ready) main.post {
+                ui = ui.copy(ready = false, status = diagnosis?.status(false) ?: orientation.message ?: "시작 자세를 다시 맞춰 주세요")
             }
             var encodeNs = 0L; var storeNs = 0L; var storeDoneNs = 0L
             val active = capture
@@ -384,21 +415,30 @@ class CalibrationCameraActivity : ComponentActivity() {
                 val storeStartNs = SystemClock.elapsedRealtimeNanos()
                 store.appendFrame(active.id, CameraPoseFrame(frameIndex, cameraNs, receivedNs, modelMs, completedNs, videoUs,
                     bitmap.width, bitmap.height, rotation, true, timestampSource, active.phoneClockId, normalized, world, written)).getOrThrow()
+                if (frameIndex % 30L == 0L) PhoneWorkoutService.send(this, WearSync.PATH_CALIBRATION_CAMERA_STATE,
+                    CalibrationCameraState(active.id, active.setId, active.attemptId, 1, true).encode())
                 frameIndex++
                 storeDoneNs = SystemClock.elapsedRealtimeNanos(); encodeNs = storeStartNs - encodeStartNs; storeNs = storeDoneNs - storeStartNs
                 val now = SystemClock.elapsedRealtime()
                 if (now - lastClockWindowAtMs >= 20_000) { lastClockWindowAtMs = now; probe(active.id, "MIDDLE") }
-                val metric = if (world.size == 1 && normalized.size == 1)
+                orientationFrames++
+                if (!orientation.accepted || orientation.rawYaw?.let { kotlin.math.abs(kotlin.math.abs(it) - guide.viewTarget!!.degrees) > CameraOrientationPolicy.TOLERANCE } != false) orientationRejected++
+                val metric = if (watchMeasurementReady && orientation.accepted && world.size == 1 && normalized.size == 1)
                     CameraCaptureGuide.forExercise(exerciseId, active.watchOnLeft).observedMetric(normalized.single(), world.single(), active.watchOnLeft)
                 else null
                 counter?.observe(modelMs, metric)
                 val message = when {
                     normalized.size > 1 -> "여러 사람이 보여요. 혼자 화면에 들어와 주세요."
+                    !orientation.accepted -> orientation.message ?: "몸 방향을 다시 맞춰 주세요"
+                    !watchMeasurementReady -> "워치 준비 중이에요. 시작 자세를 유지해 주세요"
                     normalized.isEmpty() || counter != null && metric == null -> "팔과 몸통이 가려지지 않게 해 주세요."
+                    orientationFrames >= 30 && orientationRejected.toDouble() / orientationFrames > 1 - CalibrationSafety.MIN_ORIENTATION_RATIO -> "몸 방향이 맞지 않는 구간이 많아요. 이 촬영은 보정에서 제외될 수 있어요"
+                    guide.metric == null -> "이 운동은 카메라 횟수 검증을 지원하지 않아요. 촬영 후 직접 종료해 주세요"
                     else -> "10회 후 시작 자세에서 3초 멈춰 주세요"
                 }
                 main.post { ui = ui.copy(status = message) }
-                val end = captureEnd.observe(cameraNs, pose.takeIf { written }, worldPose.takeIf { written }, guide, active.watchOnLeft)
+                val end = captureEnd.observe(cameraNs, pose.takeIf { written && orientation.accepted }, worldPose.takeIf { written && orientation.accepted }, guide, active.watchOnLeft,
+                    allowEnd = (counter?.reps ?: 0) >= CalibrationSafety.MIN_REPS)
                 if (end != null) stopCapture(null, end)
                 else if (videoUs >= 120_000_000L) stopCapture(null)
             }
@@ -412,17 +452,17 @@ class CalibrationCameraActivity : ComponentActivity() {
                 guideSmoother.update(anchor, modelMs)?.let { CameraPoseGuide.build(family, it) }
             }
             // Without wearing info capture cannot start, so the figure must not look ready (pose geometry itself is unchanged).
-            val matched = poseReady && wearing != null
+            val matched = poseReady && wearing != null && !ui.blocked && !stopping && !ui.saving
             main.post {
                 overlay.points = normalized.singleOrNull().orEmpty(); overlay.frameWidth = frameWidth; overlay.frameHeight = frameHeight; overlay.diagnosis = diagnosis; overlay.perfText = perfLine ?: overlay.perfText
-                overlay.update(figure, matched); overlay.invalidate()
+                overlay.update(figure, matched && !ui.blocked && !ui.saving); overlay.invalidate()
             }
         } catch (error: Throwable) {
             val storageFull = captureStorageFull(error)
             val hadCapture = capture != null || preparedCapture != null
             if (hadCapture) stopCapture(if (storageFull) "Storage full while recording reference frames"
                 else "Camera frame processing failed: ${error.javaClass.simpleName}")
-            else poseReady = false
+            else { poseReady = false; poseReadySinceNs = null; orientationTracker.reset() }
             val report = CameraInitializationFailure.report("FRAME_PROCESSING", error)
             main.post {
                 ui = ui.copy(failureReport = report, status = when {
@@ -442,7 +482,8 @@ class CalibrationCameraActivity : ComponentActivity() {
         lastDiagnosisLogMs = modelMs
         val text = diagnosis?.let { d ->
             d.joints.joinToString(" ") { "${it.index}=${"%.2f".format(it.confidence)}${if (it.inFrame) "" else "(out)"}" } +
-                " angle=${d.angle?.let { "%.0f".format(it) }} atRest=${d.atRest} ready=${d.ready}"
+                " angle=${d.angle?.let { "%.0f".format(it) }} atRest=${d.atRest} ready=${d.ready}" +
+                " yaw=${d.orientation?.yaw} rawYaw=${d.orientation?.rawYaw} yawOK=${d.orientation?.accepted} reason=${d.blocker} rejected=$orientationRejected/$orientationFrames"
         } ?: "no single pose"
         Log.i("KCoachPose", "$exerciseId left=$previewLeft $text")
     }
@@ -458,6 +499,8 @@ class CalibrationCameraActivity : ComponentActivity() {
         if (stopping) return
         stopping = true
         main.post { ui = ui.copy(stopEnabled = false, saving = true, status = "영상과 센서 기록 저장 중…") }
+        PhoneWorkoutService.send(this, WearSync.PATH_CALIBRATION_CAMERA_STATE,
+            CalibrationCameraState(active.id, active.setId, active.attemptId, 2, false).encode())
         if (capture != null) PhoneWorkoutService.send(this, WearSync.PATH_COMMAND, WearSync.command("STOP", active.id, "", 0, 0))
         probe(active.id, "END")
         worker.execute {
@@ -534,6 +577,8 @@ class CalibrationCameraActivity : ComponentActivity() {
                 debugText.color = if (ok) Color.rgb(120, 255, 170) else Color.rgb(255, 120, 110)
                 canvas.drawText(text, 12 * dp, y, debugText); y += 15 * dp
             }
+            row("yaw=${d.orientation?.yaw?.let { "%.0f°".format(it) }} raw=${d.orientation?.rawYaw?.let { "%.0f°".format(it) }} ok=${d.orientation?.accepted}", d.orientation?.accepted == true)
+            d.orientation?.message?.let { row(it, false) }
             d.joints.forEach { row("#${it.index} vis=${it.visibility?.let { v -> "%.2f".format(v) }} pres=${it.presence?.let { v -> "%.2f".format(v) }}${if (it.inFrame) "" else " OUT"}", it.ok) }
             row("angle=${d.angle?.let { "%.0f°".format(it) } ?: "-"}${d.requiredBand?.let { " (${it.start.toInt()}~${it.endInclusive.toInt()}°)" } ?: ""} atRest=${d.atRest ?: "-"} ≥${CameraCaptureGuide.MIN_CONFIDENCE}", d.ready)
         }

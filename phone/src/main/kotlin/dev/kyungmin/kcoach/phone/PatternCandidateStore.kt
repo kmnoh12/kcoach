@@ -336,8 +336,10 @@ class PatternCandidateStore(private val context: Context) {
     fun verifyAdoptionEvidence(candidateId: String, evidence: PatternValidationEvidence,
         requireBaselineHash: Boolean = false): Result<PatternCandidate> = synchronized(lock) {
         runCatching {
+            require(evidence.safetyVersion == 1) { "보정 안전 검증을 다시 진행해 주세요" }
             val candidate = load(candidateId).getOrThrow()
             checkCurrentSources(candidate.profile)
+            verifyReplaySafety(candidate.profile)
             listOf("validation" to evidence.phoneReportHash, "native-validation" to evidence.watchReportHash).forEach { (kind, hash) ->
                 val file = reportFiles(candidateId, kind).singleOrNull { SensorCaptureFormat.sha256(it.readBytes()) == hash }
                     ?: error("Verified report missing or changed")
@@ -375,6 +377,17 @@ class PatternCandidateStore(private val context: Context) {
             }
             candidate
         }
+    }
+
+    private fun verifyReplaySafety(profile: ReviewedPatternProfile) {
+        val material = captures.list().mapNotNull { capture ->
+            val set = readSet(capture).getOrNull() ?: return@mapNotNull null
+            if (set.compatibility != profile.compatibility) return@mapNotNull null
+            val count = reviews.load(capture.id).getOrThrow().countReference ?: return@mapNotNull null
+            HeldOutPatternSet(set, count, ExerciseTrackingProfiles.resolve(set.exerciseId))
+        }
+        val safety = PatternRegressionValidation.compare(PatternRuntimeProfile.from(profile), null, material).getOrThrow()
+        require(safety.passed) { "일반 검출기보다 나빠지는 보정은 적용하지 않아요: ${safety.failures.joinToString()}" }
     }
 
     private fun validationMaterialDigest(candidate: PatternCandidate): String {
@@ -427,9 +440,11 @@ class PatternCandidateStore(private val context: Context) {
         val key = PatternCompatibility(localUserId(), contract.recipe, if (capture.watchOnLeft) "LEFT" else "RIGHT",
             capture.watchOrientation, device, "watch-native-si-v1")
         val review = reviews.load(capture.id).getOrThrow()
+        val quality = captures.assessQuality(capture.id, review.countReference?.reps).getOrThrow()
+        require(quality.eligible) { quality.message }
         val day = Instant.ofEpochMilli(capture.createdAtMs).atOffset(ZoneOffset.UTC).toLocalDate().toString()
         ReviewedPatternSet(capture.id, manifest.payload.getValue(WirePayloadKeys.SHA256).lowercase(), capture.exerciseId,
-            key, day, captures.motionDocument(capture.id).getOrThrow(), review.references)
+            key, day, sensor.validated.document, review.references)
     }
 
     private fun candidateFile(id: String): File {

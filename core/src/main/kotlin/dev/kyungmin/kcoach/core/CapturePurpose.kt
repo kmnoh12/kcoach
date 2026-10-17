@@ -7,7 +7,7 @@ enum class CapturePurpose(val preservePreparation: Boolean, val stopAtTarget: Bo
 
     companion object {
         fun forSession(sessionId: String): CapturePurpose = when {
-            sessionId.startsWith("paired-") -> PAIRED_REFERENCE
+            (sessionId.startsWith("paired-") || sessionId.startsWith("calibration-paired-")) -> PAIRED_REFERENCE
             sessionId.startsWith("calibration-") -> LEGACY_CALIBRATION
             else -> WORKOUT
         }

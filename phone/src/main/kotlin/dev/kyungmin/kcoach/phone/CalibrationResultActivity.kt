@@ -88,7 +88,10 @@ class CalibrationResultActivity : ComponentActivity() {
                 val mismatches = if (watchSpans == null) emptyList() else RepMismatchFinder.find(videoSpans, watchSpans)
                     .map { MismatchRowUi(it.span.startMs, it.span.endMs, it.side == MismatchSide.VIDEO_ONLY, saved[it]) }
                 val counted = review.countReference?.reps
-                val message = when {
+                if (counted != null) PhoneWorkoutService.send(this, WearSync.PATH_CALIBRATION_CAMERA_STATE,
+                    CalibrationCameraState(capture.id, capture.setId, capture.attemptId, review.revision + 2, false, counted).encode())
+                val quality = captures.assessQuality(id, counted).getOrThrow()
+                val message = listOfNotNull(CalibrationPatternSafetyMonitor(this).notice(id), quality.message).joinToString(" · ") + " · " + when {
                     counted == null -> "영상을 보고 실제로 한 횟수를 알려 주세요."
                     watch == null -> "${counted}회로 저장했어요. 워치 실시간 집계는 아직 받지 못했어요."
                     watch != counted -> "${counted}회로 저장했어요. 워치 실시간 집계는 ${watch}회로 서로 달라요."

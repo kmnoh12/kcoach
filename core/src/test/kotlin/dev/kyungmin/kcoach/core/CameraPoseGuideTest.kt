@@ -84,6 +84,6 @@ class CameraPoseGuideTest {
         val points = pose(11 to (300.0 to 250.0), 12 to (200.0 to 250.0), 13 to (300.0 to 330.0), 14 to (200.0 to 330.0))
         val front = assertNotNull(CameraPoseGuide.measure(points, w, h, CameraPoseFamily.STAND_ARMS_DOWN_FRONT, left = true))
         val oblique = assertNotNull(CameraPoseGuide.measure(points, w, h, CameraPoseFamily.EXTERNAL_ROTATION_OBLIQUE, left = true))
-        assertEquals(front.bodyHeight / 0.7, oblique.bodyHeight, 1e-6)
+        assertEquals(front.bodyHeight / kotlin.math.cos(Math.toRadians(CameraOrientationPolicy.OBLIQUE)), oblique.bodyHeight, 1e-6)
     }
 }

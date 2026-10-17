@@ -17,7 +17,7 @@ internal class CalibrationVideoRetention(context: Context) {
     private val app = context.applicationContext
     private val captures = CalibrationCaptureStore(app)
     private fun file(id: String): AtomicFile {
-        require(id.matches(Regex("paired-[A-Za-z0-9-]{1,100}")))
+        require(id.matches(Regex("(?:calibration-)?paired-[A-Za-z0-9-]{1,100}")))
         return AtomicFile(File(app.filesDir, "calibration-captures/$id/video-retention.json"))
     }
     private fun read(id: String): JSONObject? {

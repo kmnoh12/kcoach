@@ -72,6 +72,12 @@ class WearCommandService : WearableListenerService() {
             receivePatternProfile(payload, null)
             return
         }
+        if (path == WearSync.PATH_CALIBRATION_CAMERA_STATE) {
+            if (runCatching { dev.kyungmin.kcoach.core.CalibrationCameraState.decode(payload) }.isFailure) return
+            ContextCompat.startForegroundService(this, Intent(this, WearWorkoutService::class.java)
+                .putExtra(WearWorkoutService.EXTRA_COMMAND, "CALIBRATION_CAMERA_STATE").putExtra("payload", payload))
+            return
+        }
         if (path == WearSync.PATH_CLOCK_REQUEST) {
             val reply = runCatching {
                 val request = WireCodec.decode(payload)
@@ -80,7 +86,7 @@ class WearCommandService : WearableListenerService() {
                     android.os.SystemClock.elapsedRealtimeNanos(), epoch.id, epoch.verified)
                 WireCodec.encode(reply.copy(payload = reply.payload + mapOf("pairedReferenceSupported" to "true", "captureFormats" to "1,2",
                     "patternShadowCaptureSupported" to "true", "patternProfileFormat" to "1", "patternActiveBindingSupported" to "true",
-                    "startWristContextFormat" to "1", "startDirectionProfileFormat" to "1", "tempoSettingsFormat" to "1")))
+                    "startWristContextFormat" to "1", "startDirectionProfileFormat" to "1", "tempoSettingsFormat" to "1", "calibrationCameraStateFormat" to "1")))
             }.getOrNull() ?: return
             Thread {
                 runCatching { Tasks.await(Wearable.getNodeClient(this).connectedNodes, 2, TimeUnit.SECONDS).forEach { node ->
@@ -94,6 +100,12 @@ class WearCommandService : WearableListenerService() {
             if (runCatching { dev.kyungmin.kcoach.core.ManualSetAck.decode(payload) }.isFailure) return
             ContextCompat.startForegroundService(this, Intent(this, WearWorkoutService::class.java)
                 .putExtra(WearWorkoutService.EXTRA_COMMAND, "MANUAL_ACK").putExtra("payload", payload))
+            return
+        }
+        if (path == WearSync.PATH_SET_RECORD) {
+            if (runCatching { dev.kyungmin.kcoach.core.SetRecordCommand.decode(payload) }.isFailure) return
+            ContextCompat.startForegroundService(this, Intent(this, WearWorkoutService::class.java)
+                .putExtra(WearWorkoutService.EXTRA_COMMAND, "SET_RECORD").putExtra("payload", payload))
             return
         }
         if (path == WearSync.PATH_SET_ACK) {

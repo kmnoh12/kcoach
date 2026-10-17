@@ -288,7 +288,7 @@ class PhoneWearListenerService : WearableListenerService() {
         }
         logEvent(KCoachEventMarker.CAPTURE_VALIDATED, manifest)
         broadcastCaptureState(manifest, CaptureState.RECEIVED)
-        if (manifest.sessionId.startsWith("calibration-")) {
+        if (dev.kyungmin.kcoach.core.CapturePurpose.forSession(manifest.sessionId) == dev.kyungmin.kcoach.core.CapturePurpose.LEGACY_CALIBRATION) {
             prefs.edit()
                 .putString("calibration:${manifest.payload[WirePayloadKeys.EXERCISE_ID].orEmpty()}:status", "RAW_SAVED")
                 .putLong("calibration:${manifest.payload[WirePayloadKeys.EXERCISE_ID].orEmpty()}:rawSavedAt", System.currentTimeMillis())
@@ -345,10 +345,11 @@ class PhoneWearListenerService : WearableListenerService() {
         logEvent(KCoachEventMarker.ANALYSIS_STARTED, manifest)
         if (manifest.payload["capturePurpose"] == dev.kyungmin.kcoach.core.CapturePurpose.PAIRED_REFERENCE.name) {
             CalibrationCaptureStore(this).attachSensor(received).getOrThrow()
+            CalibrationPatternSafetyMonitor(this).check(manifest.sessionId)
             sendBroadcast(Intent(ACTION_PAIRED_RAW_SAVED).setPackage(packageName).putExtra("captureId", manifest.sessionId))
             return // Paired raw data is reviewed before learning; the legacy builder never adopts it.
         }
-        if (manifest.sessionId.startsWith("calibration-")) {
+        if (dev.kyungmin.kcoach.core.CapturePurpose.forSession(manifest.sessionId) == dev.kyungmin.kcoach.core.CapturePurpose.LEGACY_CALIBRATION) {
             persistCalibrationResult(manifest, rawDocument, exerciseId, exerciseName)
         }
         val personal = prefs.getString("personalProfile:$exerciseId", null)

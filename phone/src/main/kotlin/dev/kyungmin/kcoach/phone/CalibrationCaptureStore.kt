@@ -39,7 +39,7 @@ class CalibrationCaptureStore(private val context: Context) {
             }
             check(SessionStore(context).loadActive().getOrThrow() == null) { "An active workout owns the watch" }
             check(prefs.getString("active", null) == null) { "Another camera capture is recording" }
-            val capture = CalibrationCapture("paired-${UUID.randomUUID()}", exerciseId, name, watchOnLeft,
+            val capture = CalibrationCapture("calibration-paired-${UUID.randomUUID()}", exerciseId, name, watchOnLeft,
                 watchOrientation, phoneClockId, UUID.randomUUID().toString(), UUID.randomUUID().toString(),
                 System.currentTimeMillis(), CalibrationCaptureStatus.RECORDING, ownerProcessId = processOwner,
                 startWristContext = startWristContext)
@@ -56,7 +56,7 @@ class CalibrationCaptureStore(private val context: Context) {
     }
 
     fun list(): List<CalibrationCapture> = synchronized(lock) {
-        root.listFiles().orEmpty().filter { it.isDirectory && it.name.startsWith("paired-") }
+        root.listFiles().orEmpty().filter { it.isDirectory && CapturePurpose.forSession(it.name) == CapturePurpose.PAIRED_REFERENCE }
             .mapNotNull { load(it.name).getOrNull() }.sortedByDescending { it.createdAtMs }
     }
 
@@ -79,6 +79,23 @@ class CalibrationCaptureStore(private val context: Context) {
     fun performance(id: String): String? = synchronized(lock) {
         File(directory(id), "performance.json").takeIf { it.isFile && it.length() <= 200_000 }?.readText()
     }
+
+    /** Persist a derived audit summary, retaining all original frames even when learning is refused. */
+    fun assessQuality(id: String, confirmedReps: Int?): Result<CalibrationQuality> = synchronized(lock) { runCatching {
+        val capture = load(id).getOrThrow()
+        require(capture.status != CalibrationCaptureStatus.RECORDING)
+        val watchReps = sensor(id).getOrNull()?.manifest?.payload?.get(WirePayloadKeys.WATCH_REPS)?.toIntOrNull()
+        val quality = CalibrationSafety.evaluate(motionFrames(id).getOrThrow(), capture.exerciseId, capture.watchOnLeft, watchReps, confirmedReps)
+        val json = JSONObject().put("schemaVersion", 1).put("orientationRatio", quality.orientationRatio)
+            .put("visibilityRatio", quality.visibilityRatio).put("cameraReps", quality.cameraReps ?: JSONObject.NULL)
+            .put("watchReps", watchReps ?: JSONObject.NULL).put("confirmedReps", confirmedReps ?: JSONObject.NULL)
+            .put("eligible", quality.eligible).put("failures", JSONArray(quality.failures))
+        val file = android.util.AtomicFile(userFile(id, "quality.json"))
+        val stream = file.startWrite()
+        try { stream.write(json.toString().toByteArray(Charsets.UTF_8)); file.finishWrite(stream) }
+        catch (error: Throwable) { file.failWrite(stream); throw error }
+        quality
+    } }
 
     fun active(): Result<CalibrationCapture?> = synchronized(lock) {
         runCatching { prefs.getString("active", null)?.let { load(it).getOrThrow() }
@@ -234,7 +251,7 @@ class CalibrationCaptureStore(private val context: Context) {
     }
 
     private fun directory(id: String): File {
-        require(id.matches(Regex("paired-[A-Za-z0-9-]{1,100}")))
+        require(id.matches(Regex("(?:calibration-)?paired-[A-Za-z0-9-]{1,100}")))
         return File(root, id)
     }
 

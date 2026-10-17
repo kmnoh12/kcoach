@@ -15,6 +15,8 @@ class CalibrationCaptureStoreTest {
         val app = RuntimeEnvironment.getApplication(); val store = CalibrationCaptureStore(app)
         val declared = StartWristContext("external_rotation", PatternCandidateStore(app).localUserId(), "LEFT", "OUTSIDE", "HAND", "PALM_UP_HORIZONTAL")
         val clip = store.begin("external_rotation", "회전", true, "clock", "OUTSIDE", declared).getOrThrow()
+        assertTrue(clip.id.startsWith("calibration-paired-"))
+        assertEquals(CapturePurpose.PAIRED_REFERENCE, CapturePurpose.forSession(clip.id))
         assertEquals(declared, CalibrationCaptureStore(app).load(clip.id).getOrThrow().startWristContext)
         store.finish(clip.id, false, "synthetic fixture").getOrThrow()
         val file = app.filesDir.resolve("calibration-captures/${clip.id}/capture.json")

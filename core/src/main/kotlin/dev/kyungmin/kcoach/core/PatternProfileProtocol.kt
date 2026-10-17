@@ -7,8 +7,8 @@ enum class PatternProfileStatus { STAGED, APPLIED, DISABLED, CONFLICT, WRONG_DEV
 
 /** Immutable reports remain on the phone. The controller must verify both before issuing activation. */
 data class PatternValidationEvidence(val phoneReportHash: String, val watchReportHash: String,
-    val previousActiveHash: String? = null) {
-    init { require(listOfNotNull(phoneReportHash, watchReportHash, previousActiveHash).all { it.matches(HASH) }) }
+    val previousActiveHash: String? = null, val safetyVersion: Int = 1) {
+    init { require(safetyVersion in 0..1); require(listOfNotNull(phoneReportHash, watchReportHash, previousActiveHash).all { it.matches(HASH) }) }
     companion object { private val HASH = Regex("[0-9a-f]{64}") }
 }
 
@@ -24,7 +24,7 @@ data class PatternProfileCommand(val commandId: String, val operation: PatternPr
         payload = mapOf("kind" to "PATTERN_PROFILE_V1", "operation" to operation.name,
             "runtime" to Base64.getEncoder().encodeToString(PatternRuntimeCodec.encode(runtime)), "runtimeHash" to runtimeHash,
             "expectedRevision" to expectedRevision.toString(), "phoneReportHash" to evidence?.phoneReportHash.orEmpty(),
-            "watchReportHash" to evidence?.watchReportHash.orEmpty(), "previousActiveHash" to evidence?.previousActiveHash.orEmpty())))
+            "watchReportHash" to evidence?.watchReportHash.orEmpty(), "previousActiveHash" to evidence?.previousActiveHash.orEmpty(), "safetyVersion" to (evidence?.safetyVersion ?: 0).toString())))
 
     companion object {
         fun decode(encoded: String): PatternProfileCommand {
@@ -36,7 +36,8 @@ data class PatternProfileCommand(val commandId: String, val operation: PatternPr
             val bytes = Base64.getDecoder().decode(field("runtime"))
             require(SensorCaptureFormat.sha256(bytes) == field("runtimeHash"))
             val phone = field("phoneReportHash")
-            val evidence = if (phone.isEmpty()) null else PatternValidationEvidence(phone, field("watchReportHash"), field("previousActiveHash").ifEmpty { null })
+            val evidence = if (phone.isEmpty()) null else PatternValidationEvidence(phone, field("watchReportHash"), field("previousActiveHash").ifEmpty { null },
+                envelope.payload["safetyVersion"]?.toInt() ?: 0)
             return PatternProfileCommand(envelope.messageId, PatternProfileOperation.valueOf(field("operation")),
                 PatternRuntimeCodec.decode(bytes), field("expectedRevision").toLong(), evidence)
         }

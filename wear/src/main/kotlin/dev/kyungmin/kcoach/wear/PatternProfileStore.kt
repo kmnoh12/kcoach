@@ -19,6 +19,8 @@ class PatternProfileStore(private val context: Context,
 
     fun stage(command: PatternProfileCommand): Result<PatternProfileAck> = synchronized(lock) {
         runCatching {
+            require(command.operation !in setOf(PatternProfileOperation.ACTIVATE, PatternProfileOperation.ROLLBACK) ||
+                command.evidence?.safetyVersion == 1) { "Calibration safety revalidation required" }
             val state = read()
             val slots = state.getJSONObject("slots")
             val id = slotId(command.runtime.compatibility)
@@ -74,6 +76,17 @@ class PatternProfileStore(private val context: Context,
             val slots = state.getJSONObject("slots")
             val id = slotId(key)
             val slot = slots.optJSONObject(id) ?: if (active) JSONObject().put("revision", 0L) else return@runCatching null
+            if (active) {
+                val effective = slot.optString("pendingActive").ifEmpty { slot.optString("currentActive") }
+                    .takeIf { it.isNotEmpty() }?.let(PatternProfileCommand::decode)
+                if (effective != null && effective.operation != PatternProfileOperation.DISABLE && effective.evidence?.safetyVersion != 1) {
+                    // Preserve receipts/revision for an explicit DISABLE or verified replacement, but use generic.
+                    slot.remove("frozenActive")
+                    slot.put("frozenEmptyActive", JSONObject().put("sessionId", sessionId).put("setId", setId)
+                        .put("attemptId", attemptId).put("watchClockId", watchClockId))
+                    slots.put(id, slot); write(state); return@runCatching null
+                }
+            }
             val channel = if (active) "Active" else "Shadow"
             if (active) slot.optJSONObject("frozenEmptyActive")?.let { empty ->
                 if (empty.getString("sessionId") == sessionId && empty.getString("setId") == setId &&
@@ -155,7 +168,10 @@ class PatternProfileStore(private val context: Context,
 
     fun frozen(key: PatternCompatibility, active: Boolean = false): Result<FrozenPatternProfile?> = synchronized(lock) {
         runCatching { read().getJSONObject("slots").optJSONObject(slotId(key))
-            ?.optJSONObject(if (active) "frozenActive" else "frozenShadow")?.let(::decodeFrozen) }
+            ?.optJSONObject(if (active) "frozenActive" else "frozenShadow")?.let(::decodeFrozen)?.takeIf { frozen ->
+                !active || PatternProfileCommand.decode(read().getJSONObject("receipts").getJSONObject(frozen.commandId)
+                    .getString("command")).evidence?.safetyVersion == 1
+            } }
     }
 
     /** Receipt identifies the removed model; application proves the basic detector actually processed a sample. */

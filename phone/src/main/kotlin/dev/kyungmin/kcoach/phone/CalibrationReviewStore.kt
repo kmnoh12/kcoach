@@ -39,9 +39,11 @@ class CalibrationReviewStore(private val context: Context) {
                 cameraMetrics = null, squatMetrics = null)
             else current.copy(revision = current.revision + 1, countReference = count)
             write(next, if (rebuild) emptyList() else null)
+            runCatching { PhoneWorkoutService.send(context, WearSync.PATH_CALIBRATION_CAMERA_STATE,
+                CalibrationCameraState(capture.id, capture.setId, capture.attemptId, next.revision + 2, false, actualReps).encode()) }
             next
         }
-    }
+    }.onSuccess { CalibrationPatternSafetyMonitor(context).check(id) }
 
     fun alignment(id: String): Result<CaptureClockMapping> = runCatching {
         val capture = captures.load(id).getOrThrow()
@@ -292,7 +294,7 @@ class CalibrationReviewStore(private val context: Context) {
             (0 until pauses.length()).map { pause -> pauses.getJSONArray(pause).let { RepPause(it.getLong(0), it.getLong(1)) } })
     }
     private fun directory(id: String): File {
-        require(id.matches(Regex("paired-[A-Za-z0-9-]{1,100}")))
+        require(id.matches(Regex("(?:calibration-)?paired-[A-Za-z0-9-]{1,100}")))
         return File(context.filesDir, "calibration-captures/$id")
     }
     companion object {

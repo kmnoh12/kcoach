@@ -16,19 +16,19 @@ class CameraSquatTest {
         val world = MutableList(33) { CameraLandmark(0.0, 0.0, 0.0, .95, .95) }
         image[0] = image[0].copy(y = .08 + bend * .08)
         for (side in 0..1) {
-            val x = if (side == 0) -.04 else .04
+            val x = if (side == 0) .16 else -.16
             image[11 + side] = image[0].copy(x = .5 + x, y = .20 + bend * .08)
             image[23 + side] = image[0].copy(x = .5 + x + bend * .05, y = .42 + bend * .16)
             image[25 + side] = image[0].copy(x = .5 + x + bend * .12, y = .65)
             image[27 + side] = image[0].copy(x = .5 + x, y = .88)
-            world[11 + side] = world[0].copy(x = x, y = -.45)
+            world[11 + side] = world[0].copy(x = x * 1.3, y = -.45)
             world[23 + side] = world[0].copy(x = x, y = 0.0)
             world[25 + side] = world[0].copy(x = x + bend * .20, y = .40 - bend * .15)
             world[27 + side] = world[0].copy(x = x, y = .80 - bend * .30)
         }
         val ns = 1_000_000_000L + ms * 1_000_000L
         return CameraPoseFrame(ms / 50, ns, ns + 1_000_000, ns / 1_000_000, ns + 2_000_000, ms * 1000,
-            640, 480, 0, true, CameraTimestampSource.PHONE_ELAPSED_REALTIME, "phone", listOf(image), listOf(world), true)
+            640, 480, 0, true, CameraTimestampSource.PHONE_ELAPSED_REALTIME, "phone", listOf(image), listOf(world.map { it.copy(x = (it.x + it.z) / kotlin.math.sqrt(2.0), z = (it.z - it.x) / kotlin.math.sqrt(2.0)) }), true)
     }
     private fun sequence() = (0L..1100L step 50).map { ms ->
         frame(ms, when { ms < 400 -> 0.0; ms <= 650 -> (ms - 400) / 250.0; ms <= 900 -> (900 - ms) / 250.0; else -> 0.0 })

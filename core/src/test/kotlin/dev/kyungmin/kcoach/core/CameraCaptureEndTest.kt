@@ -24,8 +24,17 @@ class CameraCaptureEndTest {
         assertNull(end.observe(6_000_000_000, null, null, guide, true))
         assertNull(end.observe(6_100_000_000, image(), image(), guide, true))
     }
+    @Test fun insufficientRepetitionsCannotTriggerAutomaticCompletion() {
+        val end = CameraCaptureEnd()
+        end.observe(0, image(), image(), guide, true, allowEnd = false)
+        end.observe(250_000_000, image(.7), image(), guide, true, allowEnd = false)
+        for (n in 2L..30L) assertNull(end.observe(n * 250_000_000, image(), image(), guide, true, allowEnd = false))
+        assertNull(end.endCameraNs)
+        for (n in 31L..40L) assertNull(end.observe(n * 250_000_000, image(), image(), guide, true))
+        assertNotNull(end.observe(41 * 250_000_000L, image(), image(), guide, true))
+    }
     @Test fun externalRotationWorksWithoutCameraMetricButKeepsTheElbowBand() {
-        val rotation = CameraCaptureGuide.forExercise("external_rotation", true)
+        val rotation = CameraCaptureGuide.forExercise("external_rotation", true).copy(viewTarget = null)
         assertNull(rotation.metric)
         fun pose(wristX: Double) = image().toMutableList().apply {
             this[11] = CameraLandmark(.4, .3, 0.0, 1.0, 1.0)

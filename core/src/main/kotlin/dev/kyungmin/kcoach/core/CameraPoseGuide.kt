@@ -20,7 +20,7 @@ enum class CameraPoseFamily(
     val arm: Pair<Double, Double>,
     val leg: Pair<Double, Double>? = null,
     /** Apparent shoulder width relative to a straight-on view; below 1 the user is turned toward a 45-degree oblique view. */
-    val widthScale: Double = 1.0,
+    val widthScale: Double = if (front) 1.0 else kotlin.math.cos(Math.toRadians(CameraOrientationPolicy.OBLIQUE)),
 ) {
     STAND_ARMS_DOWN_SIDE(false, 0.0, 0.0 to 4.0),
     STAND_ARMS_DOWN_FRONT(true, 0.0, 8.0 to 6.0),
@@ -28,12 +28,12 @@ enum class CameraPoseFamily(
     OVERHEAD_EXTENSION_SIDE(false, 0.0, 170.0 to -70.0),
     CABLE_OVERHEAD_EXTENSION_SIDE(false, 30.0, 130.0 to -140.0),
     // 45 degrees: a pure side view points the forearm along the camera axis, which hides the wrist and flattens its depth.
-    EXTERNAL_ROTATION_OBLIQUE(true, 0.0, 0.0 to -90.0, widthScale = .7),
+    EXTERNAL_ROTATION_OBLIQUE(true, 0.0, 0.0 to -90.0, widthScale = kotlin.math.cos(Math.toRadians(CameraOrientationPolicy.OBLIQUE))),
     PREACHER_SIDE(false, 10.0, 45.0 to 40.0),
     INCLINE_ARMS_DOWN_SIDE(false, 45.0, 0.0 to 0.0),
     INCLINE_PRESS_SIDE(false, 45.0, 180.0 to 180.0),
     SEATED_ARMS_UP_SIDE(false, -12.0, 150.0 to 165.0),
-    SEATED_PRESS_FRONT(true, 0.0, 80.0 to 175.0),
+    SEATED_PRESS_FRONT(false, 0.0, 80.0 to 175.0),
     SEATED_ARMS_FORWARD_SIDE(false, 2.0, 85.0 to 88.0),
     SEATED_CHEST_PRESS_SIDE(false, -5.0, -30.0 to 80.0),
     ARMS_OPEN_FRONT(true, 0.0, 80.0 to 85.0),
@@ -145,7 +145,7 @@ object CameraPoseGuide {
         fun dir(degrees: Double) = Math.toRadians(degrees).let { GuidePoint(f * sin(it), cos(it)) }
         val up = Math.toRadians(family.torsoLean).let { GuidePoint(f * sin(it), -cos(it)) }
         val hip = anchor.shoulder + up * (-TORSO * h)
-        val far = if (anchor.other == anchor.shoulder) anchor.shoulder + GuidePoint(-f * .03 * h, -.005 * h) else anchor.other
+        val far = anchor.shoulder + GuidePoint(-f * SHOULDER_WIDTH * family.widthScale * h, 0.0)
         val limbs = mutableListOf<GuideLimb>()
         for ((s, primary) in listOf(far to false, anchor.shoulder to true)) {
             val elbow = s + dir(upper) * (UPPER_ARM * h)
@@ -158,7 +158,7 @@ object CameraPoseGuide {
                 limbs += GuideLimb(listOf(start, knee, knee + dir(shank) * (SHANK * h)), .07 * h, primary)
             }
         }
-        return GuideFigure(anchor.shoulder + up * (HEAD_OFFSET * h), HEAD_RADIUS * h, listOf(anchor.shoulder, hip), .12 * h,
+        return GuideFigure(anchor.shoulder + up * (HEAD_OFFSET * h), HEAD_RADIUS * h, listOf(anchor.shoulder, far, hip + GuidePoint(-f * HIP_WIDTH * family.widthScale * h, 0.0), hip), .12 * h,
             limbs, family.lowerBody)
     }
 

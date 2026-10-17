@@ -5,7 +5,8 @@ import kotlin.math.abs
 
 data class PatternRegressionRow(val captureId: String, val rawSha256: String, val referenceDigest: String,
     val countReference: SetCountReference, val exerciseId: String, val candidateCount: Int?, val previousCount: Int?,
-    val candidateBoundaryErrorsMs: List<Double>, val previousBoundaryErrorsMs: List<Double>, val refusalReason: String?)
+    val candidateBoundaryErrorsMs: List<Double>, val previousBoundaryErrorsMs: List<Double>, val refusalReason: String?,
+    val genericCount: Int? = null)
 
 data class PatternRegressionReport(val candidateHash: String, val previousHash: String?,
     val rows: List<PatternRegressionRow>, val failures: List<String>) {
@@ -46,18 +47,22 @@ object PatternRegressionValidation {
                     RepCycle(it.startTimestampNs, it.turnaroundTimestampNs, it.endTimestampNs,
                         ExerciseMeasurementContracts.resolve(set.exerciseId).departurePhase)
                 }
+            val genericCount = if (usable) PhoneRepAnalyzer.analyze(set.document, ExerciseTrackingProfiles.resolve(set.exerciseId)).result.phoneReanalyzedReps else null
             val previousCount = if (!usable) null else if (previous != null) previousCycles!!.size else
                 PhoneRepAnalyzer.analyze(set.document, held.baselineProfile).result.phoneReanalyzedReps
             fun errors(cycles: List<RepCycle>?): List<Double> =
                 if (cycles?.size != count.reps || set.references.size != count.reps || set.references.any { !it.eligibleForLearning }) emptyList()
                 else cycles.zip(set.references).flatMap { (cycle, ref) -> listOf(abs(cycle.startNs - ref.cycle.startNs),
                     abs(cycle.turnaroundNs - ref.cycle.turnaroundNs), abs(cycle.endNs - ref.cycle.endNs)).map { it / 1_000_000.0 } }
-            if (!usable || previousCount == null) failures += "regression_inputs_unavailable"
+            if (!usable || previousCount == null || genericCount == null) failures += "regression_inputs_unavailable"
             PatternRegressionRow(set.captureId, set.rawSha256, ReviewedPatternBuilder.referenceDigest(set.references), count,
                 set.exerciseId, nextCycles?.size, previousCount, errors(nextCycles), errors(previousCycles),
-                if (!usable) "invalid_or_incomplete_signal" else if (previousCount == null) "baseline_unavailable" else null)
+                if (!usable) "invalid_or_incomplete_signal" else if (previousCount == null || genericCount == null) "baseline_unavailable" else null, genericCount)
         }
         fun error(row: PatternRegressionRow, value: Int?) = value?.let { abs(it - row.countReference.reps) } ?: row.countReference.reps + 1
+        // No individual capture may get worse, even if gains elsewhere hide it in the mean.
+        if (rows.any { error(it, it.candidateCount) > error(it, it.previousCount) }) failures += "regression_capture_error"
+        if (rows.any { it.genericCount == null || error(it, it.candidateCount) > error(it, it.genericCount) }) failures += "generic_count_regression"
         if (rows.sumOf { error(it, it.candidateCount) } > rows.sumOf { error(it, it.previousCount) }) failures += "regression_count_error"
         if (rows.groupBy { it.exerciseId }.values.any { group ->
             group.sumOf { error(it, it.candidateCount) } > group.sumOf { error(it, it.previousCount) }

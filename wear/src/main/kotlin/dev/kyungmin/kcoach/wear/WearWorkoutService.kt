@@ -76,6 +76,7 @@ class WearWorkoutService : Service(), SensorEventListener {
     private var gyroscope: Sensor? = null
     private var heartRateSensor: Sensor? = null
 
+    private val calibrationCameraState by lazy { CalibrationWatchStateStore(this) }
     private var paired = false
     private var running = false
     private var resting = false
@@ -85,6 +86,7 @@ class WearWorkoutService : Service(), SensorEventListener {
     private var paused = false
     private var pausedRestRemainingMs = 0L
     private var lastPhoneHeartbeatAtMs = 0L
+    private val recordState by lazy { WatchRecordState(this) }
     private var sessionId = ""
     private var exerciseId = ""
     private var exerciseName = "운동 대기 중"
@@ -285,6 +287,11 @@ class WearWorkoutService : Service(), SensorEventListener {
         }
         val applied = runCatching {
         when (type) {
+            "SET_RECORD" -> {
+                recordState.receive(intent?.getStringExtra("payload").orEmpty())?.let {
+                    broadcastState(force = true)
+                }
+            }
             "WORKOUT_CONTROL_SUBMIT" -> {
                 val request = dev.kyungmin.kcoach.core.WatchWorkoutControl.decode(requireNotNull(intent?.getStringExtra("payload")))
                 check(checkpoint()) { "Preserve raw before requesting a workout transition" }
@@ -328,6 +335,10 @@ class WearWorkoutService : Service(), SensorEventListener {
                     if (ack.status in setOf(dev.kyungmin.kcoach.core.ManualSetStatus.APPLIED, dev.kyungmin.kcoach.core.ManualSetStatus.DUPLICATE))
                         sendToPhone(WearSync.PATH_RECONNECT, WearSync.watchUiReady(sessionId), coalescible = false)
                 }
+            }
+            "CALIBRATION_CAMERA_STATE" -> {
+                val state = dev.kyungmin.kcoach.core.CalibrationCameraState.decode(intent!!.getStringExtra("payload").orEmpty())
+                if ((sessionId.isBlank() || sessionId == state.sessionId) && calibrationCameraState.update(state)) broadcastState(force = true)
             }
             "QUERY" -> {
                 broadcastState(force = true)
@@ -1011,7 +1022,8 @@ class WearWorkoutService : Service(), SensorEventListener {
         reps = 0
         lastAccel = FloatArray(3); lastGyro = FloatArray(3)
         lastAccelerometerNs = null; lastAccelerometerAccuracy = null; lastHeartRateNs = null
-        calibrationStage = if (sessionId.startsWith("calibration-")) CalibrationStage.BASELINE else null
+        calibrationStage = if (dev.kyungmin.kcoach.core.CapturePurpose.forSession(sessionId) == dev.kyungmin.kcoach.core.CapturePurpose.LEGACY_CALIBRATION) CalibrationStage.BASELINE else null
+        calibrationCameraState.begin(sessionId, setId, attemptId, exerciseId, exerciseName)
         preparationHoldMs = 0L
         patternSelectionMode = intent.getStringExtra("patternSelectionMode").orEmpty()
         // Any unresolved previous chunks stay on disk instead of being erased
@@ -1170,18 +1182,13 @@ class WearWorkoutService : Service(), SensorEventListener {
         handler.removeCallbacks(setEndTicker)
         handler.post(setEndTicker)
         val genericProfile = ExerciseTrackingProfiles.resolve(exerciseId, exerciseName)
-        val personalProfile = if (calibrationStage != null || patternSelectionMode == "VERIFIED_PATTERN") null else getSharedPreferences("personal-profiles", MODE_PRIVATE)
-            .getString(exerciseId, null)
-            ?.let { runCatching { PersonalCalibrationProfileCodec.decode(it) }.getOrNull() }
+        // Legacy self-labeled threshold profiles have no reviewed non-regression evidence.
+        // A restored in-progress attempt keeps its snapshot; a new attempt starts generic.
         trackingProfile = if (savedSnapshot != null) {
             dev.kyungmin.kcoach.core.TrackingProfileSnapshot.decode(savedSnapshot).also {
                 require(it.exerciseId == genericProfile.exerciseId) { "recorded profile belongs to another exercise" }
             }
-        } else if (personalProfile == null) {
-            genericProfile
-        } else {
-            PersonalCalibrationBuilder.personalizedTrackingProfile(personalProfile, genericProfile)
-        }
+        } else genericProfile
         forearmRotationDetector = if (trackingProfile.signal == TrackingSignal.FOREARM_ROTATION) {
             ForearmRotationRepDetector(trackingProfile)
         } else {
@@ -1199,14 +1206,15 @@ class WearWorkoutService : Service(), SensorEventListener {
         // hardware-reviewed wrist target yet. Do not reinterpret an arbitrary quiet wrist as
         // a correct pose or make deferred grips wait two seconds. The legacy calibration
         // baseline is a separate sensor-stability task, not an exercise posture verdict.
-        val needsCalibrationBaseline = calibrationStage == CalibrationStage.BASELINE &&
+        val needsCalibrationBaseline = (calibrationStage == CalibrationStage.BASELINE || sessionId.startsWith("calibration-paired-")) &&
             trackingProfile.mode != TrackingMode.MANUAL_REQUIRED
         val direction = startDirectionSnapshot.takeIf { it.isNotEmpty() }?.let(dev.kyungmin.kcoach.core.StartDirectionRuntimeCodec::decode)
         startDirectionStatus = if (direction != null) "WAITING" else dev.kyungmin.kcoach.core.StartWristOrientationPolicy.uncheckedStartStatus(exerciseId)
         measurementReady = !needsCalibrationBaseline && direction == null
         measurementArmed = measurementReady
         startPoseGate = if (measurementReady) null else
-            StartPoseStabilityGate(direction?.gateConfig ?: StartPoseGateConfig.forProfile(trackingProfile).copy(requireSetupMotion = false))
+            StartPoseStabilityGate(direction?.gateConfig ?: StartPoseGateConfig.forProfile(trackingProfile).copy(requireSetupMotion = false,
+                stableDurationMs = if (sessionId.startsWith("calibration-paired-")) 3_000L else 2_000L))
         if (measurementReady && trackingProfile.mode != TrackingMode.MANUAL_REQUIRED) {
             forearmRotationDetector?.beginCounting()
             profiledMotionDetector?.beginCounting()
@@ -1335,6 +1343,7 @@ class WearWorkoutService : Service(), SensorEventListener {
         val savedCapture = saveCapture()
         check(captureSampleCount == 0 || savedCapture != null) { "Session end deferred; original capture retained" }
         savedCapture?.let(::sendCaptureToPhone)
+        calibrationCameraState.finish(sessionId, reps)
         sendLiveState(phase, false, force = true)
         sendToPhone(
             WearSync.PATH_COMPLETE,
@@ -2065,11 +2074,14 @@ class WearWorkoutService : Service(), SensorEventListener {
 
     private fun broadcastState(force: Boolean = false) {
         val now = System.currentTimeMillis()
+        recordState.observe(sessionId, setId, attemptId, running || paused && !resting && pausedRestRemainingMs == 0L)
         WatchSessionTally.get(this).observe(sessionId, setId, attemptId, running, resting, paused, reps, weightKg, heartRate, now)
+        recordState.currentRecord()?.let { WatchSessionTally.get(this).noteSetRecord(it.sessionId, it.setId) }
         if (!force && now - lastUiBroadcastAtMs < UI_BROADCAST_INTERVAL_MS) return
         lastUiBroadcastAtMs = now
         uiBroadcastCount += 1
         sendBroadcast(Intent(ACTION_STATE).setPackage(packageName).apply {
+            recordState.addExtras(this)
             putExtra("paired", paired)
             putExtra("running", running)
             putExtra("resting", resting)
@@ -2108,10 +2120,12 @@ class WearWorkoutService : Service(), SensorEventListener {
             } == true)
             putExtra("patternShadowEventIndex", shadowEvents.lastIndex)
             putExtra("patternShadowEmissionNs", shadowEvents.lastOrNull()?.sourceEmissionNs ?: -1L)
-            if (calibrationStage == CalibrationStage.BASELINE && !measurementReady) {
+            if (dev.kyungmin.kcoach.core.CapturePurpose.forSession(sessionId) != dev.kyungmin.kcoach.core.CapturePurpose.WORKOUT && !measurementReady) {
+                if (running) putExtra("phase", "BASELINE")
                 putExtra("preparationHoldMs", preparationHoldMs)
-                putExtra("preparationHoldTargetMs", StartPoseGateConfig.forProfile(trackingProfile).stableDurationMs)
+                putExtra("preparationHoldTargetMs", if (sessionId.startsWith("calibration-paired-")) 3_000L else StartPoseGateConfig.forProfile(trackingProfile).stableDurationMs)
             }
+            calibrationCameraState.applyTo(this, sessionId)
         })
     }
 

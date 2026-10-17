@@ -48,6 +48,7 @@ import dev.kyungmin.kcoach.phone.ui.ExerciseUi
 import dev.kyungmin.kcoach.core.TrainingLoad
 import dev.kyungmin.kcoach.core.BodyLoad
 import dev.kyungmin.kcoach.core.PersonalRecords
+import dev.kyungmin.kcoach.core.SetRecordCommand
 import dev.kyungmin.kcoach.core.RecordKind
 import dev.kyungmin.kcoach.core.WorkoutLog
 import dev.kyungmin.kcoach.core.WorkoutStats
@@ -1602,6 +1603,12 @@ class MainActivity : ComponentActivity() {
         recordBannerState = RecordBannerUi(++recordBannerSeq,
             RecordPresentation.record(workout.routine.exercises[exerciseIndex].exercise.name, hit, workout.usePounds))
         recordBannerAtMs = System.currentTimeMillis()
+        val snapshot = workoutSnapshot(workout)
+        snapshot.plannedSets.firstOrNull { SetIdentity.completionKey(snapshot.sessionId, it) == key }
+            ?.takeIf { it.setId.isNotBlank() }?.let { set ->
+                sendWear(WearSync.PATH_SET_RECORD,
+                    SetRecordCommand.fromHit(snapshot.sessionId, set.setId, set.attemptId, hit).encode())
+            }
     }
 
     private fun recordHistory(workout: ActiveWorkout) {
