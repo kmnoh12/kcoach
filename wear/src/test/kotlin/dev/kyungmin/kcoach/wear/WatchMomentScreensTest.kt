@@ -264,6 +264,16 @@ class WatchMomentScreensTest {
         pager.show(1); shot(root, "sample-aux"); pager.show(0)
         state(name = "덤벨 컬", running = true, reps = 13, target = 12, weight = 20.0, heartRate = 118)
         idle(400); shot(root, "sample-over")
+        state(name = "케이블 익스터널 로테이션", running = true, reps = 105, target = 100, weight = 102.5, heartRate = 0, phase = "MANUAL_PENDING")
+        idle(400); shot(root, "extreme-measure")
+        val face = descendants(root).filterIsInstance<WatchWorkoutFace>().single()
+        assertEquals("105", face.value.text.toString())
+        assertEquals("A three-digit count shrinks instead of turning into an ellipsis", 0, face.value.layout.getEllipsisCount(0))
+        val hint = android.graphics.Rect().also { face.hint.getHitRect(it) }
+        val arrow = android.graphics.Rect().also { face.chevronDown.getHitRect(it) }
+        val textBottom = face.hint.top + face.hint.baseline + face.hint.paint.descent()
+        assertTrue("The notice line ends above the bottom arrow", textBottom <= arrow.top + 1 || face.chevronDown.visibility != View.VISIBLE)
+        assertTrue(hint.width() > 0)
         state(name = "덤벨 컬", setId = "set-2", resting = true, setIndex = 1, reps = 12, target = 12, weight = 20.0, phase = "RESTING",
             restEndAtMs = System.currentTimeMillis() + 44_600) { putExtra("restSeconds", 90) }
         idle(4_000); shot(root, "sample-rest")
