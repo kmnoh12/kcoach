@@ -36,6 +36,30 @@ class SetEndServiceTest {
             assertEquals("SET_COMPLETE", WearSync.parse(field("pendingCompletion").get(service) as String)[9])
         } finally { controller.destroy() }
     }
+    @Test fun currentWeightAndSameAttemptSyncPreserveCountingAndAutomaticCompletion() {
+        val controller = Robolectric.buildService(WearWorkoutService::class.java).create()
+        val service = controller.get()
+        try {
+            start(service)
+            field("setId").set(service, "set"); field("attemptId").set(service, "attempt")
+            repeat(5) { rep(service) }
+            val detector = field("forearmRotationDetector").get(service)
+            fun command(type: String) = Intent().putExtra("command", type).putExtra("session", "set-end-session")
+                .putExtra("exerciseId", "external_rotation").putExtra("setId", "set").putExtra("attemptId", "attempt")
+                .putExtra("weightKg", 35.0)
+            service.onStartCommand(command("EDIT_SET").putExtra("which", "CURRENT").putExtra("reps", -1), 0, 2)
+            service.onStartCommand(command("SYNC").putExtra("syncPhase", "WORKING"), 0, 3)
+            assertEquals(35.0, field("weightKg").get(service) as Double, 0.0)
+            assertEquals(5, field("reps").getInt(service))
+            assertSame(detector, field("forearmRotationDetector").get(service))
+            assertTrue(field("measurementReady").getBoolean(service))
+            repeat(5) { rep(service) }
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(3100))
+            assertFalse(field("running").getBoolean(service))
+            assertEquals("10", WearSync.parse(field("pendingCompletion").get(service) as String)[5])
+        } finally { controller.destroy() }
+    }
+
     @Test fun continuousExtraRepsReachTwelveBeforeAutomaticCompletion() {
         val controller = Robolectric.buildService(WearWorkoutService::class.java).create()
         val service = controller.get()

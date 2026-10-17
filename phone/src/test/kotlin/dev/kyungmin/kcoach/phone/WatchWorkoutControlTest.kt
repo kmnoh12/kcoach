@@ -107,6 +107,40 @@ class WatchWorkoutControlTest {
         assertEquals(saved, store.loadActive().getOrThrow())
     }
 
+    @Test fun currentWeightPersistsAndResyncsWithoutChangingRepsAndRejectsStaleOrRestingEdits() {
+        val app = RuntimeEnvironment.getApplication()
+        val store = SessionStore(app)
+        assertTrue(store.saveActive(snapshot().copy(startedAtMs = 100)))
+        val sent = mutableListOf<Pair<String, String>>()
+        val controller = WatchWorkoutController(app) { path, value -> sent += path to value }
+        val edit = WatchWorkoutControl("current", WatchWorkoutAction.EDIT_SET, "watch-session", "set-0", "attempt-0",
+            which = "CURRENT", reps = -1, weightKg = 35.0)
+        assertEquals(edit, WatchWorkoutControl.decode(edit.encode()))
+        assertTrue(runCatching { edit.copy(reps = 8) }.isFailure)
+        assertTrue(runCatching { edit.copy(weightKg = null) }.isFailure)
+        assertEquals(WatchWorkoutControlStatus.APPLIED, controller.receive(edit.encode(), 200).getOrThrow().ack.status)
+        val saved = SessionStore(app).loadActive().getOrThrow()!!
+        assertEquals(snapshot().copy(startedAtMs = 100,
+            plannedSets = snapshot().plannedSets.mapIndexed { index, set -> if (index == 0) set.copy(weightKg = 35.0) else set }), saved)
+        val sync = WearSync.parse(sent.last { it.first == WearSync.PATH_COMMAND }.second)
+        assertEquals("SYNC", sync[1]); assertEquals("12", sync[6]); assertEquals("35.0", sync[7])
+        assertEquals("WORKING", sync[11])
+        assertEquals(WatchWorkoutControlStatus.DUPLICATE,
+            controller.receive(edit.encode(), 250).getOrThrow().ack.status)
+        for (invalid in listOf(edit.copy(commandId = "session", sessionId = "other"),
+            edit.copy(commandId = "attempt", attemptId = "old"))) {
+            assertEquals(WatchWorkoutControlStatus.STALE, controller.receive(invalid.encode(), 260).getOrThrow().ack.status)
+        }
+        assertEquals(saved, store.loadActive().getOrThrow())
+        store.applyManualSet(ManualSetCommand("count-current", edit.sessionId, "leg_press", 0,
+            edit.setId, edit.attemptId, 8, 0, ManualSetOperation.COMPLETE), 300).getOrThrow()
+        val resting = store.loadActive().getOrThrow()!!
+        assertEquals(35.0, resting.plannedSets[0].weightKg!!, 0.0)
+        assertEquals(WatchWorkoutControlStatus.STALE, controller.receive(edit.copy(commandId = "rest-current",
+            setId = "set-1", attemptId = "attempt-1").encode(), 400).getOrThrow().ack.status)
+        assertEquals(resting, store.loadActive().getOrThrow())
+    }
+
     @Test fun finalRestUsesEmptyNextIdentityAndStillEditsPrevious() {
         val app = RuntimeEnvironment.getApplication(); val store = SessionStore(app)
         val plan = snapshot().copy(plannedSets = snapshot().plannedSets.take(1))

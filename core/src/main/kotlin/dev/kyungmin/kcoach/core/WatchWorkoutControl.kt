@@ -39,8 +39,8 @@ data class WatchWorkoutControl(val commandId: String, val action: WatchWorkoutAc
             deltaSeconds != null && restSeconds != null && restSeconds in 0..1800 && restEndAtMs != null && restEndAtMs >= 0
             else deltaSeconds == null && restSeconds == null && restEndAtMs == null)
         require(if (action == WatchWorkoutAction.EDIT_SET)
-            which in setOf("PREVIOUS", "NEXT") && reps in -1..9999 && (weightKg == null || weightKg.isFinite() && weightKg >= 0) &&
-                (reps >= 0 || weightKg != null)
+            which in setOf("PREVIOUS", "NEXT", "CURRENT") && reps in -1..9999 && (weightKg == null || weightKg.isFinite() && weightKg >= 0) &&
+                (reps >= 0 || weightKg != null) && (which != "CURRENT" || (reps == -1 && weightKg != null))
             else which == null && reps == -1 && weightKg == null)
         require(planHash == null || planHash.matches(CONTROL_HASH))
         require((side == null && placement == null) ||
