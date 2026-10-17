@@ -37,6 +37,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -92,7 +94,13 @@ private val GROUP_BORDER = Color(0xFF3A4240)
 @Composable
 private fun ProgressionSection(settings: ProgressionSettings, onChange: (ProgressionSettings) -> Unit) {
     var current by remember { mutableStateOf(settings) }
-    fun update(next: ProgressionSettings) { current = next; onChange(next) }
+    val haptic = LocalHapticFeedback.current
+    fun update(next: ProgressionSettings) {
+        if (next == current) return // a drag repeats the same detent; buzz and save only on a real change
+        haptic.performHapticFeedback(if (next.enabled != current.enabled) HapticFeedbackType.LongPress else HapticFeedbackType.TextHandleMove)
+        current = next
+        onChange(next)
+    }
     Column(Modifier.fillMaxWidth().clip(KShape.Panel).border(0.5.dp, GROUP_BORDER, KShape.Panel).padding(16.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
