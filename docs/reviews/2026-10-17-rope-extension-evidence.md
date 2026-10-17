@@ -58,3 +58,41 @@ ZIP, then running Python unittest class
 `PYTHONPATH=tools`, and the core test `*SelectedEvidenceReplayTest`.
 
 No production detector, application version, or deployment was changed.
+
+## Second capture cfc9dc8b
+
+The next independently supplied capture is also `rope_extension`, left wrist,
+outside placement, reviewed as 10 repetitions without reviewed boundaries.
+All nine indexed entries passed integrity checks. Raw SHA-256:
+`2e8573e30bbef1092021d1462ac5ebed9bb5b39806ca0f3ef9a59c4a6b8f4f79`.
+The 1,566 samples span 31.351 seconds at 49.919 Hz, longest gap 20.326 ms.
+Both sensors report HIGH accuracy throughout, with no missing clocks, stale
+acceleration joins, or unreliable samples. Camera records total 248.
+
+The same selected replay test passed with this original ZIP:
+
+| Detector | Count | End times in sensor seconds |
+|---|---:|---|
+| Frozen and current rope profile | 6 | 6.49, 10.13, 14.88, 21.15, 23.74, 27.26 |
+| Unadopted ReturnToPose comparison | 10 | 6.13, 8.67, 11.13, 13.62, 15.86, 18.29, 20.77, 23.28, 25.72, 28.25 |
+
+Across these two user-reviewed 10-rep captures, the existing detector produces
+11 and 6, whereas the unchanged comparison detector produces 10 and 10.
+The second capture therefore exposes undercounting, not just the first
+capture's net overcount. A constant final-count correction cannot solve both.
+Aggregate absolute count error averages 2.5 for the existing detector and 0 for
+the comparison on these two explored captures only. This is not population
+accuracy or independent validation, and does not establish per-rep correctness.
+
+Sparse video contact sheets confirm rope pushdowns followed by approaching the
+phone; they are insufficient for manually labeling every repetition. Exploratory
+camera thresholding again totals 10 but ends its last cycle around 31.26 video
+seconds, after the pose comparison's last event around 28.25 sensor seconds.
+It also lacks a cycle around the comparison's 15.86-second event. Thus even a
+camera total of 10 must not be mistaken for a matching set of rep boundaries.
+Clock-offset estimates span about 575 ms. Candidate adoption remains pending
+boundary review and broader exercise-specific checks.
+
+Original extracted files and replay CSV are retained privately under ignored
+`work/evidence/cfc9dc8b/`. Only this analysis note is added to version control;
+the production engine, versions, and releases are unchanged.
