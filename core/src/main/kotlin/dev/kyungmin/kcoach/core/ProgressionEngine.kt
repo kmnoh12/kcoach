@@ -45,11 +45,20 @@ class ProgressionEngine {
             }
             var streak = 0
             for (log in comparable) {
-                if (log.sets.indices.filter { !log.sets[it].isWarmup && log.sets[it].weightKg == weight } != indices) break
-                val rows = indices.map { log.sets[it] }
+                val historicalIndices = if (weight == groups.first().key) {
+                    val main = log.sets.indices.filter { !log.sets[it].isWarmup }.groupBy { log.sets[it].weightKg }
+                        .entries.maxByOrNull { if (plan.load == ProgressionLoad.ASSISTANCE) -(it.key ?: 0.0) else it.key ?: 0.0 }
+                    if (main == null || main.key != weight) break
+                    main.value
+                } else {
+                    val sameWeight = log.sets.indices.filter { !log.sets[it].isWarmup && log.sets[it].weightKg == weight }
+                    if (sameWeight != indices) break
+                    sameWeight
+                }
+                val rows = historicalIndices.map { log.sets[it] }
                 if (rows.any { !it.completed || !it.repsEntered || it.targetReps == null }) continue
                 if (rows.any { !it.progressionEligible }) continue
-                if (indices.any { log.sets[it].reps < targets[it].upperReps!! || log.sets[it].reps < log.sets[it].targetReps!! }) break
+                if (historicalIndices.any { log.sets[it].reps < targets[it].upperReps!! || log.sets[it].reps < log.sets[it].targetReps!! }) break
                 streak++
             }
             // Waiting at the heaviest successful group blocks progression of lighter groups.

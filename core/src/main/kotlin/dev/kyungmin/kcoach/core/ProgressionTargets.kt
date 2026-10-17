@@ -30,7 +30,7 @@ object ProgressionDefaults {
         return when (equipment) {
             "바벨" -> IncrementCandidate(5.0, false)
             "덤벨" -> IncrementCandidate(2.0, false)
-            "머신", "케이블", "핀 머신" -> IncrementCandidate(observedWeights.filter { it.isFinite() && it >= 0 }.distinct().sorted().zipWithNext { a, b -> b - a }.minOrNull(), true)
+            "머신", "케이블", "핀 머신" -> IncrementCandidate(observedWeights.filter { it.isFinite() && it >= 0 }.distinct().sorted().zipWithNext { a, b -> b - a }.minOrNull() ?: 5.0, false)
             else -> IncrementCandidate(null, true)
         }
     }

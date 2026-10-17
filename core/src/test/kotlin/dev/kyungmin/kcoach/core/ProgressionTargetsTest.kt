@@ -51,6 +51,34 @@ class ProgressionTargetsTest {
         p = p.copy(sets = next(p, log(p))!!)
         assertEquals(listOf(10, 4, 10), p.sets.map { it.targetReps })
     }
+    @Test fun changingBackoffSetsPreservesMainStreak() {
+        val old = plan(70.0 to 10, 70.0 to 10, 60.0 to 8)
+        val current = plan(70.0 to 10, 70.0 to 10, 50.0 to 7)
+        val result = next(current, log(old, 1), log(current, 2))!!
+        assertEquals(listOf(75.0, 75.0, 50.0), result.map { it.weightKg })
+        assertEquals(listOf(6, 6, 7), result.map { it.targetReps })
+    }
+    @Test fun singleRemainingMainSetUsesAllHistoricalMainSets() {
+        val old = plan(70.0 to 10, 70.0 to 10)
+        val current = plan(70.0 to 10, 60.0 to 8)
+        val result = next(current, log(old, 1), log(current, 2))!!
+        assertEquals(listOf(75.0, 60.0), result.map { it.weightKg })
+        assertEquals(listOf(6, 8), result.map { it.targetReps })
+        val failed = log(old, 1, listOf(10, 9))
+        assertEquals(listOf(70.0, 60.0), next(current, failed, log(current, 2))!!.map { it.weightKg })
+    }
+    @Test fun differentHistoricalMainWeightBreaksStreakEvenWhenCurrentWeightWasPresent() {
+        val current = plan(70.0 to 10, 60.0 to 10)
+        val differentMain = plan(70.0 to 10, 75.0 to 10)
+        assertEquals(listOf(70.0, 60.0), next(current, log(current, 1), log(differentMain, 2), log(current, 3))!!.map { it.weightKg })
+    }
+    @Test fun assistanceMainIsLightestAndExcludesWarmup() {
+        val old = plan(5.0 to 10, 20.0 to 10, 20.0 to 10, warmup = true, load = ProgressionLoad.ASSISTANCE)
+        val current = plan(5.0 to 10, 20.0 to 10, 30.0 to 8, warmup = true, load = ProgressionLoad.ASSISTANCE)
+        assertEquals(listOf(5.0, 15.0, 30.0), next(current, log(old, 1), log(current, 2))!!.map { it.weightKg })
+        val differentMain = old.copy(sets = old.sets.mapIndexed { i, s -> if (i == 2) s.copy(weightKg = 15.0) else s })
+        assertEquals(listOf(5.0, 20.0, 30.0), next(current, log(current, 1), log(differentMain, 2), log(current, 3))!!.map { it.weightKg })
+    }
     @Test fun incompleteGroupDoesNotGainReps() {
         val p = plan(70.0 to 8, 70.0 to 4, 70.0 to 10)
         assertEquals(p.sets, next(p, log(p, reps = listOf(8, 3, 10)))!!.map { it.copy(upperReps = null) })
@@ -106,11 +134,27 @@ class ProgressionTargetsTest {
         val assisted = plan(20.0 to 10, load = ProgressionLoad.ASSISTANCE)
         assertEquals(15.0, next(assisted, log(assisted), speed = ProgressionSpeed.FAST)!!.single().weightKg)
     }
-    @Test fun pinCandidateRequiresExplicitConfirmationAndNoRatioLimit() {
-        assertEquals(IncrementCandidate(10.0, true), ProgressionDefaults.increment("머신", listOf(20.0, 30.0, 40.0)))
+    @Test fun explicitConfirmationStillBlocksAndNoRatioLimitApplies() {
         val p = plan(20.0 to 12, pattern = "curl")
         assertEquals(20.0, next(p, log(p), speed = ProgressionSpeed.FAST, increment = IncrementCandidate(10.0, true))!!.single().weightKg)
         assertEquals(30.0, next(p, log(p), speed = ProgressionSpeed.FAST, increment = IncrementCandidate(10.0, false))!!.single().weightKg)
+    }
+    @Test fun machineDefaultsUseFiveOrSmallestObservedGapAndConfirmedValueWins() {
+        for (equipment in listOf("머신", "케이블", "핀 머신")) {
+            val p = plan(20.0 to 10).let { it.copy(key = it.key.copy(equipment = equipment)) }
+            for (weights in listOf(emptyList(), listOf(20.0, 20.0))) {
+                val increment = ProgressionDefaults.increment(equipment, weights)
+                assertEquals(IncrementCandidate(5.0, false), increment)
+                assertEquals(25.0, next(p, log(p, 1), log(p, 2), increment = increment)!!.single().weightKg)
+            }
+            val observed = ProgressionDefaults.increment(equipment, listOf(40.0, 20.0, 30.0, 32.5, 30.0))
+            assertEquals(IncrementCandidate(2.5, false), observed)
+            assertEquals(22.5, next(p, log(p, 1), log(p, 2), increment = observed)!!.single().weightKg)
+            val confirmed = ProgressionDefaults.increment(equipment, listOf(20.0, 30.0), confirmedKg = 1.0)
+            assertEquals(IncrementCandidate(1.0, false), confirmed)
+            assertEquals(21.0, next(p, log(p, 1), log(p, 2), increment = confirmed)!!.single().weightKg)
+        }
+        assertEquals(IncrementCandidate(null, true), ProgressionDefaults.increment("unknown", listOf(20.0, 30.0)))
     }
     @Test fun legacyAndExtendedCodecRoundTrip() {
         assertEquals(LoggedSet(60.0, 10), ExerciseHistoryCodec.decode("bench\t1\t60:10").single().sets.single())
