@@ -4,7 +4,10 @@ package dev.kyungmin.kcoach.core
 data class CameraCaptureGuide(val id: String, val direction: String, val framing: String, val required: Set<Int>,
     val startDescription: String, val metric: CameraMotion?, val readyElbowBand: ClosedFloatingPointRange<Double>? = null,
     val headline: String = direction, val startHint: String? = null,
-    val viewTarget: CameraViewTarget? = null) {
+    val viewTarget: CameraViewTarget? = null,
+    /** Joints the pose itself hides (a wrist behind the head); they count as seen at [OCCLUDED_MIN_CONFIDENCE]. */
+    val occluded: Set<Int> = emptySet()) {
+    private fun minConfidence(index: Int) = if (index in occluded) OCCLUDED_MIN_CONFIDENCE else MIN_CONFIDENCE
     /** How long the start pose must hold before capture may start; without an angle check it needs a steadier hold. */
     val readyHoldMs: Long get() = if (metric == null) 1000L else 200L
 
@@ -20,7 +23,7 @@ data class CameraCaptureGuide(val id: String, val direction: String, val framing
     }
     fun visible(points: List<CameraLandmark>): Boolean = required.isNotEmpty() && required.all { index ->
         val point = points.getOrNull(index) ?: return@all false
-        minOf(point.visibility ?: 0.0, point.presence ?: 0.0) >= MIN_CONFIDENCE && inFrame(point)
+        minOf(point.visibility ?: 0.0, point.presence ?: 0.0) >= minConfidence(index) && inFrame(point)
     }
 
     /** Why [startReady] says yes or no, joint by joint, for the on-screen debug overlay and offline replays. */
@@ -29,7 +32,7 @@ data class CameraCaptureGuide(val id: String, val direction: String, val framing
         val joints = required.sorted().map { index ->
             val point = image.getOrNull(index)
             StartJoint(index, point?.visibility, point?.presence, point?.let(::inFrame) == true,
-                point != null && minOf(point.visibility ?: 0.0, point.presence ?: 0.0) >= MIN_CONFIDENCE && inFrame(point))
+                point != null && minOf(point.visibility ?: 0.0, point.presence ?: 0.0) >= minConfidence(index) && inFrame(point))
         }
         val seen = image.size == 33 && world.size == 33 && joints.all { it.ok }
         val angle = if (!seen) null else if (metric != null) observedMetric(image, world, left) else if (readyElbowBand != null) elbowSetupAngle(image, world, left) else null
@@ -45,8 +48,9 @@ data class CameraCaptureGuide(val id: String, val direction: String, val framing
     fun observedMetric(image: List<CameraLandmark>, world: List<CameraLandmark>, left: Boolean): Double? {
         val motion = metric ?: return null
         if (image.size != 33 || world.size != 33 || !visible(image)) return null
+        // The required joints just passed [visible]; a hidden-by-pose joint is trusted at its lower bar.
         val points = world.mapIndexed { i, p -> PosePoint(p.x, p.y, p.z,
-            minOf(image[i].visibility ?: 0.0, image[i].presence ?: 0.0,
+            if (i in occluded) 1.0 else minOf(image[i].visibility ?: 0.0, image[i].presence ?: 0.0,
                 p.visibility ?: 1.0, p.presence ?: 1.0)) }
         val value = UpperBodyPoseGeometry.metric(points, motion, left) ?: return null
         if (motion == CameraMotion.SQUAT_KNEE_FLEXION && motion.atRest(value)) {
@@ -60,6 +64,8 @@ data class CameraCaptureGuide(val id: String, val direction: String, val framing
     companion object {
         /** Minimum min(visibility, presence) for a required joint to count as seen. */
         const val MIN_CONFIDENCE = 0.65
+        /** Wrist behind the head in overhead extensions: MediaPipe still places it, only with low confidence. */
+        const val OCCLUDED_MIN_CONFIDENCE = 0.25
 
         fun forExercise(id: String, left: Boolean): CameraCaptureGuide {
             val contract = ExerciseMeasurementContracts.resolve(id)
@@ -98,8 +104,11 @@ data class CameraCaptureGuide(val id: String, val direction: String, val framing
                 // External rotation turns the forearm about the upper arm, which a phone camera cannot
                 // judge reliably; it only checks the elbow is set at about 90 degrees beside the body.
                 if (recipe == MeasurementRecipe.EXTERNAL_ROTATION) 75.0..105.0 else null,
-                brief(id, recipe, left), startHint(id, recipe), target)
+                brief(id, recipe, left), startHint(id, recipe), target,
+                if (id in HIDDEN_WRIST_IDS) setOf(wrist) else emptySet())
         }
+
+        private val HIDDEN_WRIST_IDS = setOf("cable_overhead_extension", "rope_overhead_extension", "dumbbell_triceps_extension")
 
         /** One short line: which way to face the camera and what must be in frame. */
         private fun brief(id: String, recipe: MeasurementRecipe, left: Boolean): String {
