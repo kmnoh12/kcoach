@@ -53,7 +53,8 @@ import dev.kyungmin.kcoach.core.ProgressionSettings
 import dev.kyungmin.kcoach.core.ProgressionSpeed
 import kotlin.math.roundToInt
 
-class SettingsActions(val back: () -> Unit, val profile: () -> Unit = {}, val tempo: () -> Unit = {}, val posture: () -> Unit = {})
+class SettingsActions(val back: () -> Unit, val profile: () -> Unit = {}, val tempo: () -> Unit = {}, val posture: () -> Unit = {},
+    val diagnostics: () -> Unit = {})
 
 @Composable
 fun SettingsScreen(
@@ -80,6 +81,11 @@ fun SettingsScreen(
                 Text("운동별 자세", color = KColors.White)
             }
             Text("운동마다 평소 하는 그립이나 시작 자세를 지정해요.", color = KColors.Muted, fontSize = 13.sp)
+            Spacer(Modifier.height(24.dp))
+            OutlinedButton(onClick = actions.diagnostics, modifier = Modifier.fillMaxWidth().height(50.dp), shape = KShape.Control) {
+                Text("오류 기록 저장", color = KColors.White)
+            }
+            Text("앱 종료 원인을 확인할 ZIP 파일을 저장해요. 저장한 파일을 채팅에 첨부해 주세요.", color = KColors.Muted, fontSize = 13.sp)
         }
     }
 }

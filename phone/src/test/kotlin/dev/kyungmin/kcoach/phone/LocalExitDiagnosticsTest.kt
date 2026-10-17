@@ -7,10 +7,36 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import java.io.File
+import java.io.ByteArrayOutputStream
+import java.util.zip.ZipInputStream
+import org.json.JSONObject
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class LocalExitDiagnosticsTest {
+    @Test fun diagnosticsZipContainsRecordedExceptionAndVersionWithoutChangingOriginalReports() {
+        val app = RuntimeEnvironment.getApplication()
+        LocalExitDiagnostics.state("ACTIVE", "RESTING")
+        LocalExitDiagnostics.recordException(IllegalStateException("PRIVATE workout name or weight"))
+        val before = LocalExitDiagnostics.readReports().getOrThrow().getValue("last-exception.json")
+        val bytes = ByteArrayOutputStream().also { DiagnosticsExport.write(app, it) }.toByteArray()
+        val entries = linkedMapOf<String, String>()
+        ZipInputStream(bytes.inputStream()).use { zip ->
+            while (true) {
+                val entry = zip.nextEntry ?: break
+                entries[entry.name] = zip.readBytes().toString(Charsets.UTF_8)
+            }
+        }
+        assertTrue(entries.keys.all { it in setOf("export.json", "last-exception.json", "last-state.json", "system-exits.json") })
+        assertEquals(before, entries["last-exception.json"])
+        assertEquals(before, LocalExitDiagnostics.readReports().getOrThrow()["last-exception.json"])
+        val metadata = JSONObject(entries.getValue("export.json"))
+        assertEquals(BuildConfig.VERSION_CODE, metadata.getInt("exportAppVersionCode"))
+        assertTrue(metadata.getBoolean("hasExceptionReport"))
+        assertFalse(entries.values.any { it.contains("PRIVATE") })
+        assertEquals("RESTING", JSONObject(entries.getValue("last-exception.json")).getString("phase"))
+    }
+
     @Test fun localExceptionHasCodeFramesAndStateButNoPrivateMessages() {
         val app = RuntimeEnvironment.getApplication()
         LocalExitDiagnostics.state("ACTIVE", "WORKING")

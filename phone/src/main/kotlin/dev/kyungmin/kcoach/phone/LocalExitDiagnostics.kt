@@ -3,6 +3,7 @@ package dev.kyungmin.kcoach.phone
 import android.app.Activity
 import android.app.ActivityManager
 import android.app.Application
+import android.content.Context
 import android.os.Build
 import android.os.Bundle
 import android.util.AtomicFile
@@ -15,10 +16,11 @@ internal object LocalExitDiagnostics {
     @Volatile private var screen = "UNKNOWN"
     @Volatile private var phase = "UNKNOWN"
     private var directory: File? = null
+    private var priorStateAtLaunch: String? = null
 
     fun install(app: Application) {
         directory = File(app.noBackupFilesDir, "exit-diagnostics").apply { mkdirs() }
-        val priorState = runCatching { File(directory, "last-state.json").readText() }.getOrNull()
+        priorStateAtLaunch = runCatching { File(directory, "last-state.json").readText() }.getOrNull()
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->
             try { recordException(error) } finally { previous?.uncaughtException(thread, error) }
@@ -32,19 +34,23 @@ internal object LocalExitDiagnostics {
             override fun onActivitySaveInstanceState(activity: Activity, state: Bundle) = Unit
             override fun onActivityDestroyed(activity: Activity) = Unit
         })
-        Thread({
-            runCatching {
-                if (Build.VERSION.SDK_INT >= 30) {
-                    val exits = app.getSystemService(ActivityManager::class.java)
-                        .getHistoricalProcessExitReasons(app.packageName, 0, 8)
-                    val rows = JSONArray()
-                    exits.forEach { exit -> rows.put(JSONObject().put("atMs", exit.timestamp)
-                        .put("reason", exit.reason).put("status", exit.status).put("importance", exit.importance)
-                        .put("pssKb", exit.pss).put("rssKb", exit.rss)) }
-                    write("system-exits.json", JSONObject().put("exits", rows).put("priorState", priorState?.let(::JSONObject)))
-                }
+        Thread({ refreshSystemHistory(app) }, "local-exit-history").start()
+    }
+
+    /** Refresh on export too, so the startup worker need not have completed first. */
+    internal fun refreshSystemHistory(context: Context) {
+        runCatching {
+            if (Build.VERSION.SDK_INT >= 30) {
+                val exits = context.getSystemService(ActivityManager::class.java)
+                    .getHistoricalProcessExitReasons(context.packageName, 0, 8)
+                val rows = JSONArray()
+                exits.forEach { exit -> rows.put(JSONObject().put("atMs", exit.timestamp)
+                    .put("reason", exit.reason).put("status", exit.status).put("importance", exit.importance)
+                    .put("pssKb", exit.pss).put("rssKb", exit.rss)) }
+                write("system-exits.json", JSONObject().put("exits", rows)
+                    .put("priorState", priorStateAtLaunch?.let(::JSONObject)))
             }
-        }, "local-exit-history").start()
+        }
     }
 
     fun workoutPhase(workoutPhase: String) {
@@ -83,6 +89,7 @@ internal object LocalExitDiagnostics {
     }
 
     private fun stateJson() = JSONObject().put("atMs", System.currentTimeMillis()).put("screen", screen).put("phase", phase)
+        .put("appVersion", BuildConfig.VERSION_NAME).put("appVersionCode", BuildConfig.VERSION_CODE)
     @Synchronized private fun write(name: String, value: JSONObject) {
         val dir = directory ?: return
         val file = AtomicFile(File(dir, name))
