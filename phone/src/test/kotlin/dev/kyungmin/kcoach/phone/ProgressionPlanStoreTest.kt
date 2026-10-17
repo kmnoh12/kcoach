@@ -101,10 +101,10 @@ class ProgressionPlanStoreTest {
         ProgressionSettingsStore(context).save(ProgressionSettings(false, ProgressionSpeed.SLOW)).getOrThrow()
         assertEquals(ProgressionSettings(false, ProgressionSpeed.SLOW), ProgressionSettingsStore(context).load().getOrThrow())
         val increments = ProgressionIncrementStore(context)
-        assertTrue(increments.candidate("machine", "머신", listOf(20.0, 30.0, 40.0)).getOrThrow().needsConfirmation)
+        assertEquals(IncrementCandidate(10.0, false), increments.candidate("machine", "머신", listOf(20.0, 30.0, 40.0)).getOrThrow())
         increments.save("machine", 5.0).getOrThrow()
         assertEquals(IncrementCandidate(5.0, false), ProgressionIncrementStore(context).candidate("machine", "머신").getOrThrow())
-        assertTrue(increments.candidate("other", "머신").getOrThrow().needsConfirmation)
+        assertEquals(IncrementCandidate(5.0, false), increments.candidate("other", "머신").getOrThrow())
         assertTrue(increments.save("machine", -1.0).isFailure)
     }
     @Test fun projectionPreservesTargetsWarmupAndMissingUnfinishedPositions() {
