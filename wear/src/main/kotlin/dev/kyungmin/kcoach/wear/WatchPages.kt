@@ -29,6 +29,10 @@ import kotlin.math.roundToInt
 internal open class Grid432(context: Context) : FrameLayout(context) {
     protected val positions = LinkedHashMap<View, android.graphics.Rect>()
     private val designSp = HashMap<TextView, Float>()
+    /** Text placed by its baseline on the design grid, the way the design sheet's line-height:1 boxes put it. */
+    private val baselines = HashMap<TextView, Float>()
+    /** Text that shrinks to fit its box width instead of being cut off. */
+    private val fitting = HashSet<TextView>()
     protected val density get() = resources.displayMetrics.density
 
     fun <T : View> place(view: T, l: Int, t: Int, r: Int, b: Int): T {
@@ -36,6 +40,21 @@ internal open class Grid432(context: Context) : FrameLayout(context) {
         if (positions[view] != rect) { positions[view] = rect; requestLayout() }
         if (view.parent == null) addView(view, LayoutParams(1, 1))
         return view
+    }
+
+    /**
+     * Puts a line of text between [l] and [r] with its baseline at [baseline] design units. The box itself is
+     * always tall enough for the whole line, so the bottom of Korean glyphs is never cut.
+     */
+    fun <T : TextView> placeText(view: T, l: Int, r: Int, baseline: Float, fit: Boolean = false): T {
+        if (baselines[view] != baseline) { baselines[view] = baseline; requestLayout() }
+        if (fit) fitting += view else fitting -= view
+        return place(view, l, baseline.toInt() - 40, r, baseline.toInt() + 20)
+    }
+
+    /** Changes a text's size, in design units of the 432 grid (the design sheet's `calc(var(--u)*N)`). */
+    fun sizeUnits(view: TextView, units: Float) {
+        if (designSp[view] != units / 2f) { designSp[view] = units / 2f; requestLayout() }
     }
 
     fun text(sp: Float, color: Int, bold: Boolean = false, medium: Boolean = false, gravity: Int = Gravity.CENTER) = TextView(context).apply {
@@ -47,11 +66,21 @@ internal open class Grid432(context: Context) : FrameLayout(context) {
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec)
         val scale = minOf(measuredWidth, measuredHeight) / 432f
-        designSp.forEach { (view, sp) -> view.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, sp * 2f * scale) }
+        designSp.forEach { (view, sp) ->
+            var px = sp * 2f * scale
+            val box = positions[view]?.width()?.times(scale)
+            if (view in fitting && box != null && box > 0f && px > 0f) {
+                view.paint.textSize = px
+                val wanted = android.text.Layout.getDesiredWidth(view.text, view.paint)
+                if (wanted > box) px *= box / wanted * 0.98f
+            }
+            view.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, px)
+        }
         positions.forEach { (view, rect) ->
             var height = (rect.height() * scale).toInt()
             // A line of text needs about 1.4 times its size; a tighter box would cut the bottom of Korean glyphs.
             if (view is TextView) height = maxOf(height, (view.textSize * 1.4f).toInt())
+            if (view is TextView && view in baselines) height = (view.textSize * 1.6f).toInt()
             view.measure(MeasureSpec.makeMeasureSpec((rect.width() * scale).toInt(), MeasureSpec.EXACTLY),
                 MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY))
         }
@@ -62,7 +91,11 @@ internal open class Grid432(context: Context) : FrameLayout(context) {
         val offsetX = (width - side) / 2; val offsetY = (height - side) / 2
         positions.forEach { (view, rect) ->
             val l = offsetX + (rect.left * scale).toInt(); val r = offsetX + (rect.right * scale).toInt()
-            if (view is TextView) {
+            val baseline = baselines[view]
+            if (view is TextView && baseline != null) {
+                val t = (offsetY + baseline * scale - view.baseline).roundToInt()
+                view.layout(l, t, r, t + view.measuredHeight)
+            } else if (view is TextView) {
                 val centreY = offsetY + rect.centerY() * scale
                 val half = view.measuredHeight / 2f
                 view.layout(l, (centreY - half).toInt(), r, (centreY + half).toInt())
@@ -261,8 +294,10 @@ internal class EditPageView(context: Context) : Grid432(context) {
         segTrack.visibility = if (measure) GONE else VISIBLE
         segPrevious.visibility = segTrack.visibility; segNext.visibility = segTrack.visibility
         finish.visibility = if (measure) VISIBLE else GONE
-        place(clock, 116, 42, 316, 72); place(name, 63, 56, 369, 92)
-        place(sub, 52, if (measure) 98 else 76, 380, if (measure) 126 else 102)
+        // Baselines from the design sheet (top + 0.841 x size).
+        placeText(clock, 116, 316, 63.9f); placeText(name, 63, 369, 83.2f, fit = true)
+        placeText(sub, 52, 380, if (measure) 116.5f else 94.5f)
+        sub.typeface = if (measure) Typeface.DEFAULT else Typeface.create("sans-serif-medium", Typeface.NORMAL)
         place(segTrack, 50, 108, 382, 152); place(segPrevious, 54, 112, 214, 148); place(segNext, 218, 112, 378, 148)
         val firstTop = if (measure) 134 else 166; val secondTop = if (measure) 206 else 238
         layoutRow(repsRow, firstTop); layoutRow(weightRow, secondTop)
@@ -283,6 +318,8 @@ internal class EditPageView(context: Context) : Grid432(context) {
     /** Shows a value as a large number with a small unit, e.g. 12 회, 20 kg, 105 kg. */
     private fun show(view: TextView, number: String, unit: String) {
         view.text = SpannableStringBuilder(number).apply {
+            // The design keeps 4 units between the number and its unit.
+            val gap = length; append(Moment.GAP); setSpan(GapSpan(4f / 31f), gap, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             val start = length
             append(unit)
             setSpan(RelativeSizeSpan(0.52f), start, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
@@ -310,15 +347,15 @@ internal class EditPageView(context: Context) : Grid432(context) {
 
 /** The page below the counter while measuring: heart rate with its zone, workout time and finished sets. */
 internal class AuxPageView(context: Context) : Grid432(context) {
-    val clock = place(text(13f, WatchWorkoutFace.WHITE, medium = true), 116, 42, 316, 72)
-    val heartRate = place(text(56f, WatchWorkoutFace.BONE, medium = true), 70, 76, 292, 186)
-    val bpm = place(text(11f, WatchWorkoutFace.MUTED), 292, 130, 360, 170)
+    val clock = placeText(text(13f, WatchWorkoutFace.WHITE, medium = true), 116, 316, 63.9f)
+    /** The rate and its small "bpm", centred together on one baseline as in the design. */
+    val heartRate = placeText(text(56f, WatchWorkoutFace.BONE, medium = true).apply { letterSpacing = -3f / 112f }, 40, 392, 166.2f, fit = true)
     val zoneBar = place(ZoneBar(context), 84, 204, 348, 220)
-    val zoneLabel = place(text(11f, WatchWorkoutFace.SOFT, bold = true), 84, 228, 348, 258)
-    val elapsed = place(text(20f, WatchWorkoutFace.WHITE, medium = true), 88, 288, 214, 334)
-    val elapsedLabel = place(text(9f, WatchWorkoutFace.MUTED), 88, 336, 214, 362)
-    val sets = place(text(20f, WatchWorkoutFace.WHITE, medium = true), 232, 288, 344, 334)
-    val setsLabel = place(text(9f, WatchWorkoutFace.MUTED), 232, 336, 344, 362)
+    val zoneLabel = placeText(text(11f, WatchWorkoutFace.SOFT, bold = true).apply { letterSpacing = 1.5f / 22f }, 84, 348, 250.5f)
+    /** Workout time and finished sets, two columns 48 units apart. */
+    private val pair = StatRow(this, 40f, 18f, 290f, 8f, 23.25f, 0f, 300f)
+    val elapsed get() = pair.values[0]
+    val sets get() = pair.values[1]
     val chevronUp = place(ChevronView(context, true), 199, 14, 233, 31)
     init { setBackgroundColor(Color.BLACK) }
 
@@ -326,11 +363,10 @@ internal class AuxPageView(context: Context) : Grid432(context) {
         clock.text = clockText
         val zone = WatchWorkoutFace.zone(heart)
         val color = if (zone == 0) WatchWorkoutFace.MUTED else WatchWorkoutFace.zoneColor(heart)
-        heartRate.text = if (heart > 0) heart.toString() else "—"; heartRate.setTextColor(color)
-        bpm.text = if (heart > 0) "bpm" else ""
+        heartRate.text = if (heart > 0) Moment.valueWithUnit(heart.toString(), "bpm", 22f / 112f, WatchWorkoutFace.MUTED, gapEm = 10f / 112f) else "—"
+        heartRate.setTextColor(color)
         zoneBar.zone = zone
         zoneLabel.text = if (zone == 0) "" else "ZONE $zone"; zoneLabel.setTextColor(color)
-        elapsed.text = elapsedText; elapsedLabel.text = "운동 시간"
-        sets.text = finishedSets.toString(); setsLabel.text = "완료 세트"
+        pair.bind(listOf(elapsedText to "운동 시간", finishedSets.toString() to "완료 세트"))
     }
 }

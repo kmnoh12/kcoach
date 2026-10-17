@@ -17,34 +17,50 @@ import android.widget.TextView
 /** The workout face in real accessible Android views; coordinates follow the 432-unit round design grid. */
 internal class WatchWorkoutFace(context: Context) : FrameLayout(context) {
     private val positions = mutableMapOf<View, android.graphics.Rect>()
+    /** Lines placed by their baseline, the way the design sheet's line-height:1 boxes put them (design units). */
+    private val baselines = HashMap<TextView, Float>()
+    /** Lines that shrink to fit their box instead of being cut (three-digit counts, long notices). */
+    private val fitting = HashSet<TextView>()
     /** Text sizes live on the 432-unit design grid (in the old sp numbers) and scale with the screen, not the user's density. */
     private val designSp = HashMap<TextView, Float>()
     fun size(view: TextView, sp: Float) { designSp[view] = sp; applyTextSize(view) }
     private fun applyTextSize(view: TextView) {
         val sp = designSp[view] ?: return
         val scale = minOf(width, height) / 432f
-        if (scale > 0f) view.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, sp * 2f * scale) else view.textSize = sp
+        if (scale <= 0f) { view.textSize = sp; return }
+        var px = sp * 2f * scale
+        val box = positions[view]?.width()?.times(scale)
+        if (view in fitting && box != null && box > 0f) {
+            view.paint.textSize = px
+            val wanted = android.text.Layout.getDesiredWidth(view.text, view.paint)
+            if (wanted > box) px *= box / wanted * .98f
+        }
+        view.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, px)
     }
     private val divider = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(38, 38, 36); strokeWidth = 1.5f }
+    private val medium = Typeface.create("sans-serif-medium", Typeface.NORMAL)
     val clock = label(13f, WHITE, 116, 42, 316, 72)
     val title = label(17f, WHITE, 63, 74, 369, 110, true).apply { maxLines = 1 }
-    val subtitle = label(11f, MUTED, 52, 114, 380, 142)
+    val subtitle = label(11f, MUTED, 52, 72, 380, 142)
     val jog = JogBar(context).also { positions[it] = android.graphics.Rect(80, 202, 352, 298); addView(it, LayoutParams(1, 1)); it.visibility = GONE }
     val chevronUp = ChevronView(context, true).also { positions[it] = android.graphics.Rect(199, 14, 233, 31); addView(it, LayoutParams(1, 1)); it.visibility = GONE }
     val chevronDown = ChevronView(context, false).also { positions[it] = android.graphics.Rect(199, 398, 233, 415); addView(it, LayoutParams(1, 1)); it.visibility = GONE }
+    /** The rest screen's card for the next set: a muted label on the left, the set itself on the right. */
+    val restCard = View(context).also {
+        positions[it] = android.graphics.Rect(72, 296, 360, 350); addView(it, LayoutParams(1, 1)); it.visibility = GONE
+        it.background = android.graphics.drawable.GradientDrawable().apply { setColor(CARD) }
+    }
+    val restNextLabel = label(9.5f, SOFT, 92, 300, 200, 346).apply { gravity = Gravity.START or Gravity.CENTER_VERTICAL; visibility = GONE }
+    val restNextValue = label(12.5f, WHITE, 200, 300, 340, 346).apply { gravity = Gravity.END or Gravity.CENTER_VERTICAL; visibility = GONE }
     val valueGhost = label(88f, BONE, 50, 140, 270, 320, false).apply { alpha = 0f; isClickable = false; importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO }
     val value = label(88f, BONE, 50, 140, 270, 320, false)
-    val target = label(15f, MUTED, 270, 232, 382, 292)
+    val target = label(15f, SOFT, 270, 232, 382, 292)
+    /** The weight with its small "kg" on one line, as the design sets them. */
     val weight = label(17f, WHITE, 84, 336, 176, 378, false)
-    val unit = label(10f, MUTED, 178, 346, 208, 378)
     val heart = HeartView(context).also { positions[it] = android.graphics.Rect(232, 340, 266, 374); addView(it, LayoutParams(1, 1)) }
     val heartRate = label(17f, WHITE, 268, 336, 352, 378, false)
-    val hint = label(11f, MUTED, 60, 384, 372, 410).apply { isClickable = true }
+    val hint = label(11f, MUTED, 76, 370, 356, 400).apply { isClickable = true }
     val down = label(12f, MUTED, 180, 391, 252, 419)
-    val restCard = label(12.5f, WHITE, 72, 296, 360, 350, false).apply {
-        background = android.graphics.drawable.GradientDrawable().apply { setColor(CARD); cornerRadius = 10f * resources.displayMetrics.density }
-        visibility = GONE
-    }
     val restGo = label(10.5f, SOFT, 96, 366, 336, 394, false).apply { visibility = GONE; isClickable = true; isFocusable = true }
     val action = label(16f, Color.rgb(23, 22, 18), 76, 280, 356, 376, true).apply {
         tag = "phone-result"; isClickable = true; isFocusable = true
@@ -52,8 +68,14 @@ internal class WatchWorkoutFace(context: Context) : FrameLayout(context) {
             setColor(BONE); cornerRadius = 6f * resources.displayMetrics.density
         }
     }
-    init { listOf(weight, heartRate, clock).forEach { it.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL) } }
-    init { listOf(value, valueGhost).forEach { it.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL) } }
+    init {
+        listOf(weight, heartRate, clock, value, valueGhost, restNextValue).forEach { it.typeface = medium }
+        // Design baselines: top + 0.841 x size for the sheet's line-height:1 text.
+        baselines[clock] = 63.9f; baselines[title] = 100.6f; baselines[subtitle] = 134.5f
+        baselines[restNextLabel] = 330.5f; baselines[restNextValue] = 332.5f; baselines[restGo] = 385.7f
+        baselines[hint] = 392f
+        fitting += listOf(value, valueGhost, hint, restNextValue)
+    }
     var showDivider = true
     init { setBackgroundColor(Color.BLACK); setWillNotDraw(false) }
     private fun label(sp: Float, color: Int, left: Int, top: Int, right: Int, bottom: Int, bold: Boolean = false) =
@@ -64,18 +86,29 @@ internal class WatchWorkoutFace(context: Context) : FrameLayout(context) {
             addView(this, LayoutParams(1, 1)); positions[this] = android.graphics.Rect(left, top, right, bottom)
             designSp[this] = sp
         }
+    private fun place(view: View, l: Int, t: Int, r: Int, b: Int) {
+        val rect = android.graphics.Rect(l, t, r, b)
+        if (positions[view] != rect) { positions[view] = rect; requestLayout() }
+    }
+    private fun baseline(view: TextView, line: Float?) {
+        if (baselines[view] == line) return
+        if (line == null) baselines.remove(view) else baselines[view] = line
+        requestLayout()
+    }
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec)
         val scale = minOf(measuredWidth, measuredHeight) / 432f
         designSp.keys.forEach { applyTextSize(it) }
         // Long exercise names shrink to fit one line, between 11 and 17 design sp.
         androidx.core.widget.TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(title, (22f * scale).toInt().coerceAtLeast(8), (34f * scale).toInt().coerceAtLeast(10), 1, android.util.TypedValue.COMPLEX_UNIT_PX)
+        (restCard.background as? android.graphics.drawable.GradientDrawable)?.cornerRadius = 18f * scale
         positions.forEach { (view, rect) ->
             var height = (rect.height() * scale).toInt()
             if (view === action) height = maxOf(height, (48 * resources.displayMetrics.density).toInt())
             // A line of text needs about 1.4 times its size; a tighter box would cut the bottom of Korean glyphs.
             if (view is TextView && view !== title) height = maxOf(height, (view.textSize * 1.4f).toInt())
             if (view === title) height = maxOf(height, (34f * scale * 1.4f).toInt())
+            if (view is TextView && view in baselines) height = if (view === title) (34f * scale * 1.6f).toInt() else (view.textSize * 1.6f).toInt()
             view.measure(MeasureSpec.makeMeasureSpec((rect.width() * scale).toInt(), MeasureSpec.EXACTLY),
                 MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY))
         }
@@ -86,9 +119,13 @@ internal class WatchWorkoutFace(context: Context) : FrameLayout(context) {
         positions.forEach { (view, rect) ->
             val l = offsetX + (rect.left * scale).toInt(); val r = offsetX + (rect.right * scale).toInt()
             val centreY = offsetY + (rect.centerY() * scale)
+            val line = (view as? TextView)?.let { baselines[it] }
             if (view === action) {
                 val bottomPx = offsetY + (rect.bottom * scale).toInt()
                 view.layout(l, bottomPx - view.measuredHeight, r, bottomPx)
+            } else if (view is TextView && line != null) {
+                val t = Math.round(offsetY + line * scale - view.baseline)
+                view.layout(l, t, r, t + view.measuredHeight)
             } else if (view is TextView) {
                 // Keep the text where the design puts it even when the box grew to avoid clipping.
                 val half = view.measuredHeight / 2f
@@ -96,28 +133,65 @@ internal class WatchWorkoutFace(context: Context) : FrameLayout(context) {
             } else view.layout(l, offsetY + (rect.top * scale).toInt(), r, offsetY + (rect.bottom * scale).toInt())
         }
     }
+    private var mode = -1
     /** The counter sits left of its "/ 12회" while measuring and is centred (and wider) for the rest timer and home. */
     fun primary(mode: Int) {
-        val rect = when (mode) {
-            2 -> android.graphics.Rect(44, 96, 388, 224)       // rest timer
-            1 -> android.graphics.Rect(44, 120, 388, 300)      // home and summary
-            else -> android.graphics.Rect(50, 140, 270, 320)   // measuring
+        this.mode = mode
+        when (mode) {
+            2 -> listOf(value, valueGhost).forEach { place(it, 44, 96, 388, 224); baseline(it, 206f); it.letterSpacing = -4f / 126f }
+            1 -> listOf(value, valueGhost).forEach { place(it, 44, 120, 388, 300); baseline(it, null); it.letterSpacing = 0f }
+            else -> listOf(value, valueGhost).forEach { it.letterSpacing = -4f / 176f }
         }
-        if (positions[value] != rect) { positions[value] = rect; positions[valueGhost] = rect; requestLayout() }
-        val sub = if (mode == 2) android.graphics.Rect(52, 72, 380, 104) else android.graphics.Rect(52, 114, 380, 142)
-        if (positions[subtitle] != sub) { positions[subtitle] = sub; requestLayout() }
+        baseline(subtitle, if (mode == 2) 96.5f else 134.5f)
+    }
+
+    /**
+     * The design's measuring row: a 204-wide number window, a 14 gap and "/ 12회", centred together. A word in
+     * place of the count ("준비") sits higher, in the middle of the window.
+     */
+    fun layoutCount() {
+        if (mode != 0) return
+        val ofWidth = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 30f }.measureText(target.text.toString())
+        val left = (216f - (204f + 14f + ofWidth) / 2f).toInt()
+        val numeric = value.text.firstOrNull()?.isDigit() == true || value.text.toString() == "—"
+        listOf(value, valueGhost).forEach { place(it, left, 140, left + 204, 320); baseline(it, if (numeric) 290f else 262f) }
+        place(target, left + 218 - 6, 250, left + 218 + ofWidth.toInt() + 6, 290); baseline(target, 278.8f)
+    }
+
+    /** The weight with its unit and the heart with its rate, centred as the design's two groups 44 units apart. */
+    fun layoutMetrics() {
+        val big = android.text.TextPaint(Paint.ANTI_ALIAS_FLAG).apply { typeface = medium; textSize = 34f }
+        val weightWidth = android.text.Layout.getDesiredWidth(weight.text, big)
+        val rateWidth = big.measureText(heartRate.text.toString())
+        val showHeart = heart.visibility == VISIBLE
+        val total = weightWidth + 44f + (if (showHeart) 32.4f + 6f else 0f) + rateWidth
+        var x = 216f - total / 2f
+        place(weight, (x - 4).toInt(), 336, (x + weightWidth + 4).toInt(), 378); baseline(weight, 366.6f)
+        x += weightWidth + 44f
+        if (showHeart) { place(heart, x.toInt(), 339, (x + 32.4f).toInt(), 371); x += 32.4f + 6f }
+        place(heartRate, (x - 4).toInt(), 336, (x + rateWidth + 4).toInt(), 378); baseline(heartRate, 366.6f)
+    }
+
+    /** The rest card: "다음 2세트" on the left, "12회 × 20kg" on the right; the set shrinks when both do not fit. */
+    fun bindRestCard(label: String, set: CharSequence) {
+        restNextLabel.text = label; restNextValue.text = set
+        val labelWidth = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 19f }.measureText(label)
+        place(restNextLabel, 92, 300, (92 + labelWidth + 6).toInt(), 346)
+        place(restNextValue, (92 + labelWidth + 14).toInt(), 300, 340, 346)
     }
 
     /** The status line under the exercise name; a small coloured dot in front of it marks a live measurement. */
-    fun setSubtitle(text: String, color: Int, dot: Int? = null, sizeSp: Float = 11f, bold: Boolean = false) {
+    fun setSubtitle(text: String, color: Int, dot: Int? = null, sizeSp: Float = 11f, bold: Boolean = false, medium: Boolean = false) {
         subtitle.setTextColor(color); size(subtitle, sizeSp)
-        subtitle.typeface = if (bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+        subtitle.typeface = when { bold -> Typeface.DEFAULT_BOLD; medium -> this.medium; else -> Typeface.DEFAULT }
         subtitle.setCompoundDrawablesRelative(null, null, null, null)
+        // The rest screen's "+10초" flash is the larger 30-unit line in the same place.
+        if (mode == 2) baseline(subtitle, if (sizeSp >= 15f) 103.2f else 96.5f)
         if (dot == null) subtitle.text = text
         else {
             val scale = minOf(width, height).coerceAtLeast(1) / 432f
             // A zero-width placeholder carries the dot so it stays next to the text however long the text is.
-            subtitle.text = android.text.SpannableString("\u200B$text").apply {
+            subtitle.text = android.text.SpannableString("​$text").apply {
                 setSpan(DotSpan(dot, (9f * scale).toInt().coerceAtLeast(6), (10f * scale).toInt().coerceAtLeast(6)), 0, 1, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
         }
@@ -126,16 +200,20 @@ internal class WatchWorkoutFace(context: Context) : FrameLayout(context) {
     /** A tappable notice (retained counts, an update waiting for approval) shown in the hint line. */
     var noticeAction: (() -> Unit)? = null
     fun homeLayout(home: Boolean) {
-        val rect = if (home) android.graphics.Rect(60, 290, 372, 377) else android.graphics.Rect(60, 384, 372, 410)
+        // At home the notice is two lines in the middle; otherwise one line that ends above the bottom arrow.
+        val rect = if (home) android.graphics.Rect(60, 290, 372, 377) else android.graphics.Rect(76, 370, 356, 400)
         if (positions[hint] != rect) { positions[hint] = rect; hint.maxLines = if (home) 2 else 1; requestLayout() }
+        baseline(hint, if (home) null else 392f)
+        if (home) fitting -= hint else fitting += hint
     }
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         val side = minOf(width, height); val scale = side / 432f
         val x = (width - side) / 2f; val y = (height - side) / 2f
         if (showDivider) {
-            canvas.drawLine(x + 96 * scale, y + 324 * scale, x + 336 * scale, y + 324 * scale, divider)
-            canvas.drawLine(x + 216 * scale, y + 338 * scale, x + 216 * scale, y + 374 * scale, divider)
+            divider.strokeWidth = 1.5f * scale
+            canvas.drawLine(x + 96 * scale, y + 322.75f * scale, x + 336 * scale, y + 322.75f * scale, divider)
+            canvas.drawLine(x + 216 * scale, y + 336 * scale, x + 216 * scale, y + 374 * scale, divider)
         }
     }
     companion object {

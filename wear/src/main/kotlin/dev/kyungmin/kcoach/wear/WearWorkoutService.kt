@@ -147,6 +147,8 @@ class WearWorkoutService : Service(), SensorEventListener {
     private var measurementReady = false
     private var measurementArmed = false
     private var startPoseGate: StartPoseStabilityGate? = null
+    /** How long the wrist has been held still so far (calibration countdown on the watch screen). */
+    private var preparationHoldMs = 0L
     private val capturePrefs by lazy { getSharedPreferences(CAPTURE_PREFS, MODE_PRIVATE) }
     private val captureSendInFlight = mutableSetOf<String>()
     private val outboundSequence = AtomicLong()
@@ -1004,6 +1006,7 @@ class WearWorkoutService : Service(), SensorEventListener {
         lastAccel = FloatArray(3); lastGyro = FloatArray(3)
         lastAccelerometerNs = null; lastAccelerometerAccuracy = null; lastHeartRateNs = null
         calibrationStage = if (sessionId.startsWith("calibration-")) CalibrationStage.BASELINE else null
+        preparationHoldMs = 0L
         patternSelectionMode = intent.getStringExtra("patternSelectionMode").orEmpty()
         // Any unresolved previous chunks stay on disk instead of being erased
         // when a replacement set starts.
@@ -1398,6 +1401,7 @@ class WearWorkoutService : Service(), SensorEventListener {
                     if (!measurementReady) {
                         val gate = startPoseGate?.observe(sensorSample, lastAccelerometerNs, lastAccelerometerAccuracy)
                         measurementArmed = gate?.armed == true
+                        preparationHoldMs = gate?.stableDurationMs ?: 0L
                         if (gate?.ready == true) {
                             if (startDirectionSnapshot.isNotEmpty()) {
                                 startDirectionStatus = "CONFIRMED"
@@ -2055,6 +2059,7 @@ class WearWorkoutService : Service(), SensorEventListener {
 
     private fun broadcastState(force: Boolean = false) {
         val now = System.currentTimeMillis()
+        WatchSessionTally.get(this).observe(sessionId, setId, attemptId, running, resting, paused, reps, weightKg, heartRate, now)
         if (!force && now - lastUiBroadcastAtMs < UI_BROADCAST_INTERVAL_MS) return
         lastUiBroadcastAtMs = now
         uiBroadcastCount += 1
@@ -2097,6 +2102,10 @@ class WearWorkoutService : Service(), SensorEventListener {
             } == true)
             putExtra("patternShadowEventIndex", shadowEvents.lastIndex)
             putExtra("patternShadowEmissionNs", shadowEvents.lastOrNull()?.sourceEmissionNs ?: -1L)
+            if (calibrationStage == CalibrationStage.BASELINE && !measurementReady) {
+                putExtra("preparationHoldMs", preparationHoldMs)
+                putExtra("preparationHoldTargetMs", StartPoseGateConfig.forProfile(trackingProfile).stableDurationMs)
+            }
         })
     }
 

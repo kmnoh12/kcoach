@@ -97,7 +97,13 @@ class MainActivity : Activity() {
     private var displayedCompletionSession = ""
     internal var resultOpener: (Intent, (Boolean) -> Unit) -> Unit = { request, done -> WatchPhoneResult.open(this, request, done) }
     private val clockTicker = object : Runnable {
-        override fun run() { if (::face.isInitialized) face.clock.text = java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm")); handler.postDelayed(this, 30_000) }
+        override fun run() {
+            if (::face.isInitialized) {
+                val text = java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
+                listOf(face.clock, setDone.clock, calibrationView.clock, resultView.clock).forEach { it.text = text }
+            }
+            handler.postDelayed(this, 30_000)
+        }
     }
     private lateinit var shadowText: TextView
 
@@ -213,6 +219,11 @@ class MainActivity : Activity() {
         shadowCount = intent.getIntExtra("patternShadowCount", 0)
         shadowEventIndex = intent.getIntExtra("patternShadowEventIndex", -1)
         shadowEmissionNs = intent.getLongExtra("patternShadowEmissionNs", -1L)
+        preparationHoldMs = intent.getLongExtra("preparationHoldMs", -1L)
+        preparationHoldTargetMs = intent.getLongExtra("preparationHoldTargetMs", -1L)
+        phoneCameraRecording = intent.getBooleanExtra("phoneCameraRecording", false)
+        calibrationConfirmedReps = intent.getIntExtra("calibrationConfirmedReps", -1).takeIf { it >= 0 }
+        trackSetEnd(intent)
         if (running || resting || paused || sessionId.isNotBlank()) {
             homeStore.leaveCompletion()
             resultGeneration += 1; phoneResultPending = false; phoneResultStatus = ""
@@ -281,7 +292,178 @@ class MainActivity : Activity() {
             onPullCommit = { requestWorkoutControl() }
             onPage = { page -> onPageChanged(page) }
         }
-        return pager
+        // Full screens that take over the pages: calibration, the workout result, and on top of everything the
+        // few seconds after a set ends.
+        calibrationView = CalibrationView(this).apply { visibility = View.GONE; isClickable = true }
+        resultView = WorkoutResultView(this).apply { visibility = View.GONE; isClickable = true; onOpen = { openFinishedWorkout() } }
+        setDone = SetDoneView(this).apply { background = null }
+        setDoneLayer = FrameLayout(this).apply {
+            background = android.graphics.drawable.ColorDrawable(Color.BLACK)
+            visibility = View.GONE; isClickable = true
+            setOnClickListener { hideSetDone() }
+            addView(setDone, FrameLayout.LayoutParams(-1, -1))
+        }
+        return FrameLayout(this).apply {
+            setBackgroundColor(Color.BLACK)
+            addView(pager, FrameLayout.LayoutParams(-1, -1))
+            addView(calibrationView, FrameLayout.LayoutParams(-1, -1))
+            addView(resultView, FrameLayout.LayoutParams(-1, -1))
+            addView(setDoneLayer, FrameLayout.LayoutParams(-1, -1))
+        }
+    }
+
+    private lateinit var calibrationView: CalibrationView
+    private lateinit var resultView: WorkoutResultView
+    private lateinit var setDone: SetDoneView
+    private lateinit var setDoneLayer: FrameLayout
+    private val tally by lazy { WatchSessionTally.get(this) }
+    /** The set being measured right now, kept so its end can be announced with the numbers it ended on. */
+    private var workingSet: SetMoment? = null
+    /** The finished set on screen (screens 3, 7, 8), or null. */
+    private var shownSet: SetMoment? = null
+    private var setDoneUntilMs = 0L
+    private val setDoneEnd = Runnable { hideSetDone() }
+    private var preparationHoldMs = -1L
+    private var preparationHoldTargetMs = -1L
+    private var phoneCameraRecording = false
+    private var calibrationConfirmedReps: Int? = null
+    /** Screen 11 stays at least 3.5 s even when the phone closes the calibration session right away. */
+    private var calibrationDone: Pair<Int, Int?>? = null
+    private var calibrationDoneSession = ""
+    private var calibrationDoneUntilMs = 0L
+    private val calibrationDoneEnd = Runnable { updateUi() }
+    private var phoneResultColor = WatchWorkoutFace.MUTED
+    /** The number of the set the watch last saw end, for the rest editor's "방금 1세트"; 0 when unknown. */
+    private var lastFinishedSetNumber = 0
+
+    /**
+     * Notices the moment a measured set ends (the watch counted to the end, the user submitted a count, or the
+     * phone moved to rest) and shows screen 3, or 7/8 when the phone reports a record for that set.
+     */
+    private fun trackSetEnd(intent: Intent) {
+        val calibration = sessionId.startsWith("calibration-")
+        val previous = workingSet
+        if (running && !resting && !paused && !calibration && setId.isNotBlank()) {
+            workingSet = SetMoment(sessionId, setId, exerciseId, exerciseName, setIndex + 1, displayedCount() ?: reps, weightKg)
+            // The next set has started: the moment of the previous one is over.
+            shownSet?.let { if (it.setId != setId || it.sessionId != sessionId) hideSetDone(immediate = true) }
+            return
+        }
+        shownSet?.let { shown ->
+            val record = SetRecord.from(intent, shown.setId)
+            if (record != null && shown.record == null) {
+                tally.noteRecord(shown.sessionId, shown.exerciseId)
+                showSetDone(shown.copy(record = record), switching = true)
+            }
+        }
+        if (paused) return
+        workingSet = null
+        if (previous == null || previous.sessionId != sessionId) return
+        val finished = when {
+            setId == previous.setId && !running && !resting -> previous.copy(reps = displayedCount() ?: reps, weightKg = weightKg)
+            resting -> previous
+            else -> return
+        }
+        lastFinishedSetNumber = finished.setNumber
+        if ((finished.reps ?: 0) <= 0) return
+        val record = SetRecord.from(intent, finished.setId)
+        if (record != null) tally.noteRecord(finished.sessionId, finished.exerciseId)
+        showSetDone(finished.copy(record = record), switching = false)
+    }
+
+    private fun showSetDone(moment: SetMoment, switching: Boolean) {
+        val quiet = Moment.reducedMotion(this)
+        // The window runs on the monotonic clock the handler uses, so a wall-clock change cannot stretch it.
+        val now = android.os.SystemClock.uptimeMillis()
+        shownSet = moment
+        val clockText = java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
+        setDoneLayer.animate().cancel(); setDone.animate().cancel()
+        if (switching) {
+            // A record reported a moment later replaces the plain check, with enough time left to read it.
+            setDoneUntilMs = maxOf(setDoneUntilMs, now + 2_500L)
+            if (quiet) setDone.bind(moment, clockText)
+            else setDone.animate().alpha(0f).setDuration(100).withEndAction {
+                setDone.bind(moment, clockText); setDone.animate().alpha(1f).setDuration(150).start()
+            }.start()
+        } else {
+            setDoneUntilMs = now + Moment.SET_DONE_MS
+            setDone.bind(moment, clockText)
+            pager.show(0)
+            setDoneLayer.visibility = View.VISIBLE
+            setDoneLayer.background.alpha = 255
+            if (quiet) { setDoneLayer.alpha = 1f; setDone.alpha = 1f }
+            else {
+                // Dip to black, then the content: the counter underneath never shows through the new screen.
+                setDoneLayer.alpha = 0f; setDone.alpha = 0f
+                setDoneLayer.animate().alpha(1f).setDuration(120).withEndAction { setDone.animate().alpha(1f).setDuration(150).start() }.start()
+            }
+            if (setDone.look == SetDoneView.Look.DONE) setDone.check.play()
+            buzzOnce()
+        }
+        handler.removeCallbacks(setDoneEnd)
+        handler.postDelayed(setDoneEnd, (setDoneUntilMs - now).coerceAtLeast(0L))
+        coverPages()
+    }
+
+    private fun hideSetDone(immediate: Boolean = false) {
+        handler.removeCallbacks(setDoneEnd)
+        if (shownSet == null && setDoneLayer.visibility != View.VISIBLE) return
+        shownSet = null
+        setDoneLayer.animate().cancel(); setDone.animate().cancel()
+        if (immediate || Moment.reducedMotion(this)) { setDoneLayer.visibility = View.GONE; coverPages(); return }
+        // The content fades to black first, then the black lifts off the rest screen.
+        setDone.animate().alpha(0f).setDuration(140).withEndAction {
+            setDoneLayer.animate().alpha(0f).setDuration(160).withEndAction {
+                if (shownSet == null) setDoneLayer.visibility = View.GONE
+                coverPages()
+            }.start()
+        }.start()
+    }
+
+    /** Pages hidden under a full screen are hidden from accessibility too. */
+    private fun coverPages() {
+        val covered = setDoneLayer.visibility == View.VISIBLE || calibrationView.visibility == View.VISIBLE || resultView.visibility == View.VISIBLE
+        pager.importantForAccessibility = if (covered) View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS else View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
+        calibrationView.importantForAccessibility = if (setDoneLayer.visibility == View.VISIBLE) View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS else View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
+        resultView.importantForAccessibility = calibrationView.importantForAccessibility
+    }
+
+    /** One short buzz when a set ends; no sound. */
+    private fun buzzOnce() {
+        val vibrator = getSystemService(android.os.Vibrator::class.java) ?: return
+        if (!vibrator.hasVibrator()) return
+        vibrator.vibrate(android.os.VibrationEffect.createOneShot(60L, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
+    }
+
+    /** Screens 9, 10 and 11 replace the counter while a calibration session runs and right after it ([now] is uptime). */
+    private fun updateCalibration(now: Long, clockText: String) {
+        val calibration = sessionId.startsWith("calibration-")
+        if (calibration && running && !paused) {
+            calibrationDone = null
+            if (runtimePhase == "BASELINE") {
+                val steps = holdSteps(preparationHoldTargetMs.takeIf { it > 0 } ?: 0L)
+                val left = if (preparationHoldTargetMs > 0 && preparationHoldMs >= 0)
+                    kotlin.math.ceil((preparationHoldTargetMs - preparationHoldMs).coerceAtLeast(0L) / 1000.0).toInt().coerceIn(1, steps) else null
+                calibrationView.bindPrepare(clockText, left, steps, phoneCameraRecording)
+            } else calibrationView.bindCount(clockText, displayedCount() ?: reps, targetReps, phoneCameraRecording)
+            calibrationView.visibility = View.VISIBLE
+        } else if (calibration && !running && !resting && !paused && (reps > 0 || runtimePhase == "CALIBRATION_RESULT")) {
+            val data = reps to calibrationConfirmedReps
+            val first = calibrationDone == null || calibrationDoneSession != sessionId
+            if (first) { calibrationDoneSession = sessionId; calibrationDoneUntilMs = now + Moment.SET_DONE_MS }
+            if (first || data != calibrationDone) calibrationView.bindDone(clockText, data.first, data.second, playCheck = first)
+            calibrationDone = data
+            calibrationView.visibility = View.VISIBLE
+        } else if (calibrationDone != null && now < calibrationDoneUntilMs && !running && !resting && !paused) {
+            // The session already closed; the result stays until it has been on screen for 3.5 s.
+            calibrationView.clock.text = clockText
+            calibrationView.visibility = View.VISIBLE
+            handler.removeCallbacks(calibrationDoneEnd)
+            handler.postDelayed(calibrationDoneEnd, calibrationDoneUntilMs - now + 20)
+        } else {
+            calibrationDone = null
+            calibrationView.visibility = View.GONE
+        }
     }
 
     /** Entering the editor stops counting so lifting the wrist to look at the watch is not counted as a rep. */
@@ -343,12 +525,12 @@ class MainActivity : Activity() {
             if (field == EditPageView.Field.REPS) {
                 val current = if (restEditSegment == 0) lastWorkingReps else targetReps
                 val next = (current + delta).coerceIn(0, 9_999)
-                if (restEditSegment == 0) lastWorkingReps = next else targetReps = next
+                if (restEditSegment == 0) { lastWorkingReps = next; tally.editLast(reps = next) } else targetReps = next
                 sendWorkoutCommand("EDIT_SET") { putExtra("which", which); putExtra("reps", next); putExtra("weightKg", Double.NaN) }
             } else {
                 val current = (if (restEditSegment == 0) lastWorkingWeight else weightKg) ?: 0.0
                 val next = (current + delta).coerceIn(0.0, 999.0)
-                if (restEditSegment == 0) lastWorkingWeight = next else weightKg = next
+                if (restEditSegment == 0) { lastWorkingWeight = next; tally.editLast(weightKg = next) } else weightKg = next
                 sendWorkoutCommand("EDIT_SET") { putExtra("which", which); putExtra("reps", -1); putExtra("weightKg", next) }
             }
         } else if (field == EditPageView.Field.REPS) {
@@ -386,7 +568,7 @@ class MainActivity : Activity() {
                     val difference = value - current
                     if (resting) {
                         val which = if (restEditSegment == 0) "PREVIOUS" else "NEXT"
-                        if (restEditSegment == 0) lastWorkingWeight = value else weightKg = value
+                        if (restEditSegment == 0) { lastWorkingWeight = value; tally.editLast(weightKg = value) } else weightKg = value
                         sendWorkoutCommand("EDIT_SET") { putExtra("which", which); putExtra("reps", -1); putExtra("weightKg", value) }
                     } else {
                         weightKg = value
@@ -465,16 +647,20 @@ class MainActivity : Activity() {
         face.value.maxLines = if (complete) 2 else 1
         face.showDivider = measuring
         face.invalidate()
-        listOf(face.target, face.weight, face.unit, face.heartRate).forEach { it.visibility = if (measuring) View.VISIBLE else View.GONE }
+        listOf(face.target, face.weight, face.heartRate).forEach { it.visibility = if (measuring) View.VISIBLE else View.GONE }
         face.title.visibility = if (resting) View.GONE else View.VISIBLE
         face.down.visibility = View.GONE
-        face.action.visibility = if (complete) View.VISIBLE else View.GONE
-        face.action.text = "폰에서 보기"; face.action.isEnabled = !phoneResultPending
-        face.action.alpha = if (phoneResultPending) 0.5f else 1f
+        // The finished workout has its own screen with its own button (screen 12).
+        face.action.visibility = View.GONE
+        resultView.visibility = if (complete) View.VISIBLE else View.GONE
+        if (complete) resultView.bind(clockText, homeStore.completion()?.summary, phoneResultStatus, phoneResultColor, phoneResultPending)
+        updateCalibration(android.os.SystemClock.uptimeMillis(), clockText)
+        setDone.clock.text = clockText
+        coverPages()
         face.hint.text = ""; face.hint.setTextColor(WatchWorkoutFace.MUTED); face.noticeAction = null
         face.size(face.value, if (active) 88f else 24f)
         face.value.setTextColor(WatchWorkoutFace.SAGE)
-        face.restCard.visibility = View.GONE; face.restGo.visibility = View.GONE; face.jog.visibility = View.GONE
+        listOf(face.restCard, face.restNextLabel, face.restNextValue).forEach { it.visibility = View.GONE }; face.restGo.visibility = View.GONE; face.jog.visibility = View.GONE
         val controlsReady = resting && !paused && workoutControls.supportsControls() && setId.isNotBlank() && attemptId.isNotBlank()
         if (active) {
             face.title.text = exerciseName
@@ -484,8 +670,10 @@ class MainActivity : Activity() {
             face.target.text = "/ ${targetReps}회"
             face.value.text = count?.toString() ?: "—"
             face.value.setTextColor(if (count != null && count > targetReps) WatchWorkoutFace.ORANGE else WatchWorkoutFace.SAGE)
-            face.weight.text = weightKg?.let { if (it % 1.0 == 0.0) it.toInt().toString() else "%.1f".format(it) } ?: "—"
-            face.unit.text = "kg"; face.heart.show(if (resting) 0 else heartRate); face.heartRate.text = heartRate.takeIf { it > 0 }?.toString() ?: "—"
+            face.weight.text = Moment.valueWithUnit(weightKg?.let(Moment::kg) ?: "—", "kg", 20f / 34f, WatchWorkoutFace.MUTED, gapEm = 6f / 34f)
+            face.heart.show(if (resting) 0 else heartRate); face.heartRate.text = heartRate.takeIf { it > 0 }?.toString() ?: "—"
+            // Past the target the line under the name says so in the over-target colour (the design's screen 2).
+            if (running && !paused && count != null && count > targetReps) face.setSubtitle("목표 초과", WatchWorkoutFace.ORANGE, medium = true)
             if (manualRequired && count == null) face.hint.text = "위로 · 횟수 기록"
             if (running && runtimePhase in setOf("POSITIONING", "PREPARING", "BASELINE", "START_DIRECTION_WAITING")) {
                 face.value.text = "준비"; face.size(face.value, 40f)
@@ -497,14 +685,15 @@ class MainActivity : Activity() {
                 face.size(face.value, 63f); face.value.setTextColor(WatchWorkoutFace.YELLOW)
                 face.target.visibility = View.GONE
                 if (now < restFlashUntilMs) face.setSubtitle(restFlashText, WatchWorkoutFace.YELLOW, sizeSp = 15f, bold = true)
-                else face.setSubtitle("휴식 · 목표 ${restSeconds / 60}:${"%02d".format(restSeconds % 60)}", WatchWorkoutFace.YELLOW, bold = true)
-                face.restCard.text = "다음 세트   ${targetReps}회" + (weightKg?.let { " × ${if (it % 1.0 == 0.0) it.toInt().toString() else "%.1f".format(it)}kg" } ?: "")
-                face.restCard.visibility = View.VISIBLE
+                else face.setSubtitle("휴식 · 목표 ${restSeconds / 60}:${"%02d".format(restSeconds % 60)}", WatchWorkoutFace.YELLOW, medium = true)
+                face.bindRestCard("다음 ${setIndex + 1}세트", "${targetReps}회" + (weightKg?.let { " × ${Moment.kg(it)}kg" } ?: ""))
+                listOf(face.restCard, face.restNextLabel, face.restNextValue).forEach { it.visibility = View.VISIBLE }
                 face.jog.visibility = View.VISIBLE
                 face.restGo.text = "다음 세트 시작"
                 face.restGo.visibility = if (controlsReady) View.VISIBLE else View.GONE
             }
             if (paused) face.hint.text = "폰에서 계속할 수 있어요"
+            face.layoutCount(); face.layoutMetrics()
         } else if (complete) {
             face.title.text = "운동 완료"; face.setSubtitle("수고했어요", WatchWorkoutFace.MUTED)
             face.value.text = if (phoneResultStatus.isBlank()) "기록을 확인해 보세요" else phoneResultStatus
@@ -565,7 +754,8 @@ class MainActivity : Activity() {
                 val repsShown = if (previous) lastWorkingReps else targetReps
                 val weightShown = if (previous) lastWorkingWeight else weightKg
                 val left = RestCountdownCalculator.calculate(now, restEndAtMs, restSeconds).remainingSeconds
-                editPage.bindRest("휴식 ${left / 60}:${"%02d".format(left % 60)}", clockText, "방금 세트", "다음 세트", restEditSegment,
+                editPage.bindRest("휴식 ${left / 60}:${"%02d".format(left % 60)}", clockText,
+                    if (lastFinishedSetNumber > 0) "방금 ${lastFinishedSetNumber}세트" else "방금 세트", "다음 ${setIndex + 1}세트", restEditSegment,
                     repsShown.toString(), weightShown?.let { if (it % 1.0 == 0.0) it.toInt().toString() else "%.1f".format(it) } ?: "—")
             } else {
                 editPage.applyMode(EditPageView.Mode.MEASURE)
@@ -650,11 +840,12 @@ class MainActivity : Activity() {
         if (running || resting || paused || sessionId.isNotBlank() || phoneResultPending) return
         val completed = homeStore.completion() ?: return
         val generation = ++resultGeneration
-        phoneResultPending = true; phoneResultStatus = "폰으로 요청하는 중"; updateUi()
+        phoneResultPending = true; phoneResultStatus = "폰으로 요청하는 중"; phoneResultColor = WatchWorkoutFace.MUTED; updateUi()
         fun finish(success: Boolean) {
             if (isDestroyed || generation != resultGeneration) return
             resultGeneration += 1; phoneResultPending = false
-            phoneResultStatus = if (success) "폰에서 확인해 주세요" else "연결을 확인하고\n다시 눌러 주세요"
+            phoneResultStatus = if (success) "폰에서 확인해 주세요" else "연결을 확인하고 다시 눌러 주세요"
+            phoneResultColor = if (success) WatchWorkoutFace.SAGE else WatchWorkoutFace.ORANGE
             updateUi()
         }
         handler.postDelayed({ finish(false) }, 15_000)
@@ -832,6 +1023,8 @@ class MainActivity : Activity() {
                 paint.color = WatchWorkoutFace.YELLOW
                 return
             }
+            // The unlit rim stays visible behind the shrinking rest time, as in the design.
+            paint.color = WatchWorkoutFace.TRACK; canvas.drawArc(oval, -90f, 360f, false, paint)
             paint.color = WatchWorkoutFace.YELLOW
             canvas.drawArc(oval, -90f, 360f * fraction, false, paint)
             postInvalidateOnAnimation()
